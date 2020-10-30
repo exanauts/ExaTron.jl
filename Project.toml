@@ -1,0 +1,4 @@
+name = "ExaTron"
+uuid = "2621268c-3774-4230-834f-5f36c024a1bf"
+authors = ["Youngdae Kim <youngdae@anl.gov>"]
+version = "0.1.0"
