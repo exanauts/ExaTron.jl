@@ -219,4 +219,6 @@ function dtron(n,x,xl,xu,f,g,a,adiag,acol_ptr,arow_ind,
     dsave[1] = fc
     dsave[2] = alphac
     dsave[3] = prered
+
+    return delta
 end

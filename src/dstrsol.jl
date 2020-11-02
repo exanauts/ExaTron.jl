@@ -11,7 +11,7 @@ function dstrsol(n,l,ldiag,jptr,indr,r,task)
 
     # Solve L*x = r and store the result in r.
 
-    if task == :N
+    if task == 'N'
         for j=1:n
             temp = r[j]/ldiag[j]
             for k=jptr[j]:jptr[j+1]-1
@@ -25,7 +25,7 @@ function dstrsol(n,l,ldiag,jptr,indr,r,task)
 
     # Solve L'*x = r and store the result in r.
 
-    if task == :T
+    if task == 'T'
         r[n] = r[n]/ldiag[n]
         for j=n-1:-1:1
             temp = zero

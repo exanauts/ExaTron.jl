@@ -123,7 +123,7 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         alpha = zero
         dicfs(nfree,nnz,b,bdiag,bcol_ptr,brow_ind,
               l,ldiag,lcol_ptr,lrow_ind,nv,alpha,
-              iwa,wa,view(wa,n+1:5*n))
+              iwa,view(wa,1:n),view(wa,n+1:5*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.

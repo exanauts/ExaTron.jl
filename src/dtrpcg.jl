@@ -95,14 +95,14 @@ function dtrpcg(n,a,adiag,acol_ptr,arow_ind,g,delta,
         # Compute z by solving L'*z = p.
 
         dcopy(n,p,1,z,1)
-        dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,z,:T)
+        dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,z,'T')
 
         # Compute q by solving L*q = A*z and save L*q for
         # use in updating the residual t.
 
         dssyax(n,a,adiag,acol_ptr,arow_ind,z,q)
         dcopy(n,q,1,z,1)
-        dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,q,:N)
+        dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,q,'N')
 
         # Compute alpha and determine sigma such that the trust region
         # constraint || w + sigma*p || = delta is satisfied.
