@@ -1,6 +1,10 @@
 module ExaTron
 
+using LinearAlgebra
+
 export dtron
+
+const BLAS_LIBRARY = :Tron
 
 include("daxpy.jl")
 include("dcopy.jl")

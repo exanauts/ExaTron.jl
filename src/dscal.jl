@@ -1,4 +1,4 @@
-function dscal(n,da,dx,incx)
+function tron_dscal(n,da,dx,incx)
 
     # Scales a vector by a constant.
     # It uses unrolled loops for increment equal to one.
@@ -48,3 +48,10 @@ function dscal(n,da,dx,incx)
         return
     end
 end
+
+if isequal(BLAS_LIBRARY, :OpenBlas)
+    dscal(n,da,dx,incx) = BLAS.scal!(n, da, dx, incx)
+else
+    dscal(n,da,dx,incx) = tron_dscal(n, da, dx, incx)
+end
+

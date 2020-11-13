@@ -5,7 +5,7 @@ This subroutine computes constant times a vector plus a vector.
 It uses unrolled loops for increments equal to one.
 Jack Dongarra, LINPACK, 3/11/78.
 """
-function daxpy(n,da,dx,incx,dy,incy)
+function tron_daxpy(n,da,dx,incx,dy,incy)
     if n <= 0
         return
     end
@@ -51,3 +51,10 @@ function daxpy(n,da,dx,incx,dy,incy)
         return
     end
 end
+
+if isequal(BLAS_LIBRARY, :OpenBlas)
+    daxpy(n,da,dx,incx,dy,incy) = BLAS.axpy!(da,dx,dy)
+else
+    daxpy(n,da,dx,incx,dy,incy) = tron_daxpy(n,da,dx,incx,dy,incy)
+end
+

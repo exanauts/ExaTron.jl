@@ -8,7 +8,7 @@ name, so that
    Modified on 14-October-1993 to inline the call to DLASSQ.
    Sven Hammarling, Nag Ltd.
 """
-function dnrm2(n,x,incx)
+function tron_dnrm2(n,x,incx)
     one = 1.0
     zero = 0.0
 
@@ -40,3 +40,10 @@ function dnrm2(n,x,incx)
 
     return xnorm
 end
+
+if isequal(BLAS_LIBRARY, :OpenBlas)
+    dnrm2(n,x,incx) = BLAS.nrm2(n, x, incx)
+else
+    dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
+end
+

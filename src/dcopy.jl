@@ -1,4 +1,4 @@
-function dcopy(n,dx,incx,dy,incy)
+function tron_dcopy(n,dx,incx,dy,incy)
     # Copies a vector, x, to a vector, y.
     # It uses unrolled loops for increments equal to one.
     # Jack Dongarra, LINPACK, 3/11/78.
@@ -55,3 +55,10 @@ function dcopy(n,dx,incx,dy,incy)
         return
     end
 end
+
+if isequal(BLAS_LIBRARY, :OpenBlas)
+    dcopy(n,dx,incx,dy,incy) = copyto!(dy, 1, dx, 1, n)
+else
+    dcopy(n,dx,incx,dy,incy) = tron_dcopy(n,dx,incx,dy,incy)
+end
+
