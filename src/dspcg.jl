@@ -101,29 +101,13 @@ function dspcg(n,x,xl,xu,A,g,delta,
 
         # Obtain the submatrix of A for the free variables.
         # Recall that iwa allows the detection of free variables.
-
-        # TODO
-        bcol_ptr[1] = 1
-        nnz = 0
-        for j=1:nfree
-            jfree = indfree[j]
-            bdiag[j] = A.diag_vals[jfree]
-            for ip = A.colptr[jfree]:A.colptr[jfree+1]-1
-                if iwa[A.rowval[ip]] > 0
-                    nnz = nnz + 1
-                    brow_ind[nnz] = iwa[A.rowval[ip]]
-                    b[nnz] = A.tril_vals[ip]
-                end
-            end
-            bcol_ptr[j+1] = nnz + 1
-        end
+        nnz = reorder!(B, A, indfree, nfree, iwa)
 
         # Compute the incomplete Cholesky factorization.
-
         alpha = zero
         dicfs(nfree, nnz, B, L,
-              nv,alpha,
-              iwa,view(wa,1:n),view(wa,n+1:5*n))
+              nv, alpha,
+              iwa, view(wa,1:n), view(wa,n+1:5*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.

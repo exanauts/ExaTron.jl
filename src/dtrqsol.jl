@@ -15,7 +15,7 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function dtrqsol(n,x,p,delta)
-    zero = zero(eltype(x))
+    zero = 0.0
     sigma = zero
 
     ptx = ddot(n,p,1,x,1)
@@ -24,7 +24,6 @@ function dtrqsol(n,x,p,delta)
     dsq = delta^2
 
     # Guard against abnormal cases.
-
     rad = ptx^2 + ptp*(dsq - xtx)
     rad = sqrt(max(rad,zero))
 

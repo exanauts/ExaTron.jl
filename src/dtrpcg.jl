@@ -99,7 +99,7 @@ function dtrpcg(n,A,g,delta, L,
         # Compute q by solving L*q = A*z and save L*q for
         # use in updating the residual t.
 
-        dssyax(A,z,q)
+        dssyax(n, A, z,q)
         dcopy(n,q,1,z,1)
         dstrsol(n, L, q,'N')
 

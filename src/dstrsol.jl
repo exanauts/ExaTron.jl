@@ -7,7 +7,7 @@ MINPACK-2 Project. May 1998.
 Argonne National Laboratory.
 """
 function dstrsol(n, L, r, task)
-    zero = zero(eltype(r))
+    zero = 0.0
 
     # Solve L*x = r and store the result in r.
 

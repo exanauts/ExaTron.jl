@@ -21,10 +21,10 @@ function dicfs(n, nnz, A, L,
     two = 2.0
 
     # Compute the l2 norms of the columns of A.
-    nrm2!(wa1, A)
+    nrm2!(wa1, A, n)
 
     # Compute the scaling matrix D.
-    for i=1:n
+    @inbounds for i=1:n
         if wa1[i] > zero
             wa2[i] = one/sqrt(wa1[i])
         else
@@ -96,7 +96,7 @@ function dicfs(n, nnz, A, L,
                 nb = nb + 1
             else
                 for i=1:n
-                    ldiag[i] /= wa2[i]
+                    L.diag_vals[i] /= wa2[i]
                 end
                 for j=1:L.colptr[n+1]-1
                     L.tril_vals[j] = L.tril_vals[j]/wa2[L.rowval[j]]

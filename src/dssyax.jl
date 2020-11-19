@@ -115,19 +115,20 @@ function Base.copy!(A::TronSparseMatrixCSC, values)
     end
 end
 
-function nrm2!(wa, A::TronSparseMatrixCSC)
+nrm2!(wa, A) = nrm2!(wa, A, A.n)
+function nrm2!(wa, A::TronSparseMatrixCSC, n)
     for i=1:n
-        wa1[i] = adiag[i]^2
+        wa[i] = A.diag_vals[i]^2
     end
     @inbounds for j=1:n
-        for i=acol_ptr[j]:acol_ptr[j+1]-1
-            k = arow_ind[i]
-            wa1[j] = wa1[j] + a[i]^2
-            wa1[k] = wa1[k] + a[i]^2
+        for i=A.colptr[j]:A.colptr[j+1]-1
+            k = A.rowval[i]
+            wa[j] = wa[j] + A.tril_vals[i]^2
+            wa[k] = wa[k] + A.tril_vals[i]^2
         end
     end
     for j=1:n
-        wa1[j] = sqrt(wa1[j])
+        wa[j] = sqrt(wa[j])
     end
 end
 
@@ -157,3 +158,23 @@ function dssyax(n::Int, A::TronSparseMatrixCSC, x, y)
 
     return
 end
+
+function reorder!(B::TronSparseMatrixCSC, A::TronSparseMatrixCSC, indfree, nfree, iwa)
+    # Update matrix B inplace
+    B.colptr[1] = 1
+    nnz = 0
+    for j=1:nfree
+        jfree = indfree[j]
+        B.diag_vals[j] = A.diag_vals[jfree]
+        for ip = A.colptr[jfree]:A.colptr[jfree+1]-1
+            if iwa[A.rowval[ip]] > 0
+                nnz = nnz + 1
+                B.rowval[nnz] = iwa[A.rowval[ip]]
+                B.tril_vals[nnz] = A.tril_vals[ip]
+            end
+        end
+        B.colptr[j+1] = nnz + 1
+    end
+    return nnz
+end
+
