@@ -4,7 +4,9 @@ using LinearAlgebra
 
 export dtron
 
-const BLAS_LIBRARY = :Tron
+const BLAS_LIBRARY = :OpenBlas
+
+tron_zeros(S, n) = fill!(S(undef, n), zero(eltype(S)))
 
 include("daxpy.jl")
 include("dcopy.jl")

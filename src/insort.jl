@@ -9,7 +9,7 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function insort(n,keys)
-    for j=2:n
+    @inbounds for j=2:n
         ind = keys[j]
         i = j - 1
         while (i > 0) && (keys[i] > ind)

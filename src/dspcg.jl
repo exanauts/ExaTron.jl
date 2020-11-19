@@ -51,17 +51,16 @@ March 2000
 Clarified documentation of nv variable.
 Eliminated the nnz = max(nnz,1) statement.
 """
-function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
+function dspcg(n,x,xl,xu,A,g,delta,
                rtol,s,nv,itermax,
-               b,bdiag,bcol_ptr,brow_ind,
-               l,ldiag,lcol_ptr,lrow_ind,
+               B, L,
                indfree,gfree,w,wa,iwa)
     zero = 0.0
     one = 1.0
 
     # Compute A*(x[1] - x[0]) and store in w.
 
-    dssyax(n,a,adiag,acol_ptr,arow_ind,s,w)
+    dssyax(A, s, w)
 
     # Compute the Cauchy point.
 
@@ -103,16 +102,17 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         # Obtain the submatrix of A for the free variables.
         # Recall that iwa allows the detection of free variables.
 
+        # TODO
         bcol_ptr[1] = 1
         nnz = 0
         for j=1:nfree
             jfree = indfree[j]
-            bdiag[j] = adiag[jfree]
-            for ip = acol_ptr[jfree]:acol_ptr[jfree+1]-1
-                if iwa[arow_ind[ip]] > 0
+            bdiag[j] = A.diag_vals[jfree]
+            for ip = A.colptr[jfree]:A.colptr[jfree+1]-1
+                if iwa[A.rowval[ip]] > 0
                     nnz = nnz + 1
-                    brow_ind[nnz] = iwa[arow_ind[ip]]
-                    b[nnz] = a[ip]
+                    brow_ind[nnz] = iwa[A.rowval[ip]]
+                    b[nnz] = A.tril_vals[ip]
                 end
             end
             bcol_ptr[j+1] = nnz + 1
@@ -121,8 +121,8 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         # Compute the incomplete Cholesky factorization.
 
         alpha = zero
-        dicfs(nfree,nnz,b,bdiag,bcol_ptr,brow_ind,
-              l,ldiag,lcol_ptr,lrow_ind,nv,alpha,
+        dicfs(nfree, nnz, B, L,
+              nv,alpha,
               iwa,view(wa,1:n),view(wa,n+1:5*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
@@ -130,6 +130,7 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         # Recall that w contains A*(x[k] - x[0]).
         # Compute the norm of the reduced gradient Z'*g.
 
+        # TODO
         for j=1:nfree
             gfree[j] = w[indfree[j]] + g[indfree[j]]
             wa[j] = g[indfree[j]]
@@ -142,14 +143,13 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         tol = rtol*gfnorm
         stol = zero
 
-        infotr,itertr = dtrpcg(nfree,b,bdiag,bcol_ptr,brow_ind,gfree,delta,
-                               l,ldiag,lcol_ptr,lrow_ind,
+        infotr,itertr = dtrpcg(nfree,B,gfree,delta, L,
                                tol,stol,itermax,w,
                                view(wa,1:n),view(wa,n+1:2*n),view(wa,2*n+1:3*n),
                                view(wa,3*n+1:4*n),view(wa,4*n+1:5*n))
 
         iters = iters + itertr
-        dstrsol(nfree,l,ldiag,lcol_ptr,lrow_ind,w,'T')
+        dstrsol(nfree,L, w,'T')
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.
@@ -161,7 +161,7 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         end
 
         dprsrch(nfree,view(wa,1:n),view(wa,n+1:2*n),view(wa,2*n+1:3*n),
-                b,bdiag,bcol_ptr,brow_ind,gfree,w,
+                B,gfree,w,
                 view(wa,3*n+1:4*n), view(wa,4*n+1:5*n))
 
         # Update the minimizer and the step.
@@ -174,7 +174,7 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
 
         # Compute A*(x[k+1] - x[0]) and store in w.
 
-        dssyax(n,a,adiag,acol_ptr,arow_ind,s,w)
+        dssyax(A, s, w)
 
         # Compute the gradient grad q(x[k+1]) = g + A*(x[k+1] - x[0])
         # of q at x[k+1] for the free variables.

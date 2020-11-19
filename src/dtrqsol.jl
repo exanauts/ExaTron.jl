@@ -15,7 +15,7 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function dtrqsol(n,x,p,delta)
-    zero = 0.0
+    zero = zero(eltype(x))
     sigma = zero
 
     ptx = ddot(n,p,1,x,1)

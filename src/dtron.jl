@@ -9,10 +9,9 @@ solution of large bound-constrained optimization problems
 where the Hessian matrix is sparse. The user must evaluate the
 function, gradient, and the Hessian matrix.
 """
-function dtron(n,x,xl,xu,f,g,a,adiag,acol_ptr,arow_ind,
+function dtron(n,x,xl,xu,f,g,A,
                frtol,fatol,fmin,cgtol,itermax,delta,task,
-               b,bdiag,bcol_ptr,brow_ind,
-               l,ldiag,lcol_ptr,lrow_ind,
+               B, L,
                xc,s,indfree,
                isave,dsave,wa,iwa)
     zero = 0.0
@@ -78,21 +77,20 @@ function dtron(n,x,xl,xu,f,g,a,adiag,acol_ptr,arow_ind,
 
             # Compute the Cauchy step and store in s.
 
-            alphac = dcauchy(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
+            alphac = dcauchy(n,x,xl,xu,A,g,delta,
                             alphac,s,wa)
 
             # Compute the projected Newton step.
 
-            info,iters = dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
+            info,iters = dspcg(n,x,xl,xu,A,g,delta,
                                cgtol,s,5,itermax,
-                               b,bdiag,bcol_ptr,brow_ind,
-                               l,ldiag,lcol_ptr,lrow_ind,
+                               B, L,
                                indfree,view(wa,1:n),view(wa,n+1:2*n),
                                view(wa,2*n+1:7*n),iwa)
 
             # Compute the predicted reduction.
 
-            dssyax(n,a,adiag,acol_ptr,arow_ind,s,wa)
+            dssyax(A, s, wa)
             prered = -(ddot(n,s,1,g,1) + p5*ddot(n,s,1,wa,1))
             iterscg = iterscg + iters
 

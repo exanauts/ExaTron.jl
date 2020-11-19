@@ -9,7 +9,7 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function dmid(n,x,xl,xu)
-    for i=1:n
+    @inbounds for i=1:n
         x[i] = max(xl[i],min(x[i],xu[i]))
     end
     return

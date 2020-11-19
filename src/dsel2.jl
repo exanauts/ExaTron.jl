@@ -26,7 +26,7 @@ function dsel2(n,x,keys,k)
     lc = n
     lp = 2*n
 
-    while (l < u)
+    @inbounds while (l < u)
 
         # Choose the partition as the median of the elements in
         # positions l+s*(u-l) for s = 0, 0.25, 0.5, 0.75, 1.
@@ -35,10 +35,13 @@ function dsel2(n,x,keys,k)
         p1 = floor(Int,(u+3*l)/4)
         p2 = floor(Int,(u+l)/2)
         p3 = floor(Int,(3*u+l)/4)
+        x_p1 = x[keys[p1]]
+        x_p2 = x[keys[p2]]
+        x_p3 = x[keys[p3]]
 
         # Order the elements in positions l and p1.
 
-        if abs(x[keys[l]]) > abs(x[keys[p1]])
+        if abs(x[keys[l]]) > abs(x_p1)
             swap = keys[l]
             keys[l] = keys[p1]
             keys[p1] = swap
@@ -46,7 +49,7 @@ function dsel2(n,x,keys,k)
 
         # Order the elements in positions p2 and p3.
 
-        if abs(x[keys[p2]]) > abs(x[keys[p3]])
+        if abs(x_p2) > abs(x_p3)
             swap = keys[p2]
             keys[p2] = keys[p3]
             keys[p3] = swap
@@ -56,11 +59,11 @@ function dsel2(n,x,keys,k)
         # and p3, with the element in position u, and reorder
         # the first two pairs of elements as necessary.
 
-        if abs(x[keys[p3]]) > abs(x[keys[p1]])
+        if abs(x_p3) > abs(x_p1)
             swap = keys[p3]
             keys[p3] = keys[u]
             keys[u] = swap
-            if abs(x[keys[p2]]) > abs(x[keys[p3]])
+            if abs(x_p2) > abs(x_p3)
                 swap = keys[p2]
                 keys[p2] = keys[p3]
                 keys[p3] = swap
@@ -69,7 +72,7 @@ function dsel2(n,x,keys,k)
             swap = keys[p1]
             keys[p1] = keys[u]
             keys[u] = swap
-            if abs(x[keys[l]]) > abs(x[keys[p1]])
+            if abs(x[keys[l]]) > abs(x_p1)
                 swap = keys[l]
                 keys[l] = keys[p1]
                 keys[p1] = swap
@@ -84,14 +87,14 @@ function dsel2(n,x,keys,k)
         # Find the third largest element of the four remaining
         # elements (the median), and place in position l.
 
-        if abs(x[keys[p1]]) > abs(x[keys[p3]])
+        if abs(x_p1) > abs(x_p3)
             if abs(x[keys[l]]) <= abs(x[keys[p3]])
                 swap = keys[l]
                 keys[l] = keys[p3]
                 keys[p3] = swap
             end
         else
-            if abs(x[keys[p2]]) <= abs(x[keys[p1]])
+            if abs(x_p2) <= abs(x_p1)
                 swap = keys[l]
                 keys[l] = keys[p1]
                 keys[p1] = swap
