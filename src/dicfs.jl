@@ -43,7 +43,7 @@ function dicfs(n, nnz, A, L,
     # Compute the initial shift.
 
     alpha = zero
-    for i=1:n
+    @inbounds for i=1:n
         if A.diag_vals[i] == zero
             alpha = alphas
         else
@@ -71,10 +71,10 @@ function dicfs(n, nnz, A, L,
         end
 
         # Scale A and store in the lower triangular matrix L.
-        for j=1:n
+        @inbounds for j=1:n
             L.diag_vals[j] = A.diag_vals[j]*(wa2[j]^2) + alpha
         end
-        for j=1:n
+        @inbounds for j=1:n
             for i=A.colptr[j]:A.colptr[j+1]-1
                 L.tril_vals[i] = A.tril_vals[i]*wa2[j]*wa2[A.rowval[i]]
             end
@@ -95,10 +95,10 @@ function dicfs(n, nnz, A, L,
                 alpha = alphas
                 nb = nb + 1
             else
-                for i=1:n
+                @inbounds for i=1:n
                     L.diag_vals[i] /= wa2[i]
                 end
-                for j=1:L.colptr[n+1]-1
+                @inbounds for j=1:L.colptr[n+1]-1
                     L.tril_vals[j] = L.tril_vals[j]/wa2[L.rowval[j]]
                 end
                 return

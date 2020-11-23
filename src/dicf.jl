@@ -29,7 +29,7 @@ function dicf(n, nnz, L, p, indr, indf, list, w)
     insortf = 20
 
     info = 0
-    for j=1:n
+    @inbounds for j=1:n
         indf[j] = 0
         list[j] = 0
     end
@@ -49,7 +49,7 @@ function dicf(n, nnz, L, p, indr, indf, list, w)
 
     isj = L.colptr[1]
     L.colptr[1] = 1
-    for j=1:n
+    @inbounds for j=1:n
 
         # Load column j into the array w. The first and last elements
         # of the j-th column of A are a(isj) and a(iej).

@@ -78,7 +78,7 @@ function dtron(n,x,xl,xu,f,g,A,
             # Compute the Cauchy step and store in s.
 
             alphac = dcauchy(n,x,xl,xu,A,g,delta,
-                            alphac,s,wa)
+                             alphac,s,wa)
 
             # Compute the projected Newton step.
 

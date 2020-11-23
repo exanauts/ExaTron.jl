@@ -60,7 +60,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
 
     # Compute A*(x[1] - x[0]) and store in w.
 
-    dssyax(A, s, w)
+    dssyax(n, A, s, w)
 
     # Compute the Cauchy point.
 
@@ -82,7 +82,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # iwa[i] = nfree if the ith variable is free, otherwise iwa[i] = 0.
 
         nfree = 0
-        for j=1:n
+        @inbounds for j=1:n
             if xl[j] < x[j] && x[j] < xu[j]
                 nfree = nfree + 1
                 indfree[nfree] = j
@@ -114,8 +114,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # Recall that w contains A*(x[k] - x[0]).
         # Compute the norm of the reduced gradient Z'*g.
 
-        # TODO
-        for j=1:nfree
+        @inbounds for j=1:nfree
             gfree[j] = w[indfree[j]] + g[indfree[j]]
             wa[j] = g[indfree[j]]
         end
@@ -138,7 +137,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             wa[j] = x[indfree[j]]
             wa[n+j] = xl[indfree[j]]
             wa[2*n+j] = xu[indfree[j]]
@@ -151,19 +150,19 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # Update the minimizer and the step.
         # Note that s now contains x[k+1] - x[0].
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             x[indfree[j]] = wa[j]
             s[indfree[j]] = s[indfree[j]] + w[j]
         end
 
         # Compute A*(x[k+1] - x[0]) and store in w.
 
-        dssyax(A, s, w)
+        dssyax(n, A, s, w)
 
         # Compute the gradient grad q(x[k+1]) = g + A*(x[k+1] - x[0])
         # of q at x[k+1] for the free variables.
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             gfree[j] = w[indfree[j]] + g[indfree[j]]
         end
         gfnormf = dnrm2(nfree, gfree, 1)

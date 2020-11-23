@@ -117,7 +117,7 @@ end
 
 nrm2!(wa, A) = nrm2!(wa, A, A.n)
 function nrm2!(wa, A::TronSparseMatrixCSC, n)
-    for i=1:n
+    @inbounds for i=1:n
         wa[i] = A.diag_vals[i]^2
     end
     @inbounds for j=1:n
@@ -127,7 +127,7 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
             wa[k] = wa[k] + A.tril_vals[i]^2
         end
     end
-    for j=1:n
+    @inbounds for j=1:n
         wa[j] = sqrt(wa[j])
     end
 end
@@ -140,7 +140,7 @@ where A is a symmetric matrix with the strict lower triangular
 part in compressed column storage.
 """
 dssyax(A::TronSparseMatrixCSC, x, y) = dssyax(A.n, A, x, y)
-function dssyax(n::Int, A::TronSparseMatrixCSC, x, y)
+function dssyax(n, A::TronSparseMatrixCSC, x, y)
     zero = 0.0
 
     @inbounds for i in 1:n
@@ -150,8 +150,9 @@ function dssyax(n::Int, A::TronSparseMatrixCSC, x, y)
     @inbounds for j in 1:n
         rowsum = zero
         for i in A.colptr[j]:A.colptr[j+1]-1
-            rowsum += A.tril_vals[i]*x[A.rowval[i]]
-            y[A.rowval[i]] += A.tril_vals[i]*x[j]
+            row = A.rowval[i]
+            rowsum += A.tril_vals[i]*x[row]
+            @inbounds y[row] += A.tril_vals[i]*x[j]
         end
         y[j] += rowsum
     end
@@ -159,11 +160,11 @@ function dssyax(n::Int, A::TronSparseMatrixCSC, x, y)
     return
 end
 
+# Update matrix B inplace
 function reorder!(B::TronSparseMatrixCSC, A::TronSparseMatrixCSC, indfree, nfree, iwa)
-    # Update matrix B inplace
     B.colptr[1] = 1
     nnz = 0
-    for j=1:nfree
+    @inbounds for j=1:nfree
         jfree = indfree[j]
         B.diag_vals[j] = A.diag_vals[jfree]
         for ip = A.colptr[jfree]:A.colptr[jfree+1]-1

@@ -52,7 +52,7 @@ function dcauchy(n,x,xl,xu,A,
     if dnrm2(n,s,1) > delta
         interp = true
     else
-        dssyax(A, s, wa)
+        dssyax(n, A, s, wa)
         gts = ddot(n,g,1,s,1)
         q = p5*ddot(n,s,1,wa,1) + gts
         interp = (q >= mu0*gts)
@@ -73,7 +73,7 @@ function dcauchy(n,x,xl,xu,A,
             alpha = interpf*alpha
             dgpstep(n,x,xl,xu,-alpha,g,s)
             if dnrm2(n,s,1) <= delta
-                dssyax(A, s,wa)
+                dssyax(n, A, s,wa)
                 gts = ddot(n,g,1,s,1)
                 q = p5*ddot(n,s,1,wa,1) + gts
                 search = (q > mu0*gts)
@@ -94,7 +94,7 @@ function dcauchy(n,x,xl,xu,A,
             alpha = extrapf*alpha
             dgpstep(n,x,xl,xu,-alpha,g,s)
             if dnrm2(n,s,1) <= delta
-                dssyax(A, s, wa)
+                dssyax(n, A, s, wa)
                 gts = ddot(n,g,1,s,1)
                 q = p5*ddot(n,s,1,wa,1) + gts
                 if q < mu0*gts
