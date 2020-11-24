@@ -6,16 +6,16 @@ This subroutine solves the triangular systems L*x = r or L'*x = r.
 MINPACK-2 Project. May 1998.
 Argonne National Laboratory.
 """
-function dstrsol(n,l,ldiag,jptr,indr,r,task)
+function dstrsol(n, L, r, task)
     zero = 0.0
 
     # Solve L*x = r and store the result in r.
 
     if task == 'N'
-        for j=1:n
-            temp = r[j]/ldiag[j]
-            for k=jptr[j]:jptr[j+1]-1
-                r[indr[k]] = r[indr[k]] - l[k]*temp
+        @inbounds for j=1:n
+            temp = r[j]/L.diag_vals[j]
+            for k=L.colptr[j]:L.colptr[j+1]-1
+                r[L.rowval[k]] = r[L.rowval[k]] - L.tril_vals[k]*temp
             end
             r[j] = temp
         end
@@ -26,13 +26,13 @@ function dstrsol(n,l,ldiag,jptr,indr,r,task)
     # Solve L'*x = r and store the result in r.
 
     if task == 'T'
-        r[n] = r[n]/ldiag[n]
-        for j=n-1:-1:1
+        r[n] = r[n]/L.diag_vals[n]
+        @inbounds for j=n-1:-1:1
             temp = zero
-            for k=jptr[j]:jptr[j+1]-1
-                temp = temp + l[k]*r[indr[k]]
+            for k=L.colptr[j]:L.colptr[j+1]-1
+                temp = temp + L.tril_vals[k]*r[L.rowval[k]]
             end
-            r[j] = (r[j] - temp)/ldiag[j]
+            r[j] = (r[j] - temp)/L.diag_vals[j]
         end
 
         return

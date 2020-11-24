@@ -27,7 +27,7 @@ MINPACK-2 Project. March 1999.
 Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
-function dprsrch(n,x,xl,xu,a,diag,col_ptr,row_ind,g,w,wa1,wa2)
+function dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
     one = 1.0
     p5 = 0.5
 
@@ -55,7 +55,7 @@ function dprsrch(n,x,xl,xu,a,diag,col_ptr,row_ind,g,w,wa1,wa2)
 
         nsteps = nsteps + 1
         dgpstep(n,x,xl,xu,alpha,w,wa1)
-        dssyax(n,a,diag,col_ptr,row_ind,wa1,wa2)
+        dssyax(n, A,wa1,wa2)
         gts = ddot(n,g,1,wa1,1)
         q = p5*ddot(n,wa1,1,wa2,1) + gts
         if q <= mu0*gts

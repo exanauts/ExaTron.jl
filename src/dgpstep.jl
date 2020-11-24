@@ -11,7 +11,7 @@ function dgpstep(n,x,xl,xu,alpha,w,s)
     # This computation of the gradient projection step avoids
     # rouding errors for the components that are feasible.
 
-    for i=1:n
+    @inbounds for i=1:n
         if x[i] + alpha*w[i] < xl[i]
             s[i] = xl[i] - x[i]
         elseif x[i] + alpha*w[i] > xu[i]

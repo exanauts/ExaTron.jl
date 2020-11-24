@@ -51,17 +51,16 @@ March 2000
 Clarified documentation of nv variable.
 Eliminated the nnz = max(nnz,1) statement.
 """
-function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
+function dspcg(n,x,xl,xu,A,g,delta,
                rtol,s,nv,itermax,
-               b,bdiag,bcol_ptr,brow_ind,
-               l,ldiag,lcol_ptr,lrow_ind,
+               B, L,
                indfree,gfree,w,wa,iwa)
     zero = 0.0
     one = 1.0
 
     # Compute A*(x[1] - x[0]) and store in w.
 
-    dssyax(n,a,adiag,acol_ptr,arow_ind,s,w)
+    dssyax(n, A, s, w)
 
     # Compute the Cauchy point.
 
@@ -83,7 +82,7 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         # iwa[i] = nfree if the ith variable is free, otherwise iwa[i] = 0.
 
         nfree = 0
-        for j=1:n
+        @inbounds for j=1:n
             if xl[j] < x[j] && x[j] < xu[j]
                 nfree = nfree + 1
                 indfree[nfree] = j
@@ -102,35 +101,20 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
 
         # Obtain the submatrix of A for the free variables.
         # Recall that iwa allows the detection of free variables.
-
-        bcol_ptr[1] = 1
-        nnz = 0
-        for j=1:nfree
-            jfree = indfree[j]
-            bdiag[j] = adiag[jfree]
-            for ip = acol_ptr[jfree]:acol_ptr[jfree+1]-1
-                if iwa[arow_ind[ip]] > 0
-                    nnz = nnz + 1
-                    brow_ind[nnz] = iwa[arow_ind[ip]]
-                    b[nnz] = a[ip]
-                end
-            end
-            bcol_ptr[j+1] = nnz + 1
-        end
+        nnz = reorder!(B, A, indfree, nfree, iwa)
 
         # Compute the incomplete Cholesky factorization.
-
         alpha = zero
-        dicfs(nfree,nnz,b,bdiag,bcol_ptr,brow_ind,
-              l,ldiag,lcol_ptr,lrow_ind,nv,alpha,
-              iwa,view(wa,1:n),view(wa,n+1:5*n))
+        dicfs(nfree, nnz, B, L,
+              nv, alpha,
+              iwa, view(wa,1:n), view(wa,n+1:5*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.
         # Recall that w contains A*(x[k] - x[0]).
         # Compute the norm of the reduced gradient Z'*g.
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             gfree[j] = w[indfree[j]] + g[indfree[j]]
             wa[j] = g[indfree[j]]
         end
@@ -142,44 +126,43 @@ function dspcg(n,x,xl,xu,a,adiag,acol_ptr,arow_ind,g,delta,
         tol = rtol*gfnorm
         stol = zero
 
-        infotr,itertr = dtrpcg(nfree,b,bdiag,bcol_ptr,brow_ind,gfree,delta,
-                               l,ldiag,lcol_ptr,lrow_ind,
+        infotr,itertr = dtrpcg(nfree,B,gfree,delta, L,
                                tol,stol,itermax,w,
                                view(wa,1:n),view(wa,n+1:2*n),view(wa,2*n+1:3*n),
                                view(wa,3*n+1:4*n),view(wa,4*n+1:5*n))
 
         iters = iters + itertr
-        dstrsol(nfree,l,ldiag,lcol_ptr,lrow_ind,w,'T')
+        dstrsol(nfree,L, w,'T')
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             wa[j] = x[indfree[j]]
             wa[n+j] = xl[indfree[j]]
             wa[2*n+j] = xu[indfree[j]]
         end
 
         dprsrch(nfree,view(wa,1:n),view(wa,n+1:2*n),view(wa,2*n+1:3*n),
-                b,bdiag,bcol_ptr,brow_ind,gfree,w,
+                B,gfree,w,
                 view(wa,3*n+1:4*n), view(wa,4*n+1:5*n))
 
         # Update the minimizer and the step.
         # Note that s now contains x[k+1] - x[0].
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             x[indfree[j]] = wa[j]
             s[indfree[j]] = s[indfree[j]] + w[j]
         end
 
         # Compute A*(x[k+1] - x[0]) and store in w.
 
-        dssyax(n,a,adiag,acol_ptr,arow_ind,s,w)
+        dssyax(n, A, s, w)
 
         # Compute the gradient grad q(x[k+1]) = g + A*(x[k+1] - x[0])
         # of q at x[k+1] for the free variables.
 
-        for j=1:nfree
+        @inbounds for j=1:nfree
             gfree[j] = w[indfree[j]] + g[indfree[j]]
         end
         gfnormf = dnrm2(nfree, gfree, 1)

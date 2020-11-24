@@ -50,8 +50,7 @@ February 2001
 
 We now set iters = 0 in the special case g = 0.
 """
-function dtrpcg(n,a,adiag,acol_ptr,arow_ind,g,delta,
-                l,ldiag,lcol_ptr,lrow_ind,
+function dtrpcg(n,A,g,delta, L,
                 tol,stol,itermax,w,
                 p,q,r,t,z)
     zero = 0.0
@@ -70,7 +69,7 @@ function dtrpcg(n,a,adiag,acol_ptr,arow_ind,g,delta,
     dcopy(n,g,1,t,1)
     dscal(n,-one,t,1)
     dcopy(n,t,1,r,1)
-    dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,r,'N')
+    dstrsol(n, L, r,'N')
 
     # Initialize the direction p.
 
@@ -95,14 +94,14 @@ function dtrpcg(n,a,adiag,acol_ptr,arow_ind,g,delta,
         # Compute z by solving L'*z = p.
 
         dcopy(n,p,1,z,1)
-        dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,z,'T')
+        dstrsol(n, L, z,'T')
 
         # Compute q by solving L*q = A*z and save L*q for
         # use in updating the residual t.
 
-        dssyax(n,a,adiag,acol_ptr,arow_ind,z,q)
+        dssyax(n, A, z,q)
         dcopy(n,q,1,z,1)
-        dstrsol(n,l,ldiag,lcol_ptr,lrow_ind,q,'N')
+        dstrsol(n, L, q,'N')
 
         # Compute alpha and determine sigma such that the trust region
         # constraint || w + sigma*p || = delta is satisfied.

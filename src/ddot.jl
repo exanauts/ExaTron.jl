@@ -5,7 +5,7 @@ This subroutine forms the dot product of two vectors.
 It uses unrolled loops for increments equal to one.
 Jack Dongarra, LINPACK, 3/11/78.
 """
-function ddot(n,dx,incx,dy,incy)
+function tron_ddot(n,dx,incx,dy,incy)
     dtemp = 0.0
 
     if n <= 0
@@ -44,3 +44,10 @@ function ddot(n,dx,incx,dy,incy)
 
     return dtemp
 end
+
+if isequal(BLAS_LIBRARY, :OpenBlas)
+    ddot(n,dx,incx,dy,incy) = BLAS.dot(n,dx,incx,dy,incy)
+else
+    ddot(n,dx,incx,dy,incy) = tron_ddot(n,dx,incx,dy,incy)
+end
+

@@ -24,7 +24,6 @@ function dtrqsol(n,x,p,delta)
     dsq = delta^2
 
     # Guard against abnormal cases.
-
     rad = ptx^2 + ptp*(dsq - xtx)
     rad = sqrt(max(rad,zero))
 

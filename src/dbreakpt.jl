@@ -11,7 +11,7 @@ function dbreakpt(n,x,xl,xu,w)
     brptmin = zero
     brptmax = zero
 
-    for i=1:n
+    @inbounds for i=1:n
         if (x[i] < xu[i] && w[i] > zero)
             nbrpt = nbrpt + 1
             brpt = (xu[i] - x[i]) / w[i]

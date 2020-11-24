@@ -25,7 +25,7 @@ MINPACK-2 Project. March 1999.
 Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
-function dcauchy(n,x,xl,xu,a,diag,col_ptr,row_ind,
+function dcauchy(n,x,xl,xu,A,
                  g,delta,alpha,s,wa)
     p5 = 0.5
     one = 1.0
@@ -52,7 +52,7 @@ function dcauchy(n,x,xl,xu,a,diag,col_ptr,row_ind,
     if dnrm2(n,s,1) > delta
         interp = true
     else
-        dssyax(n,a,diag,col_ptr,row_ind,s,wa)
+        dssyax(n, A, s, wa)
         gts = ddot(n,g,1,s,1)
         q = p5*ddot(n,s,1,wa,1) + gts
         interp = (q >= mu0*gts)
@@ -73,7 +73,7 @@ function dcauchy(n,x,xl,xu,a,diag,col_ptr,row_ind,
             alpha = interpf*alpha
             dgpstep(n,x,xl,xu,-alpha,g,s)
             if dnrm2(n,s,1) <= delta
-                dssyax(n,a,diag,col_ptr,row_ind,s,wa)
+                dssyax(n, A, s,wa)
                 gts = ddot(n,g,1,s,1)
                 q = p5*ddot(n,s,1,wa,1) + gts
                 search = (q > mu0*gts)
@@ -94,7 +94,7 @@ function dcauchy(n,x,xl,xu,a,diag,col_ptr,row_ind,
             alpha = extrapf*alpha
             dgpstep(n,x,xl,xu,-alpha,g,s)
             if dnrm2(n,s,1) <= delta
-                dssyax(n,a,diag,col_ptr,row_ind,s,wa)
+                dssyax(n, A, s, wa)
                 gts = ddot(n,g,1,s,1)
                 q = p5*ddot(n,s,1,wa,1) + gts
                 if q < mu0*gts
