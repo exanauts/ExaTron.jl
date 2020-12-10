@@ -86,6 +86,13 @@ function set_default_options!(prob::ExaTronProblem)
     return
 end
 
+function addOption(prob::ExaTronProblem, keyword::String, value::Symbol)
+    if !haskey(prob.option, keyword)
+        error("ExaTron does not have option with name $(keyword).")
+    end
+    prob.option[keyword] = value
+end
+
 function addOption(prob::ExaTronProblem, keyword::String, value::Integer)
     if !haskey(prob.option, keyword)
         error("ExaTron does not have option with name $(keyword).")
