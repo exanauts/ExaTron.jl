@@ -1,11 +1,14 @@
 module ExaTron
 
+using Libdl
 using LinearAlgebra
 
-export dtron
+export dtron, solveProblem, createProblem, addOption, ExaTronProblem
 
 const BLAS_LIBRARY = :OpenBlas
+const EXATRON_LIBRARY = "libtron"
 
+has_c_library() = !isnothing(Libdl.dlopen(EXATRON_LIBRARY; throw_error=false))
 tron_zeros(S, n) = fill!(S(undef, n), zero(eltype(S)))
 
 include("daxpy.jl")
@@ -29,5 +32,6 @@ include("dcauchy.jl")
 include("dtrpcg.jl")
 include("dspcg.jl")
 include("dtron.jl")
+include("driver.jl")
 
 end # module
