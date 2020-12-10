@@ -47,6 +47,7 @@ end
 
 if isequal(BLAS_LIBRARY, :OpenBlas)
     ddot(n,dx,incx,dy,incy) = BLAS.dot(n,dx,incx,dy,incy)
+    ddot(n, dx::CuArray, incx, dy::CuArray, incy) = CUBLAS.dot(n, dx, dy)
 else
     ddot(n,dx,incx,dy,incy) = tron_ddot(n,dx,incx,dy,incy)
 end

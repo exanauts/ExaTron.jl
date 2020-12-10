@@ -2,10 +2,12 @@ module ExaTron
 
 using Libdl
 using LinearAlgebra
+using CUDA
+using CUDA.CUBLAS
 
 export dtron, solveProblem, createProblem, addOption, ExaTronProblem
 
-const BLAS_LIBRARY = :OpenBlas
+const BLAS_LIBRARY = :Tron
 const EXATRON_LIBRARY = "libtron"
 
 has_c_library() = !isnothing(Libdl.dlopen(EXATRON_LIBRARY; throw_error=false))

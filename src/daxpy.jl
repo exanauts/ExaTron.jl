@@ -54,6 +54,7 @@ end
 
 if isequal(BLAS_LIBRARY, :OpenBlas)
     daxpy(n,da,dx,incx,dy,incy) = BLAS.axpy!(da,dx,dy)
+    daxpy(n,da,dx::CuArray,incx,dy::CuArray,incy) = CUBLAS.axpy!(n, da, dx, dy)
 else
     daxpy(n,da,dx,incx,dy,incy) = tron_daxpy(n,da,dx,incx,dy,incy)
 end

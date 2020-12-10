@@ -43,6 +43,7 @@ end
 
 if isequal(BLAS_LIBRARY, :OpenBlas)
     dnrm2(n,x,incx) = BLAS.nrm2(n, x, incx)
+    dnrm2(n, x::CuArray, incx) = CUBLAS.nrm2(n, x)
 else
     dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
 end

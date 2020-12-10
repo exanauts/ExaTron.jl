@@ -8,6 +8,7 @@ This subroutine computes the gradient projection step
 where P is the projection on the n-dimensional interval [xl,xu].
 """
 function dgpstep(n,x,xl,xu,alpha,w,s)
+    # TODO
     # This computation of the gradient projection step avoids
     # rouding errors for the components that are feasible.
 
