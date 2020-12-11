@@ -5,4 +5,3 @@ using LinearAlgebra
 using SparseArrays
 
 include("qptest.jl")
-include("tron.jl")
