@@ -1,6 +1,3 @@
-mutable struct ExaTronInfo
-end
-
 mutable struct ExaTronProblem{VI, VD}
     n::Cint                 # number of variables
     nnz::Int                # number of Hessian entries
