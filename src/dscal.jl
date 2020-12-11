@@ -51,6 +51,7 @@ end
 
 if isequal(BLAS_LIBRARY, :OpenBlas)
     dscal(n,da,dx,incx) = BLAS.scal!(n, da, dx, incx)
+    dscal(n,da,dx::CuArray,incx) = CUBLAS.scal!(n, da, dx)
 else
     dscal(n,da,dx,incx) = tron_dscal(n, da, dx, incx)
 end

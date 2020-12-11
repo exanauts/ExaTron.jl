@@ -57,31 +57,24 @@ function dtrpcg(n,A,g,delta, L,
     one = 1.0
 
     # Initialize the iterate w and the residual r.
-
-    for i=1:n
-        w[i] = zero
-    end
+    fill!(w, 0)
 
     # Initialize the residual t of grad q to -g.
     # Initialized the residual r of grad Q by solving L*r = -g.
     # Note that t = L*r.
-
     dcopy(n,g,1,t,1)
     dscal(n,-one,t,1)
     dcopy(n,t,1,r,1)
     dstrsol(n, L, r,'N')
 
     # Initialize the direction p.
-
     dcopy(n,r,1,p,1)
 
     # Initialize rho and the norms of r and t.
-
     rho = ddot(n,r,1,r,1)
     rnorm0 = sqrt(rho)
 
     # Exit if g = 0.
-
     iters = 0
     if rnorm0 == zero
         iters = 0
@@ -92,20 +85,17 @@ function dtrpcg(n,A,g,delta, L,
     for iters=1:itermax
 
         # Compute z by solving L'*z = p.
-
         dcopy(n,p,1,z,1)
         dstrsol(n, L, z,'T')
 
         # Compute q by solving L*q = A*z and save L*q for
         # use in updating the residual t.
-
-        dssyax(n, A, z,q)
+        dssyax(n, A, z, q)
         dcopy(n,q,1,z,1)
         dstrsol(n, L, q,'N')
 
         # Compute alpha and determine sigma such that the trust region
         # constraint || w + sigma*p || = delta is satisfied.
-
         ptq = ddot(n,p,1,q,1)
         if ptq > zero
             alpha = rho/ptq
@@ -152,7 +142,6 @@ function dtrpcg(n,A,g,delta, L,
         end
 
         # Compute p = r + beta*p and update rho.
-
         beta = rtr/rho
         dscal(n,beta,p,1)
         daxpy(n,one,r,1,p,1)

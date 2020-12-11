@@ -90,7 +90,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
             # Compute the predicted reduction.
 
-            dssyax(A, s, wa)
+            dssyax(n, A, s, wa)
             prered = -(ddot(n,s,1,g,1) + p5*ddot(n,s,1,wa,1))
             iterscg = iterscg + iters
 
