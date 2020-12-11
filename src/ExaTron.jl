@@ -5,7 +5,7 @@ using LinearAlgebra
 using CUDA
 using CUDA.CUBLAS
 
-export dtron, solveProblem, createProblem, addOption, ExaTronProblem
+export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
 const BLAS_LIBRARY = :Tron
 const EXATRON_LIBRARY = "libtron"

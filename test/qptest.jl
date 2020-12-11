@@ -48,7 +48,7 @@ end
 
     if ExaTron.has_c_library()
         @testset "Tron: Fortran" begin
-            prob.option["tron_code"] = :Fortran
+            ExaTron.setOption(prob, "tron_code", :Fortran)
             prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
             ExaTron.solveProblem(prob)
             @test prob.f ≈ obj♯ atol=1e-8
@@ -85,7 +85,7 @@ end
 
     if ExaTron.has_c_library()
         @testset "Tron: Fortran" begin
-            prob.option["tron_code"] = :Fortran
+            ExaTron.setOption(prob, "tron_code", :Fortran)
             ExaTron.solveProblem(prob)
             @test prob.f == obj
             @test prob.x[1] == 1.0

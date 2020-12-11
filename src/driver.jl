@@ -26,7 +26,7 @@ mutable struct ExaTronProblem{VI, VD}
     eval_grad_f::Function
     eval_h::Function
 
-    option::Dict{String, Any}
+    options::Dict{String, Any}
 
     # Statistics
     delta::Cdouble
@@ -70,42 +70,49 @@ function gpnorm(n, x, x_l, x_u, g)
 end
 
 function set_default_options!(prob::ExaTronProblem)
-    prob.option = Dict{String,Any}()
+    prob.options = Dict{String,Any}()
 
-    prob.option["max_feval"] = 500
-    prob.option["max_minor"] = 200
-    prob.option["p"] = 5
-    prob.option["verbose"] = 0
-    prob.option["tol"] = 1e-6
-    prob.option["fatol"] = 0
-    prob.option["frtol"] = 1e-12
-    prob.option["fmin"] = -1e32
-    prob.option["cgtol"] = 0.1
-    prob.option["tron_code"] = :Julia
+    prob.options["max_feval"] = 500
+    prob.options["max_minor"] = 200
+    prob.options["p"] = 5
+    prob.options["verbose"] = 0
+    prob.options["tol"] = 1e-6
+    prob.options["fatol"] = 0
+    prob.options["frtol"] = 1e-12
+    prob.options["fmin"] = -1e32
+    prob.options["cgtol"] = 0.1
+    prob.options["tron_code"] = :Julia
 
     return
 end
 
-function addOption(prob::ExaTronProblem, keyword::String, value::Symbol)
-    if !haskey(prob.option, keyword)
+function getOption(prob::ExaTronProblem, keyword::String)
+    if !haskey(prob.options, keyword)
         error("ExaTron does not have option with name $(keyword).")
     end
-    prob.option[keyword] = value
+    return prob.options[keyword]
 end
 
-function addOption(prob::ExaTronProblem, keyword::String, value::Integer)
-    if !haskey(prob.option, keyword)
+function setOption(prob::ExaTronProblem, keyword::String, value::Symbol)
+    if !haskey(prob.options, keyword)
         error("ExaTron does not have option with name $(keyword).")
     end
-    prob.option[keyword] = value
+    prob.options[keyword] = value
+end
+
+function setOption(prob::ExaTronProblem, keyword::String, value::Integer)
+    if !haskey(prob.options, keyword)
+        error("ExaTron does not have option with name $(keyword).")
+    end
+    prob.options[keyword] = value
     return
 end
 
-function addOption(prob::ExaTronProblem, keyword::String, value::Float64)
-    if !haskey(prob.option, keyword)
+function setOption(prob::ExaTronProblem, keyword::String, value::Float64)
+    if !haskey(prob.options, keyword)
         error("ExaTron does not have option with name $(keyword).")
     end
-    prob.option[keyword] = value
+    prob.options[keyword] = value
     return
 end
 
@@ -148,7 +155,7 @@ function createProblem(n::Int, x_l::AbstractVector{Float64}, x_u::AbstractVector
 
     tron.eval_h(tron.x, :Structure, tron.rows, tron.cols, 1.0, Float64[], Float64[])
     # Instantiate sparse matrix
-    p = tron.option["p"]
+    p = tron.options["p"]
     tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
     tron.B = TronSparseMatrixCSC{VI, VD}(n, nele_hess)
     tron.L = TronSparseMatrixCSC{VI, VD}(n, nele_hess + n*p)
@@ -169,14 +176,14 @@ function solveProblem(tron::ExaTronProblem)
 
     isave = VI(undef, 3)
     dsave = tron_zeros(VD, 3)
-    fatol = tron.option["fatol"]
-    frtol = tron.option["frtol"]
-    fmin = tron.option["fmin"]
-    cgtol = tron.option["cgtol"]
-    gtol = tron.option["tol"]
-    max_feval = tron.option["max_feval"]
-    tcode = tron.option["tron_code"]
-    max_minor = tron.option["max_minor"]
+    fatol = tron.options["fatol"]
+    frtol = tron.options["frtol"]
+    fmin = tron.options["fmin"]
+    cgtol = tron.options["cgtol"]
+    gtol = tron.options["tol"]
+    max_feval = tron.options["max_feval"]
+    tcode = tron.options["tron_code"]
+    max_minor = tron.options["max_minor"]
 
     # Project x into its bound. Tron requires x to be feasible.
     tron.x .= max.(tron.x_l, min.(tron.x_u, tron.x))
