@@ -1,10 +1,12 @@
 using ExaTron
-using Test
 using Random
 using LinearAlgebra
 using SparseArrays
 using CUDA
 using CUDA.CUSPARSE
+
+using Profile
+using PProf
 
 function build_problem(; n=10, gpu=true)
     Random.seed!(1)
@@ -44,6 +46,9 @@ function build_problem(; n=10, gpu=true)
     return ExaTron.createProblem(n, l, u, nnz(P), eval_f, eval_g, eval_h)
 end
 
-# prob = build_problem(; n=1000)
-# prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
+prob = build_problem(; n=1000)
+prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
+@profile ExaTron.solveProblem(prob)
+pprof()
+
 # CUDA.@profile ExaTron.solveProblem(prob)

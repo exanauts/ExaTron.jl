@@ -1,0 +1,4 @@
+[deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+ExaTron = "28b18bf8-76f9-41ea-81fa-0f922810b349"
+Profile = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
