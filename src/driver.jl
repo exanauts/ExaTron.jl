@@ -1,7 +1,7 @@
 mutable struct ExaTronProblem{VI, VD}
     n::Cint                 # number of variables
-    nnz::Int                # number of Hessian entries
-    nnz_a::Int              # number of Hessian entries in the strict lower
+    nnz::Integer            # number of Hessian entries
+    nnz_a::Integer          # number of Hessian entries in the strict lower
     A::TronSparseMatrixCSC{VI, VD}
     B::TronSparseMatrixCSC{VI, VD}
     L::TronSparseMatrixCSC{VI, VD}
@@ -30,10 +30,10 @@ mutable struct ExaTronProblem{VI, VD}
     f::Cdouble
     gnorm_two::Float64
     gnorm_inf::Float64
-    nfev::Int
-    ngev::Int
-    nhev::Int
-    minor_iter::Int
+    nfev::Integer
+    ngev::Integer
+    nhev::Integer
+    minor_iter::Integer
     status::Symbol
 
     ExaTronProblem{VI, VD}() where {VI, VD} = new{VI, VD}()
@@ -132,8 +132,8 @@ function instantiate_memory!(tron::ExaTronProblem{VI,VD}, n, nele_hess) where {V
     tron.values = tron_zeros(VD, nele_hess)
 end
 
-function createProblem(n::Int, x_l::AbstractVector{Float64}, x_u::AbstractVector{Float64},
-                       nele_hess::Int, eval_f_cb, eval_grad_f_cb, eval_h_cb)
+function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVector{Float64},
+                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb)
     @assert n == length(x_l) == length(x_u)
     @assert typeof(x_l) == typeof(x_u)
 
@@ -142,7 +142,7 @@ function createProblem(n::Int, x_l::AbstractVector{Float64}, x_u::AbstractVector
 
     tron = ExaTronProblem{VI, VD}()
     set_default_options!(tron)
-    instantiate_memory!(tron, n, nele_hess)
+    instantiate_memory!(tron, n, Int64(nele_hess))
     copyto!(tron.x_l, 1, x_l, 1, n)
     copyto!(tron.x_u, 1, x_u, 1, n)
 
@@ -154,8 +154,8 @@ function createProblem(n::Int, x_l::AbstractVector{Float64}, x_u::AbstractVector
     # Instantiate sparse matrix
     p = tron.options["p"]
     tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
-    tron.B = TronSparseMatrixCSC{VI, VD}(n, nele_hess)
-    tron.L = TronSparseMatrixCSC{VI, VD}(n, nele_hess + n*p)
+    tron.B = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess))
+    tron.L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
     tron.nnz_a = tron.A.nnz
     tron.status = :NotSolved
 
@@ -227,7 +227,7 @@ function solveProblem(tron::ExaTronProblem)
         # Initialize the trust region bound.
 
         if unsafe_string(pointer(task), 5) == "START"
-            gnorm0 = norm(tron.g, 2)
+            gnorm0 = norm(tron.g)
             tron.delta = gnorm0
         end
 
