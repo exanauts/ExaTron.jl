@@ -11,7 +11,7 @@ const BLAS_LIBRARY = :Tron
 const EXATRON_LIBRARY = "libtron"
 
 has_c_library() = !isnothing(Libdl.dlopen(EXATRON_LIBRARY; throw_error=false))
-tron_zeros(S, n) = fill!(S(undef, n), zero(eltype(S)))
+tron_zeros(S, n) = fill!(S(undef, Int64(n)), zero(eltype(S)))
 
 include("daxpy.jl")
 include("dcopy.jl")
