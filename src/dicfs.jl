@@ -43,11 +43,21 @@ function dicfs(n, nnz, A, L,
     # Compute the initial shift.
 
     alpha = zero
-    @inbounds for i=1:n
-        if A.diag_vals[i] == zero
-            alpha = alphas
-        else
-            alpha = max(alpha,-A.diag_vals[i]*(wa2[i]^2))
+    if isa(A, TronSparseMatrixCSC)
+        @inbounds for i=1:n
+            if A.diag_vals[i] == zero
+                alpha = alphas
+            else
+                alpha = max(alpha,-A.diag_vals[i]*(wa2[i]^2))
+            end
+        end
+    else
+        @inbounds for i=1:n
+            if A.vals[i,i] == zero
+                alpha = alphas
+            else
+                alpha = max(alpha,-A.vals[i,i]*(wa2[i]^2))
+            end
         end
     end
     if alpha > 0
@@ -62,21 +72,31 @@ function dicfs(n, nnz, A, L,
     nb = 1
     while true
 
-        # Copy the sparsity structure of A into L.
-        @inbounds for i=1:n+1
-            L.colptr[i] = A.colptr[i]
-        end
-        @inbounds for i=1:nnz
-            L.rowval[i] = A.rowval[i]
-        end
+        if isa(A, TronSparseMatrixCSC)
+            # Copy the sparsity structure of A into L.
+            @inbounds for i=1:n+1
+                L.colptr[i] = A.colptr[i]
+            end
+            @inbounds for i=1:nnz
+                L.rowval[i] = A.rowval[i]
+            end
 
-        # Scale A and store in the lower triangular matrix L.
-        @inbounds for j=1:n
-            L.diag_vals[j] = A.diag_vals[j]*(wa2[j]^2) + alpha
-        end
-        @inbounds for j=1:n
-            for i=A.colptr[j]:A.colptr[j+1]-1
-                L.tril_vals[i] = A.tril_vals[i]*wa2[j]*wa2[A.rowval[i]]
+            # Scale A and store in the lower triangular matrix L.
+            @inbounds for j=1:n
+                L.diag_vals[j] = A.diag_vals[j]*(wa2[j]^2) + alpha
+            end
+            @inbounds for j=1:n
+                for i=A.colptr[j]:A.colptr[j+1]-1
+                    L.tril_vals[i] = A.tril_vals[i]*wa2[j]*wa2[A.rowval[i]]
+                end
+            end
+        else
+            # TronDenseMatrix case.
+            @inbounds for j=1:n
+                L.vals[j,j] = A.vals[j,j]*(wa2[j]^2) + alpha
+            end
+            @inbounds for j=1:n,k=j+1:n
+                L.vals[k,j] = A.vals[k,j]*wa2[j]*wa2[k]
             end
         end
 
@@ -95,11 +115,17 @@ function dicfs(n, nnz, A, L,
                 alpha = alphas
                 nb = nb + 1
             else
-                @inbounds for i=1:n
-                    L.diag_vals[i] /= wa2[i]
-                end
-                @inbounds for j=1:L.colptr[n+1]-1
-                    L.tril_vals[j] = L.tril_vals[j]/wa2[L.rowval[j]]
+                if isa(L, TronSparseMatrixCSC)
+                    @inbounds for i=1:n
+                        L.diag_vals[i] /= wa2[i]
+                    end
+                    @inbounds for j=1:L.colptr[n+1]-1
+                        L.tril_vals[j] = L.tril_vals[j]/wa2[L.rowval[j]]
+                    end
+                else
+                    @inbounds for j=1:n,k=j:n
+                        L.vals[k,j] /= wa2[k]
+                    end
                 end
                 return
             end
