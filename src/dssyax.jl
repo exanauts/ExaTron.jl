@@ -1,6 +1,8 @@
 export TronSparseMatrixCSC
 
-struct TronSparseMatrixCSC{VI, VD}
+abstract type AbstractTronMatrix end
+
+struct TronSparseMatrixCSC{VI, VD} <: AbstractTronMatrix
     n::Int
     nnz::Int
     colptr::VI
@@ -8,6 +10,38 @@ struct TronSparseMatrixCSC{VI, VD}
     map::VI
     diag_vals::VD
     tril_vals::VD
+end
+
+mutable struct TronDenseMatrix{MD} <: AbstractTronMatrix
+    n::Int      # the current dimension of submatrix
+    max_n::Int  # the maximum dimension this matrix can hold
+    vals::MD    # matrix entries
+end
+
+function TronDenseMatrix{MD}(n::Int) where {MD}
+    @assert n >= 1
+    return TronDenseMatrix{MD}(n, n, tron_zeros(MD{Float64}, (n, n)))
+end
+
+function TronDenseMatrix(A::TronDenseMatrix)
+    return TronDenseMatrix{typeof(A.vals)}(A.n, A.max_n, copy(A.vals))
+end
+
+function TronDenseMatrix(I::VI, J::VI, V::VD, n) where {VI, VD}
+    @assert n >= 1
+    @assert length(I) == length(J) == length(V)
+
+    if isa(V, Array)
+        A = TronDenseMatrix{Array}(n, n, tron_zeros(Array{eltype(V)}, (n, n)))
+    else
+        A = TronDenseMatrix{CuArray}(n, n, tron_zeros(CuArray{eltype(V)}, (n, n)))
+    end
+    for i=1:length(I)
+        @assert 1 <= I[i] <= n && 1 <= J[i] <= n && I[i] >= J[i]
+        @inbounds A.vals[I[i], J[i]] += V[i]
+    end
+
+    return A
 end
 
 # Default constructor to allocate memory
@@ -97,7 +131,12 @@ function TronSparseMatrixCSC(I::VI, J::VI, V::VD, n) where {VI, VD}
     )
 end
 
+Base.size(A::TronDenseMatrix) = (A.n, A.n)
 Base.size(A::TronSparseMatrixCSC) = (A.n, A.n)
+
+function Base.fill!(A::TronDenseMatrix, val)
+    fill!(A.vals, val)
+end
 
 function Base.fill!(A::TronSparseMatrixCSC, val)
     fill!(A.diag_vals, val)
@@ -116,6 +155,24 @@ function Base.copy!(A::TronSparseMatrixCSC, values)
 end
 
 nrm2!(wa, A) = nrm2!(wa, A, A.n)
+
+function nrm2!(wa, A::TronDenseMatrix, n)
+    @inbounds for i=1:n
+        wa[i] = A.vals[i,i]^2
+    end
+    @inbounds for j=1:n
+        for i=j+1:n
+            wa[j] += A.vals[i,j]^2
+            wa[i] += A.vals[i,j]^2
+        end
+    end
+    @inbounds for j=1:n
+        wa[j] = sqrt(wa[j])
+    end
+
+    return
+end
+
 function nrm2!(wa, A::TronSparseMatrixCSC, n)
     @inbounds for i=1:n
         wa[i] = A.diag_vals[i]^2
@@ -130,6 +187,28 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     @inbounds for j=1:n
         wa[j] = sqrt(wa[j])
     end
+end
+
+@inline getdiagvalue(A::TronSparseMatrixCSC, i) = A.diag_vals[i]
+@inline getdiagvalue(A::TronDenseMatrix, i) = A.vals[i,i]
+
+function dssyax(n, A::TronDenseMatrix, x, y)
+    zero = 0.0
+
+    @inbounds for i=1:n
+        y[i] = A.vals[i,i]*x[i]
+    end
+
+    @inbounds for j=1:n
+        rowsum = zero
+        for i=j+1:n
+            rowsum += A.vals[i,j]*x[i]
+            y[i] += A.vals[i,j]*x[j]
+        end
+        y[j] += rowsum
+    end
+
+    return
 end
 
 """
@@ -158,6 +237,22 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
     end
 
     return
+end
+
+function reorder!(B::TronDenseMatrix, A::TronDenseMatrix, indfree, nfree, iwa)
+    nnz = 0
+    @inbounds for j=1:nfree
+        jfree = indfree[j]
+        B.vals[j,j] = A.vals[jfree,jfree]
+        for i=jfree+1:A.n
+            if iwa[i] > 0
+                nnz += 1
+                B.vals[iwa[i],j] = A.vals[i,jfree]
+            end
+        end
+    end
+    B.n = nfree
+    return nnz
 end
 
 # Update matrix B inplace

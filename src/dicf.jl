@@ -24,7 +24,7 @@ MINPACK-2 Project. May 1998.
 Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
-function dicf(n, nnz, L, p, indr, indf, list, w)
+function dicf(n, nnz, L::TronSparseMatrixCSC, p, indr, indf, list, w)
     zero = 0.0
     insortf = 20
 
@@ -112,7 +112,7 @@ function dicf(n, nnz, L, p, indr, indf, list, w)
             w[indr[k]] = w[indr[k]]/L.diag_vals[j]
         end
 
-        # Set mlj to the number of nonzeros to be ratined.
+        # Set mlj to the number of nonzeros to be retained.
         mlj = min(iej-isj+1+p,nlj)
         kth = nlj - mlj + 1
 
@@ -160,6 +160,33 @@ function dicf(n, nnz, L, p, indr, indf, list, w)
         # Update isj and L.colptr.
         isj = L.colptr[j+1]
         L.colptr[j+1] = newiej + 1
+    end
+
+    return info
+end
+
+function dicf(n, nnz, L::TronDenseMatrix, p, indr, indf, list, w)
+    zero = 0.0
+    info = 0
+
+    # We perform left-looking Cholesky factorization.
+    @inbounds for j=1:n
+        if L.vals[j,j] <= zero
+            info = -j
+            return info
+        end
+        L.vals[j,j] = sqrt(L.vals[j,j])
+
+        # Update column j using the previous columns.
+        @inbounds for k=1:j-1,i=j+1:n
+            L.vals[i,j] = L.vals[i,j] - L.vals[i,k]*L.vals[j,k]
+        end
+
+        # Compute the j-th column of L.
+        @inbounds for i=j+1:n
+            L.vals[i,j] = L.vals[i,j] / L.vals[j,j]
+            L.vals[i,i] = L.vals[i,i] - L.vals[i,j]^2
+        end
     end
 
     return info

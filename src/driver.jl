@@ -2,9 +2,9 @@ mutable struct ExaTronProblem{VI, VD}
     n::Cint                 # number of variables
     nnz::Integer            # number of Hessian entries
     nnz_a::Integer          # number of Hessian entries in the strict lower
-    A::TronSparseMatrixCSC{VI, VD}
-    B::TronSparseMatrixCSC{VI, VD}
-    L::TronSparseMatrixCSC{VI, VD}
+    A::AbstractTronMatrix
+    B::AbstractTronMatrix
+    L::AbstractTronMatrix
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
     g::VD         # gradient
@@ -79,6 +79,7 @@ function set_default_options!(prob::ExaTronProblem)
     prob.options["fmin"] = -1e32
     prob.options["cgtol"] = 0.1
     prob.options["tron_code"] = :Julia
+    prob.options["matrix_type"] = :Sparse
 
     return
 end
@@ -133,7 +134,7 @@ function instantiate_memory!(tron::ExaTronProblem{VI,VD}, n, nele_hess) where {V
 end
 
 function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVector{Float64},
-                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb)
+                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb; options...)
     @assert n == length(x_l) == length(x_u)
     @assert typeof(x_l) == typeof(x_u)
 
@@ -142,6 +143,9 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
 
     tron = ExaTronProblem{VI, VD}()
     set_default_options!(tron)
+    for (name, value) in options
+        setOption(tron, string(name), value)
+    end
     instantiate_memory!(tron, n, Int64(nele_hess))
     copyto!(tron.x_l, 1, x_l, 1, n)
     copyto!(tron.x_u, 1, x_u, 1, n)
@@ -153,10 +157,23 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     tron.eval_h(tron.x, :Structure, tron.rows, tron.cols, 1.0, Float64[], Float64[])
     # Instantiate sparse matrix
     p = tron.options["p"]
-    tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
-    tron.B = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess))
-    tron.L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
-    tron.nnz_a = tron.A.nnz
+
+    if tron.options["matrix_type"] == :Sparse
+        tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
+        tron.B = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess))
+        tron.L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
+        tron.nnz_a = tron.A.nnz
+    else
+        tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
+        if isa(x_l, Array)
+            tron.B = TronDenseMatrix{Array}(n)
+            tron.L = TronDenseMatrix{Array}(n)
+        else
+            tron.B = TronDenseMatrix{CuArray}(n)
+            tron.L = TronDenseMatrix{CuArray}(n)
+        end
+        tron.nnz_a = n*n
+    end
     tron.status = :NotSolved
 
     return tron
@@ -214,12 +231,19 @@ function solveProblem(tron::ExaTronProblem)
 
             # Copy values in the CSC matrix.
             fill!(tron.A, 0.0)
-            @inbounds for i in 1:tron.nnz
-                m = tron.A.map[i]
-                if m < 0
-                    tron.A.diag_vals[-m] += tron.values[i]
-                else
-                    tron.A.tril_vals[m] += tron.values[i]
+            if tron.options["matrix_type"] == :Sparse
+                @inbounds for i in 1:tron.nnz
+                    m = tron.A.map[i]
+                    if m < 0
+                        tron.A.diag_vals[-m] += tron.values[i]
+                    else
+                        tron.A.tril_vals[m] += tron.values[i]
+                    end
+                end
+            else
+                @inbounds for i in 1:tron.nnz
+                    # It is assumed that rows[i] >= cols[i] for all i.
+                    tron.A.vals[tron.rows[i], tron.cols[i]] += tron.values[i]
                 end
             end
         end
