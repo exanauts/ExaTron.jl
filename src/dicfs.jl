@@ -43,23 +43,14 @@ function dicfs(n, nnz, A, L,
     # Compute the initial shift.
 
     alpha = zero
-    if isa(A, TronSparseMatrixCSC)
-        @inbounds for i=1:n
-            if A.diag_vals[i] == zero
-                alpha = alphas
-            else
-                alpha = max(alpha,-A.diag_vals[i]*(wa2[i]^2))
-            end
-        end
-    else
-        @inbounds for i=1:n
-            if A.vals[i,i] == zero
-                alpha = alphas
-            else
-                alpha = max(alpha,-A.vals[i,i]*(wa2[i]^2))
-            end
+    @inbounds for i=1:n
+        if getdiagvalue(A,i) == zero
+            alpha = alphas
+        else
+            alpha = max(alpha,-getdiagvalue(A,i)*(wa2[i]^2))
         end
     end
+
     if alpha > 0
         alpha = max(alpha,alphas)
     end

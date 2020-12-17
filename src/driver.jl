@@ -2,9 +2,9 @@ mutable struct ExaTronProblem{VI, VD}
     n::Cint                 # number of variables
     nnz::Integer            # number of Hessian entries
     nnz_a::Integer          # number of Hessian entries in the strict lower
-    A::TronMatrix
-    B::TronMatrix
-    L::TronMatrix
+    A::AbstractTronMatrix
+    B::AbstractTronMatrix
+    L::AbstractTronMatrix
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
     g::VD         # gradient

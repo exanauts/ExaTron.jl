@@ -1,8 +1,8 @@
 export TronSparseMatrixCSC
 
-abstract type TronMatrix end
+abstract type AbstractTronMatrix end
 
-struct TronSparseMatrixCSC{VI, VD} <: TronMatrix
+struct TronSparseMatrixCSC{VI, VD} <: AbstractTronMatrix
     n::Int
     nnz::Int
     colptr::VI
@@ -12,10 +12,10 @@ struct TronSparseMatrixCSC{VI, VD} <: TronMatrix
     tril_vals::VD
 end
 
-mutable struct TronDenseMatrix{MD} <: TronMatrix
-    n::Int
-    max_n::Int
-    vals::MD
+mutable struct TronDenseMatrix{MD} <: AbstractTronMatrix
+    n::Int      # the current dimension of submatrix
+    max_n::Int  # the maximum dimension this matrix can hold
+    vals::MD    # matrix entries
 end
 
 function TronDenseMatrix{MD}(n::Int) where {MD}
@@ -188,6 +188,9 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
         wa[j] = sqrt(wa[j])
     end
 end
+
+@inline getdiagvalue(A::TronSparseMatrixCSC, i) = A.diag_vals[i]
+@inline getdiagvalue(A::TronDenseMatrix, i) = A.vals[i,i]
 
 function dssyax(n, A::TronDenseMatrix, x, y)
     zero = 0.0
