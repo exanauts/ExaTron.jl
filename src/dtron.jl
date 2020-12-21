@@ -1,3 +1,9 @@
+@enum(TronStatus,
+    Compute,
+    Evaluate,
+    NewPoint,
+)
+
 """
 Subroutine dtron
 
@@ -41,18 +47,18 @@ function dtron(n,x,xl,xu,f,g,A,
         iter = 1
         iterscg = 0
         alphac = one
-        work = "COMPUTE"
+        work = Compute
 
     else
 
         # Restore local variables.
 
         if isave[1] == 1
-            work = "COMPUTE"
+            work = Compute
         elseif isave[1] == 2
-            work = "EVALUATE"
+            work = Evaluate
         elseif isave[1] == 3
-            work = "NEWX"
+            work = NewPoint
         end
         iter = isave[2]
         iterscg = isave[3]
@@ -68,7 +74,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
         # Compute a step and evaluate the function at the trial point.
 
-        if work == "COMPUTE"
+        if work == Compute
 
             # Save the best function value, iterate, and gradient.
 
@@ -101,7 +107,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
         # Evaluate the step and determine if the step is successful.
 
-        if work == "EVALUATE"
+        if work == Evaluate
 
             # Compute the actual reduction.
 
@@ -176,15 +182,15 @@ function dtron(n,x,xl,xu,f,g,A,
 
         # Test for continuation of search
 
-        if Char(task[1]) == 'F' && work == "EVALUATE"
+        if Char(task[1]) == 'F' && work == Evaluate
             search = true
-            work = "COMPUTE"
+            work = Compute
         else
             search = false
         end
     end
 
-    if work == "NEWX"
+    if work == NewPoint
         for (i,s) in enumerate("NEWX")
             task[i] = UInt8(s)
         end
@@ -192,23 +198,23 @@ function dtron(n,x,xl,xu,f,g,A,
 
     # Decide on what work to perform on the next iteration.
 
-    if Char(task[1]) == 'F' && work == "COMPUTE"
-        work = "EVALUATE"
-    elseif Char(task[1]) == 'F' && work == "EVALUATE"
-        work = "COMPUTE"
+    if Char(task[1]) == 'F' && work == Compute
+        work = Evaluate
+    elseif Char(task[1]) == 'F' && work == Evaluate
+        work = Compute
     elseif unsafe_string(pointer(task),2) == "GH"
-        work = "NEWX"
+        work = NewPoint
     elseif unsafe_string(pointer(task),4) == "NEWX"
-        work = "COMPUTE"
+        work = Compute
     end
 
     # Save local variables.
 
-    if work == "COMPUTE"
+    if work == Compute
         isave[1] = 1
-    elseif work == "EVALUATE"
+    elseif work == Evaluate
         isave[1] = 2
-    elseif work == "NEWX"
+    elseif work == NewPoint
         isave[1] = 3
     end
     isave[2] = iter
