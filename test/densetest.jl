@@ -1,3 +1,5 @@
+import ExaTron: ICFS
+
 @testset "DenseMatrix" begin
     tol = 1e-10
     Random.seed!(0)
@@ -54,7 +56,7 @@
 
         # Test dicf().
         A.vals .= tril(L.vals * transpose(L.vals))
-        info = ExaTron.dicf(n, 1, A, 1, [], [], [], [])
+        info = ICFS.dicf(n, 1, A, 1, [], [], [], [])
         @test info == 0
         @test norm(A.vals .- L.vals) <= tol
 
