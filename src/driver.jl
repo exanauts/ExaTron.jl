@@ -207,6 +207,7 @@ function solveProblem(tron::ExaTronProblem)
     tron.nfev = tron.ngev = tron.nhev = 0
     tron.status = :NotSolved
     search = true
+
     while (search)
 
         # Evaluate the function.
@@ -231,21 +232,7 @@ function solveProblem(tron::ExaTronProblem)
 
             # Copy values in the CSC matrix.
             fill!(tron.A, 0.0)
-            if tron.options["matrix_type"] == :Sparse
-                @inbounds for i in 1:tron.nnz
-                    m = tron.A.map[i]
-                    if m < 0
-                        tron.A.diag_vals[-m] += tron.values[i]
-                    else
-                        tron.A.tril_vals[m] += tron.values[i]
-                    end
-                end
-            else
-                @inbounds for i in 1:tron.nnz
-                    # It is assumed that rows[i] >= cols[i] for all i.
-                    tron.A.vals[tron.rows[i], tron.cols[i]] += tron.values[i]
-                end
-            end
+            transfer!(tron.A, tron.rows, tron.cols, tron.values, tron.nnz)
         end
 
         # Initialize the trust region bound.

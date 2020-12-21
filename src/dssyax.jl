@@ -143,14 +143,20 @@ function Base.fill!(A::TronSparseMatrixCSC, val)
     fill!(A.tril_vals, val)
 end
 
-function Base.copy!(A::TronSparseMatrixCSC, values)
-    for i in 1:A.nnz
+function transfer!(A::TronSparseMatrixCSC, rows, cols, values, nnz)
+    for i in 1:nnz
         m = A.map[i]
         if m < 0
             A.diag_vals[-m] = values[i]
         else
             A.tril_vals[m] = values[i]
         end
+    end
+end
+function transfer!(A::TronDenseMatrix, rows, cols, values, nnz)
+    @inbounds for i in 1:nnz
+        # It is assumed that rows[i] >= cols[i] for all i.
+        A.vals[rows[i], cols[i]] += values[i]
     end
 end
 

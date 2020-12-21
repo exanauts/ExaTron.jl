@@ -7,7 +7,7 @@ function build_problem(; n=10)
     l = - 100. * rand(n)
     Iz, Jz, vals = findnz(P)
 
-    eval_f(x) = 0.5 * x' * P * x + q' * x
+    eval_f(x) = 0.5 * dot(x, P, x) + dot(q, x)
 
     function eval_g(x, g)
         fill!(g, 0)
