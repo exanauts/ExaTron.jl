@@ -27,6 +27,8 @@ include("dssyax.jl")
 # ICFS
 include("ICFS/ICFS.jl")
 using .ICFS
+# Preconditioners
+include("preconditioners.jl")
 # Tron algorithm
 include("dstrsol.jl")
 include("dtrqsol.jl")

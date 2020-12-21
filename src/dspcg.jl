@@ -104,12 +104,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # Recall that iwa allows the detection of free variables.
         nnz = reorder!(B, A, indfree, nfree, iwa)
 
-        # Compute the incomplete Cholesky factorization.
-        alpha = zero
-        # TODO
-        ICFS.dicfs(nfree, nnz, B, L,
-                   nv, alpha,
-                   iwa, view(wa,1:n), view(wa,n+1:5*n))
+        update!(L, B, nfree, nnz, iwa, view(wa,1:n), view(wa,n+1:5*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.
@@ -136,7 +131,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
                                view(wa,3*n+1:4*n),view(wa,4*n+1:5*n))
 
         iters = iters + itertr
-        dstrsol(nfree,L, w,'T')
+        dstrsol(nfree, L, w,'T')
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.
