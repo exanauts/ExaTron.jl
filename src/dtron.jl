@@ -1,7 +1,7 @@
 @enum(TronStatus,
-    Compute,
-    Evaluate,
-    NewPoint,
+    COMPUTE,
+    EVALUATE,
+    NEWPOINT,
 )
 
 """
@@ -17,7 +17,7 @@ function, gradient, and the Hessian matrix.
 """
 function dtron(n,x,xl,xu,f,g,A,
                frtol,fatol,fmin,cgtol,itermax,delta,task,
-               B, L,
+               B, precond,
                xc,s,indfree,
                isave,dsave,wa,iwa)
     zero = 0.0
@@ -36,8 +36,6 @@ function dtron(n,x,xl,xu,f,g,A,
     sigma2 = 0.5
     sigma3 = 4.0
 
-    work = ""
-
     # Initialization section.
 
     if unsafe_string(pointer(task), 5) == "START"
@@ -47,18 +45,18 @@ function dtron(n,x,xl,xu,f,g,A,
         iter = 1
         iterscg = 0
         alphac = one
-        work = Compute
+        work = COMPUTE
 
     else
 
         # Restore local variables.
 
         if isave[1] == 1
-            work = Compute
+            work = COMPUTE
         elseif isave[1] == 2
-            work = Evaluate
+            work = EVALUATE
         elseif isave[1] == 3
-            work = NewPoint
+            work = NEWPOINT
         end
         iter = isave[2]
         iterscg = isave[3]
@@ -74,7 +72,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
         # Compute a step and evaluate the function at the trial point.
 
-        if work == Compute
+        if work == COMPUTE
 
             # Save the best function value, iterate, and gradient.
 
@@ -90,7 +88,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
             info,iters = dspcg(n,x,xl,xu,A,g,delta,
                                cgtol,s,5,itermax,
-                               B, L,
+                               B, precond,
                                indfree,view(wa,1:n),view(wa,n+1:2*n),
                                view(wa,2*n+1:7*n),iwa)
 
@@ -107,7 +105,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
         # Evaluate the step and determine if the step is successful.
 
-        if work == Evaluate
+        if work == EVALUATE
 
             # Compute the actual reduction.
 
@@ -182,15 +180,15 @@ function dtron(n,x,xl,xu,f,g,A,
 
         # Test for continuation of search
 
-        if Char(task[1]) == 'F' && work == Evaluate
+        if Char(task[1]) == 'F' && work == EVALUATE
             search = true
-            work = Compute
+            work = COMPUTE
         else
             search = false
         end
     end
 
-    if work == NewPoint
+    if work == NEWPOINT
         for (i,s) in enumerate("NEWX")
             task[i] = UInt8(s)
         end
@@ -198,23 +196,23 @@ function dtron(n,x,xl,xu,f,g,A,
 
     # Decide on what work to perform on the next iteration.
 
-    if Char(task[1]) == 'F' && work == Compute
-        work = Evaluate
-    elseif Char(task[1]) == 'F' && work == Evaluate
-        work = Compute
+    if Char(task[1]) == 'F' && work == COMPUTE
+        work = EVALUATE
+    elseif Char(task[1]) == 'F' && work == EVALUATE
+        work = COMPUTE
     elseif unsafe_string(pointer(task),2) == "GH"
-        work = NewPoint
+        work = NEWPOINT
     elseif unsafe_string(pointer(task),4) == "NEWX"
-        work = Compute
+        work = COMPUTE
     end
 
     # Save local variables.
 
-    if work == Compute
+    if work == COMPUTE
         isave[1] = 1
-    elseif work == Evaluate
+    elseif work == EVALUATE
         isave[1] = 2
-    elseif work == NewPoint
+    elseif work == NEWPOINT
         isave[1] = 3
     end
     isave[2] = iter

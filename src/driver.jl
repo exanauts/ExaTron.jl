@@ -4,7 +4,7 @@ mutable struct ExaTronProblem{VI, VD}
     nnz_a::Integer          # number of Hessian entries in the strict lower
     A::AbstractTronMatrix
     B::AbstractTronMatrix
-    L::AbstractPreconditionner
+    precond::AbstractPreconditionner
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
     g::VD         # gradient
@@ -137,7 +137,7 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
         tron.B = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess))
         L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
         tron.nnz_a = tron.A.nnz
-        tron.L = IncompleteCholesky(L, p, 5)
+        tron.precond = IncompleteCholesky(L, p, 5)
     else
         tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
         if isa(x_l, Array)
@@ -147,7 +147,7 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
             tron.B = TronDenseMatrix{CuArray}(n)
             L = TronDenseMatrix{CuArray}(n)
         end
-        tron.L = IncompleteCholesky(L, p, 5)
+        tron.precond = IncompleteCholesky(L, p, 5)
         tron.nnz_a = n*n
     end
     tron.status = :NotSolved
@@ -176,7 +176,7 @@ function solveProblem(tron::ExaTronProblem)
     max_minor = tron.options["max_minor"]
 
     # Sanity check
-    if (tcode == :Fortran) && !isa(tron.L, IncompleteCholesky)
+    if (tcode == :Fortran) && !isa(tron.precond, IncompleteCholesky)
         error("Legacy Tron supports only IncompleteCholesky preconditioner." *
               "Please change preconditioner or set `tron_code` option to `:Julia`")
     end
@@ -246,8 +246,8 @@ function solveProblem(tron::ExaTronProblem)
                     tron.A.colptr, tron.A.rowval, frtol, fatol,
                     fmin, cgtol, itermax, delta,
                     task, tron.B.tril_vals, tron.B.diag_vals, tron.B.colptr,
-                    tron.B.rowval, tron.L.L.tril_vals, tron.L.L.diag_vals, tron.L.L.colptr,
-                    tron.L.L.rowval, tron.xc, tron.s, tron.indfree,
+                    tron.B.rowval, tron.precond.L.tril_vals, tron.precond.L.diag_vals, tron.precond.L.colptr,
+                    tron.precond.L.rowval, tron.xc, tron.s, tron.indfree,
                     isave, dsave, tron.wa, tron.iwa)
                 tron.delta = delta[]
             else
@@ -255,7 +255,7 @@ function solveProblem(tron::ExaTronProblem)
                                 tron.f, tron.g, tron.A,
                                 frtol, fatol,
                                 fmin, cgtol, itermax, tron.delta,
-                                task, tron.B, tron.L,
+                                task, tron.B, tron.precond,
                                 tron.xc, tron.s, tron.indfree,
                                 isave, dsave, tron.wa, tron.iwa)
             end
