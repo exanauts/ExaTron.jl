@@ -143,6 +143,18 @@ function Base.fill!(A::TronSparseMatrixCSC, val)
     fill!(A.tril_vals, val)
 end
 
+function Base.fill!(w::CuDeviceArray{Float64}, val::Float64)
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    if ty == 1
+        w[tx] = val
+    end
+    CUDA.sync_threads()
+
+    return
+end
+
 function transfer!(A::TronSparseMatrixCSC, rows, cols, values, nnz)
     for i in 1:nnz
         m = A.map[i]

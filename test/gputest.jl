@@ -6,6 +6,7 @@ end
 
 # Test routines:
 #   dicf (includes dnsol and dtsol)
+#   dtrpcg
 #   daxpy
 #   dssyax
 #   dmid
@@ -15,14 +16,15 @@ end
 #   dscal
 #   dtrqsol
 
+Random.seed!(0)
 @testset "GPU" begin
     itermax=10
     n = 8
-    nblk = 1
+    nblk = 5120
 
     @testset "dicf" begin
         function dicf_test(n::Int, d_in::CuDeviceArray{Float64},
-                        d_out::CuDeviceArray{Float64})
+                           d_out::CuDeviceArray{Float64})
             tx = threadIdx().x
             ty = threadIdx().y
 
@@ -38,8 +40,8 @@ end
         end
 
         @inbounds for i=1:itermax
-            L = rand(n,n)
-            A = tril(L)*transpose(tril(L))
+            L = tril(rand(n,n))
+            A = L*transpose(L)
             B = zeros(n,n)
             d_in = CuArray{Float64}(undef, (n,n))
             d_out = CuArray{Float64}(undef, (n,n))
@@ -48,6 +50,64 @@ end
             copyto!(B, d_out)
 
             @test norm(A .- tril(B)*transpose(tril(B))) <= 1e-10
+        end
+    end
+
+    @testset "dtrpcg" begin
+        function dtrpcg_test(n::Int, delta::Float64, tol::Float64,
+                             stol::Float64, d_in::CuDeviceArray{Float64},
+                             d_g::CuDeviceArray{Float64},
+                             d_out::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            A = @cuDynamicSharedMem(Float64, (n,n))
+            L = @cuDynamicSharedMem(Float64, (n,n), (n^2)*sizeof(Float64))
+
+            g = @cuDynamicSharedMem(Float64, n, (2*n^2)*sizeof(Float64))
+            w = @cuDynamicSharedMem(Float64, n, (2*n^2 + n)*sizeof(Float64))
+            p = @cuDynamicSharedMem(Float64, n, (2*n^2 + 2*n)*sizeof(Float64))
+            q = @cuDynamicSharedMem(Float64, n, (2*n^2 + 3*n)*sizeof(Float64))
+            r = @cuDynamicSharedMem(Float64, n, (2*n^2 + 4*n)*sizeof(Float64))
+            t = @cuDynamicSharedMem(Float64, n, (2*n^2 + 5*n)*sizeof(Float64))
+            z = @cuDynamicSharedMem(Float64, n, (2*n^2 + 6*n)*sizeof(Float64))
+
+            A[tx,ty] = d_in[tx,ty]
+            L[tx,ty] = d_in[tx,ty]
+            if ty == 1
+                g[tx] = d_g[tx]
+            end
+            CUDA.sync_threads()
+
+            ExaTron.dicf(n,L)
+            info, iters = ExaTron.dtrpcg(n,A,g,delta,L,tol,stol,n,w,p,q,r,t,z)
+            ExaTron.dtsol(n,L,w)
+            if ty == 1
+                d_out[tx] = w[tx]
+            end
+            CUDA.sync_threads()
+
+            return
+        end
+
+        delta = 100.0
+        tol = 1e-6
+        stol = 1e-6
+        for i=1:itermax
+            L = tril(rand(n,n))
+            A = L*transpose(L)
+            A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
+            g = 0.1*ones(n)
+            w = zeros(n)
+            d_in = CuArray{Float64}(undef, (n,n))
+            d_g = CuArray{Float64}(undef, n)
+            d_out = CuArray{Float64}(undef, n)
+            copyto!(d_in, A)
+            copyto!(d_g, g)
+            @cuda threads=(n,n) blocks=nblk shmem=((2*n^2+7*n)*sizeof(Float64)) dtrpcg_test(n,delta,tol,stol,d_in,d_g,d_out)
+            copyto!(w, d_out)
+
+            @test norm(w .- A\(-g)) <= tol
         end
     end
 

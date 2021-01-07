@@ -224,5 +224,10 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
     end
     CUDA.sync_threads()
 
+    if tx > ty
+        L[ty,tx] = L[tx,ty]
+    end
+    CUDA.sync_threads()
+
     return
 end
