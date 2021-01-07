@@ -14,3 +14,16 @@ function dmid(n,x,xl,xu)
     end
     return
 end
+
+function dmid(n::Int, x::CuDeviceArray{Float64},
+              xl::CuDeviceArray{Float64}, xu::CuDeviceArray{Float64})
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    if ty == 1
+        x[tx] = max(xl[tx], min(x[tx], xu[tx]))
+    end
+    CUDA.sync_threads()
+
+    return
+end

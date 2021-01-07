@@ -191,3 +191,38 @@ function dicf(n, nnz, L::TronDenseMatrix, p, indr, indf, list, w)
 
     return info
 end
+
+function dicf(n::Int,L::CuDeviceArray{Float64})
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    zero = 0.0
+    Lmn = L[tx,ty]
+    @inbounds for j=1:n
+        if L[j,j] <= zero
+            # Need to inform icf() has failed.
+            return
+        end
+
+        # Update the diagonal.
+        if (tx == j) && (ty == j)
+            L[j,j] = sqrt(Lmn)
+        end
+        CUDA.sync_threads()
+
+        Ljj = L[j,j]
+
+        # Update the jth column.
+        if ty == j
+            L[tx,j] = Lmn / Ljj
+        end
+        CUDA.sync_threads()
+
+        # Update the trailing submatrix. To avoid if-conditional, we update the
+        # whole matrix, but only the trailing part will be saved in next iterations.
+        Lmn = Lmn - L[tx,j] * L[ty,j]
+    end
+    CUDA.sync_threads()
+
+    return
+end

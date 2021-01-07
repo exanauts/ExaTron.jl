@@ -245,6 +245,31 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
     return
 end
 
+function dssyax(n::Int, A::CuDeviceArray{Float64},
+                z::CuDeviceArray{Float64},
+                q::CuDeviceArray{Float64})
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    v = A[ty,tx]*z[tx]
+
+    # Sum over the x-dimension: v = sum_tx A[ty,tx]*z[tx].
+    # The thread with tx=1 will have the sum in v.
+
+    offset = Int(n/2)
+    while offset > 0
+        v += CUDA.shfl_down_sync(0xffffffff, v, offset)
+        offset = Int(floor(offset/2))
+    end
+
+    if tx == 1
+        q[ty] = v
+    end
+    CUDA.sync_threads()
+
+    return
+end
+
 function reorder!(B::TronDenseMatrix, A::TronDenseMatrix, indfree, nfree, iwa)
     nnz = 0
     @inbounds for j=1:nfree

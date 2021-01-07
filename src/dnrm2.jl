@@ -48,3 +48,22 @@ else
     dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
 end
 
+function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    # All threads compute the Euclidean norm, hence,
+    # no sync_threads() is needed.
+
+    v = x[tx]*x[tx]
+    offset = Int(n/2)
+    while offset > 0
+        v += CUDA.shfl_down_sync(0xffffffff, v, offset)
+        offset = Int(floor(offset/2))
+    end
+
+    v = sqrt(v)
+    v = CUDA.shfl_sync(0xffffffff, v, 1)
+
+    return v
+end

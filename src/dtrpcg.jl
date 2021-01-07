@@ -50,7 +50,7 @@ February 2001
 
 We now set iters = 0 in the special case g = 0.
 """
-function dtrpcg(n,A,g,delta, L,
+function dtrpcg(n,A,g,delta,L,
                 tol,stol,itermax,w,
                 p,q,r,t,z)
     zero = 0.0
@@ -60,12 +60,12 @@ function dtrpcg(n,A,g,delta, L,
     fill!(w, 0)
 
     # Initialize the residual t of grad q to -g.
-    # Initialized the residual r of grad Q by solving L*r = -g.
+    # Initialize the residual r of grad Q by solving L*r = -g.
     # Note that t = L*r.
     dcopy(n,g,1,t,1)
     dscal(n,-one,t,1)
     dcopy(n,t,1,r,1)
-    dstrsol(n, L, r,'N')
+    dnsol(n, L, r)
 
     # Initialize the direction p.
     dcopy(n,r,1,p,1)
@@ -84,15 +84,19 @@ function dtrpcg(n,A,g,delta, L,
 
     for iters=1:itermax
 
-        # Compute z by solving L'*z = p.
+        # Note:
+        # Q(w) = 0.5*w'Bw + h'w, where B=L^{-1}AL^{-T}, h=L^{-1}g.
+        # Then p'Bp = p'L^{-1}AL^{-T}p = p'L^{-1}Az = p'q.
+        # alpha = r'r / p'Bp.
+
         dcopy(n,p,1,z,1)
-        dstrsol(n, L, z,'T')
+        dtsol(n, L, z)
 
         # Compute q by solving L*q = A*z and save L*q for
         # use in updating the residual t.
         dssyax(n, A, z, q)
         dcopy(n,q,1,z,1)
-        dstrsol(n, L, q,'N')
+        dnsol(n, L, q)
 
         # Compute alpha and determine sigma such that the trust region
         # constraint || w + sigma*p || = delta is satisfied.

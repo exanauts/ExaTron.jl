@@ -135,7 +135,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
                                view(wa,3*n+1:4*n),view(wa,4*n+1:5*n))
 
         iters = iters + itertr
-        dstrsol(nfree,L, w,'T')
+        dtsol(nfree, L, w)
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.

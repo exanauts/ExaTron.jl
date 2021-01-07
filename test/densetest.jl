@@ -42,14 +42,14 @@
         L = ExaTron.TronDenseMatrix(A)
         @test L.vals == A.vals
 
-        # Test dstrsol().
+        # Test dnsol() and dtsol().
         fill!(x, 1.0)
         fill!(y, 1.0)
-        ExaTron.dstrsol(n, L, y, 'N')
+        ExaTron.dnsol(n, L, y)
         @test norm(y .- (A.vals\x)) <= tol
         fill!(x, 1.0)
         fill!(y, 1.0)
-        ExaTron.dstrsol(n, L, y, 'T')
+        ExaTron.dtsol(n, L, y)
         @test norm(y .- (transpose(A.vals)\x)) <= tol
 
         # Test dicf().
