@@ -55,8 +55,12 @@ function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
     # All threads compute the Euclidean norm, hence,
     # no sync_threads() is needed.
 
-    v = x[tx]*x[tx]
-    offset = Int(n/2)
+    v = 0.0
+    if tx <= n  # No check on ty so that each warp has v.
+        v = x[tx]*x[tx]
+    end
+
+    offset = Int(blockDim().x/2)
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
         offset = Int(floor(offset/2))

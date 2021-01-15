@@ -23,3 +23,26 @@ function dgpstep(n,x,xl,xu,alpha,w,s)
     end
     return
 end
+
+function dgpstep(n::Int,x::CuDeviceArray{Float64},xl::CuDeviceArray{Float64},
+                 xu::CuDeviceArray{Float64},alpha,w::CuDeviceArray{Float64},
+                 s::CuDeviceArray{Float64})
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    if ty == 1
+        # It might be better to process this using just a single thread,
+        # rather than diverging between multiple threads.
+
+        if x[tx] + alpha*w[tx] < xl[tx]
+            s[tx] = xl[tx] - x[tx]
+        elseif x[tx] + alpha*w[tx] > xu[tx]
+            s[tx] = xu[tx] - x[tx]
+        else
+            s[tx] = alpha*w[tx]
+        end
+    end
+    CUDA.sync_threads()
+
+    return
+end

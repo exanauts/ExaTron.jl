@@ -4,17 +4,36 @@ catch e
     throw(e)
 end
 
-# Test routines:
-#   dicf (includes dnsol and dtsol)
-#   dtrpcg
-#   daxpy
-#   dssyax
-#   dmid
-#   dnrm2
-#   dcopy
-#   ddot
-#   dscal
-#   dtrqsol
+"""
+Test ExaTron's internal routines written for GPU.
+
+The current implementation assumes the following:
+  - A thread block takes a matrix structure, (tx,ty), with
+    n <= blockDim().x = blockDim().y <= 32 and blockDim().x is even.
+  - Arguments passed on to these routines are assumed to be
+    of size at least n. This is to prevent multiple thread
+    divergence when we call a function with n_hat < n.
+    Such a case occurs when we fix active variables.
+
+We test the following routines, where [O] indicates if the routine
+is checked if n < blockDim().x is OK.
+  - dicf     [O]: this routine also tests dnsol and dtsol.
+  - dicfs    [O]
+  - dcauchy  [O]
+  - dtrpcg   [O]
+  - dprsrch  [O]
+  - daxpy    [O]
+  - dssyax   [O]: we do shuffle using blockDim().x.
+  - dmid     [O]: we could use a single thread only to multiple divergences.
+  - dgpstep  [O]
+  - dbreakpt [O]: we use the existing ExaTron implementation as is.
+  - dnrm2    [O]: we do shuffle using blockDim().x.
+  - nrm2     [O]: we do shuffle using blockDim().x.
+  - dcopy    [O]
+  - ddot     [O]
+  - dscal    [O]
+  - dtrqsol  [O]: we use the existing ExaTron implementation as it.
+"""
 
 Random.seed!(0)
 @testset "GPU" begin
@@ -39,17 +58,168 @@ Random.seed!(0)
             return
         end
 
-        @inbounds for i=1:itermax
+        for i=1:itermax
             L = tril(rand(n,n))
             A = L*transpose(L)
-            B = zeros(n,n)
+            A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
+            tron_A = ExaTron.TronDenseMatrix{Array}(n)
+            tron_A.vals .= A
+
             d_in = CuArray{Float64}(undef, (n,n))
             d_out = CuArray{Float64}(undef, (n,n))
-            copyto!(d_in, A)
+            copyto!(d_in, tron_A.vals)
             @cuda threads=(n,n) blocks=nblk shmem=(n^2*sizeof(Float64)) dicf_test(n,d_in,d_out)
-            copyto!(B, d_out)
+            h_L = zeros(n,n)
+            copyto!(h_L, d_out)
 
-            @test norm(A .- tril(B)*transpose(tril(B))) <= 1e-10
+            tron_L = ExaTron.TronDenseMatrix{Array}(n)
+            tron_L.vals .= tron_A.vals
+            indr = zeros(Int, n)
+            indf = zeros(n)
+            list = zeros(n)
+            w = zeros(n)
+            ExaTron.dicf(n, n^2, tron_L, 5, indr, indf, list, w)
+
+            @test norm(tron_A.vals .- tril(h_L)*transpose(tril(h_L))) <= 1e-10
+            @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+        end
+    end
+
+    @testset "dicfs" begin
+        function dicfs_test(n::Int, alpha::Float64,
+                            dA::CuDeviceArray{Float64},
+                            d_out::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            wa1 = @cuDynamicSharedMem(Float64, n)
+            wa2 = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            A = @cuDynamicSharedMem(Float64, (n,n), (2*n)*sizeof(Float64))
+            L = @cuDynamicSharedMem(Float64, (n,n), (2*n+n^2)*sizeof(Float64))
+
+            A[tx,ty] = dA[tx,ty]
+            CUDA.sync_threads()
+
+            ExaTron.dicfs(n, alpha, A, L, wa1, wa2)
+            d_out[tx,ty] = L[tx,ty]
+            CUDA.sync_threads()
+
+            return
+        end
+
+        for i=1:itermax
+            L = tril(rand(n,n))
+            A = L*transpose(L)
+            A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
+            tron_A = ExaTron.TronDenseMatrix{Array}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array}(n)
+            tron_A.vals .= A
+
+            dA = CuArray{Float64}(undef, (n,n))
+            d_out = CuArray{Float64}(undef, (n,n))
+            alpha = 1.0
+            copyto!(dA, tron_A.vals)
+            @cuda threads=(n,n) blocks=nblk shmem=((2*n+2*n^2)*sizeof(Float64)) dicfs_test(n,alpha,dA,d_out)
+            h_L = zeros(n,n)
+            copyto!(h_L, d_out)
+            iwa = zeros(Int, 3*n)
+            wa1 = zeros(n)
+            wa2 = zeros(n)
+            ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
+
+            @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+
+            # Make it negative definite.
+            for j=1:n
+                tron_A.vals[j,j] = -tron_A.vals[j,j]
+            end
+            copyto!(dA, tron_A.vals)
+            @cuda threads=(n,n) blocks=nblk shmem=((2*n+2*n^2)*sizeof(Float64)) dicfs_test(n,alpha,dA,d_out)
+            copyto!(h_L, d_out)
+            ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
+
+            @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+        end
+    end
+
+    @testset "dcauchy" begin
+        function dcauchy_test(n::Int,dx::CuDeviceArray{Float64},
+                              dl::CuDeviceArray{Float64},
+                              du::CuDeviceArray{Float64},
+                              dA::CuDeviceArray{Float64},
+                              dg::CuDeviceArray{Float64},
+                              delta::Float64,
+                              alpha::Float64,
+                              d_out1::CuDeviceArray{Float64},
+                              d_out2::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            x = @cuDynamicSharedMem(Float64, n)
+            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            g =  @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            s =  @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
+            wa = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
+            A =  @cuDynamicSharedMem(Float64, (n,n), (6*n)*sizeof(Float64))
+
+            A[tx,ty] = dA[tx,ty]
+            if ty == 1
+                x[tx] = dx[tx]
+                xl[tx] = dl[tx]
+                xu[tx] = du[tx]
+                g[tx] = dg[tx]
+            end
+
+            alpha = ExaTron.dcauchy(n,x,xl,xu,A,g,delta,alpha,s,wa)
+            if ty == 1
+                d_out1[tx] = s[tx]
+                d_out2[tx] = alpha
+            end
+            CUDA.sync_threads()
+
+            return
+        end
+
+        for i=1:itermax
+            L = tril(rand(n,n))
+            A = ExaTron.TronDenseMatrix{Array}(n)
+            A.vals .= L*transpose(L)
+            A.vals .= tril(A.vals) .+ (transpose(tril(A.vals)) .- Diagonal(A.vals))
+            x = rand(n)
+            xl = x .- abs.(rand(n))
+            xu = x .+ abs.(rand(n))
+            g = A.vals*x .+ rand(n)
+            s = zeros(n)
+            wa = zeros(n)
+            alpha = 1.0
+            delta = 2.0*norm(g)
+
+            dx = CuArray{Float64}(undef, n)
+            dl = CuArray{Float64}(undef, n)
+            du = CuArray{Float64}(undef, n)
+            dg = CuArray{Float64}(undef, n)
+            dA = CuArray{Float64}(undef, (n,n))
+            d_out1 = CuArray{Float64}(undef, n)
+            d_out2 = CuArray{Float64}(undef, n)
+            copyto!(dx, x)
+            copyto!(dl, xl)
+            copyto!(du, xu)
+            copyto!(dg, g)
+            copyto!(dA, A.vals)
+            @cuda threads=(n,n) blocks=nblk shmem=((6*n+n^2)*sizeof(Float64)) dcauchy_test(n,dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2)
+            h_s = zeros(n)
+            h_alpha = zeros(n)
+            copyto!(h_s, d_out1)
+            copyto!(h_alpha, d_out2)
+
+            alpha = ExaTron.dcauchy(n, x, xl, xu, A, g, delta, alpha, s, wa)
+
+            @test norm(s .- h_s) <= 1e-10
+            @test norm(alpha .- h_alpha) <= 1e-10
         end
     end
 
@@ -108,6 +278,87 @@ Random.seed!(0)
             copyto!(w, d_out)
 
             @test norm(w .- A\(-g)) <= tol
+        end
+    end
+
+    @testset "dprsrch" begin
+        function dprsrch_test(n::Int,d_x::CuDeviceArray{Float64},
+                              d_xl::CuDeviceArray{Float64},
+                              d_xu::CuDeviceArray{Float64},
+                              d_g::CuDeviceArray{Float64},
+                              d_w::CuDeviceArray{Float64},
+                              d_A::CuDeviceArray{Float64},
+                              d_out1::CuDeviceArray{Float64},
+                              d_out2::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            x = @cuDynamicSharedMem(Float64, n)
+            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            w = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
+            wa1 = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
+            wa2 = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
+            A = @cuDynamicSharedMem(Float64, (n,n), (7*n)*sizeof(Float64))
+
+            A[tx,ty] = d_A[tx,ty]
+            if ty == 1
+                x[tx] = d_x[tx]
+                xl[tx] = d_xl[tx]
+                xu[tx] = d_xu[tx]
+                g[tx] = d_g[tx]
+                w[tx] = d_w[tx]
+            end
+            CUDA.sync_threads()
+
+            ExaTron.dprsrch(n, x, xl, xu, A, g, w, wa1, wa2)
+            if ty == 1
+                d_out1[tx] = x[tx]
+                d_out2[tx] = w[tx]
+            end
+            CUDA.sync_threads()
+
+            return
+        end
+
+        for i=1:itermax
+            L = tril(rand(n,n))
+            A = ExaTron.TronDenseMatrix{Array}(n)
+            A.vals .= L*transpose(L)
+            A.vals .= tril(A.vals) .+ (transpose(tril(A.vals)) .- Diagonal(A.vals))
+            x = rand(n)
+            xl = x .- abs.(rand(n))
+            xu = x .+ abs.(rand(n))
+            g = A.vals*x .+ rand(n)
+            w = -g
+            wa1 = zeros(n)
+            wa2 = zeros(n)
+
+            dx = CuArray{Float64}(undef, n)
+            dl = CuArray{Float64}(undef, n)
+            du = CuArray{Float64}(undef, n)
+            dg = CuArray{Float64}(undef, n)
+            dw = CuArray{Float64}(undef, n)
+            dA = CuArray{Float64}(undef, (n,n))
+            d_out1 = CuArray{Float64}(undef, n)
+            d_out2 = CuArray{Float64}(undef, n)
+            copyto!(dx, x)
+            copyto!(dl, xl)
+            copyto!(du, xu)
+            copyto!(dg, g)
+            copyto!(dw, w)
+            copyto!(dA, A.vals)
+            @cuda threads=(n,n) blocks=nblk shmem=((7*n+n^2)*sizeof(Float64)) dprsrch_test(n,dx,dl,du,dg,dw,dA,d_out1,d_out2)
+            h_x = zeros(n)
+            h_w = zeros(n)
+            copyto!(h_x, d_out1)
+            copyto!(h_w, d_out2)
+
+            ExaTron.dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
+
+            @test norm(x .- h_x) <= 1e-10
+            @test norm(w .- h_w) <= 1e-10
         end
     end
 
@@ -209,7 +460,7 @@ Random.seed!(0)
 
             ExaTron.dmid(n, x, xl, xu)
             if ty == 1
-                d_out[tx] =x[tx]
+                d_out[tx] = x[tx]
             end
             CUDA.sync_threads()
 
@@ -220,6 +471,9 @@ Random.seed!(0)
             x = rand(n)
             xl = x .- abs.(rand(n))
             xu = x .+ abs.(rand(n))
+
+            # Force some components to go below or above bounds
+            # so that we can test all cases.
             for j=1:n
                 k = rand(1:3)
                 if k == 1
@@ -241,6 +495,143 @@ Random.seed!(0)
 
             ExaTron.dmid(n, x, xl, xu)
             @test !(false in (x .== x_out))
+        end
+    end
+
+    @testset "dgpstep" begin
+        function dgpstep_test(n,dx::CuDeviceArray{Float64},
+                              dl::CuDeviceArray{Float64},
+                              du::CuDeviceArray{Float64},
+                              alpha::Float64,
+                              dw::CuDeviceArray{Float64},
+                              d_out::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            x = @cuDynamicSharedMem(Float64, n)
+            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            w = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            s = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
+            if ty == 1
+                x[tx] = dx[tx]
+                xl[tx] = dl[tx]
+                xu[tx] = du[tx]
+                w[tx] = dw[tx]
+            end
+            CUDA.sync_threads()
+
+            ExaTron.dgpstep(n, x, xl, xu, alpha, w, s)
+            if ty == 1
+                d_out[tx] = s[tx]
+            end
+            CUDA.sync_threads()
+
+            return
+        end
+
+        for i=1:itermax
+            x = rand(n)
+            xl = x .- abs.(rand(n))
+            xu = x .+ abs.(rand(n))
+            w = rand(n)
+            alpha = rand(1)[1]
+            s = zeros(n)
+            s_out = zeros(n)
+
+            # Force some components to go below or above bounds
+            # so that we can test all cases.
+            for j=1:n
+                k = rand(1:3)
+                if k == 1
+                    if x[j] + alpha*w[j] >= xl[j]
+                        w[j] = (xl[j] - x[j]) / alpha - 0.1
+                    end
+                elseif k == 2
+                    if x[j] + alpha*w[j] <= xu[j]
+                        w[j] = (xu[j] - x[j]) / alpha + 0.1
+                    end
+                end
+            end
+
+            dx = CuArray{Float64}(undef, n)
+            dl = CuArray{Float64}(undef, n)
+            du = CuArray{Float64}(undef, n)
+            dw = CuArray{Float64}(undef, n)
+            d_out = CuArray{Float64}(undef, n)
+            copyto!(dx, x)
+            copyto!(dl, xl)
+            copyto!(du, xu)
+            copyto!(dw, w)
+            @cuda threads=(n,n) blocks=nblk shmem=((5*n)*sizeof(Float64)) dgpstep_test(n,dx,dl,du,alpha,dw,d_out)
+            copyto!(s_out, d_out)
+
+            ExaTron.dgpstep(n, x, xl, xu, alpha, w, s)
+            @test !(false in (s .== s_out))
+        end
+    end
+
+    @testset "dbreakpt" begin
+        function dbreakpt_test(n,dx::CuDeviceArray{Float64},
+                               dl::CuDeviceArray{Float64},
+                               du::CuDeviceArray{Float64},
+                               dw::CuDeviceArray{Float64},
+                               d_nbrpt::CuDeviceArray{Float64},
+                               d_brptmin::CuDeviceArray{Float64},
+                               d_brptmax::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            x = @cuDynamicSharedMem(Float64, n)
+            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            w = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            if ty == 1
+                x[tx] = dx[tx]
+                xl[tx] = dl[tx]
+                xu[tx] = du[tx]
+                w[tx] = dw[tx]
+            end
+            CUDA.sync_threads()
+
+            nbrpt, brptmin, brptmax = ExaTron.dbreakpt(n, x, xl, xu, w)
+            d_nbrpt[tx,ty] = nbrpt
+            d_brptmin[tx,ty] = brptmin
+            d_brptmax[tx,ty] = brptmax
+            CUDA.sync_threads()
+
+            return
+        end
+
+        for i=1:itermax
+            x = rand(n)
+            xl = x .- abs.(rand(n))
+            xu = x .+ abs.(rand(n))
+            w = 2.0*rand(n) .- 1.0     # (-1,1]
+            h_nbrpt = zeros((n,n))
+            h_brptmin = zeros((n,n))
+            h_brptmax = zeros((n,n))
+
+            dx = CuArray{Float64}(undef, n)
+            dl = CuArray{Float64}(undef, n)
+            du = CuArray{Float64}(undef, n)
+            dw = CuArray{Float64}(undef, n)
+            d_nbrpt = CuArray{Float64}(undef, (n,n))
+            d_brptmin = CuArray{Float64}(undef, (n,n))
+            d_brptmax = CuArray{Float64}(undef, (n,n))
+            copyto!(dx, x)
+            copyto!(dl, xl)
+            copyto!(du, xu)
+            copyto!(dw, w)
+            @cuda threads=(n,n) blocks=nblk shmem=((4*n)*sizeof(Float64)) dbreakpt_test(n,dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax)
+            copyto!(h_nbrpt, d_nbrpt)
+            copyto!(h_brptmin, d_brptmin)
+            copyto!(h_brptmax, d_brptmax)
+
+            nbrpt, brptmin, brptmax = ExaTron.dbreakpt(n, x, xl, xu, w)
+            @test !(false in (nbrpt .== h_nbrpt))
+            @test !(false in (brptmin .== h_brptmin))
+            @test !(false in (brptmax .== h_brptmax))
         end
     end
 
@@ -274,6 +665,45 @@ Random.seed!(0)
             xnorm = norm(h_in, 2)
 
             @test norm(xnorm .- h_out) <= 1e-10
+        end
+    end
+
+    @testset "nrm2" begin
+        function nrm2_test(n::Int, d_A::CuDeviceArray{Float64}, d_out::CuDeviceArray{Float64})
+            tx = threadIdx().x
+            ty = threadIdx().y
+
+            wa = @cuDynamicSharedMem(Float64, n)
+            A = @cuDynamicSharedMem(Float64, (n,n), n*sizeof(Float64))
+            A[tx,ty] = d_A[tx,ty]
+            CUDA.sync_threads()
+
+            ExaTron.nrm2!(wa, A, n)
+            if ty == 1
+                d_out[tx] = wa[tx]
+            end
+            CUDA.sync_threads()
+
+            return
+        end
+
+        @inbounds for i=1:itermax
+            L = tril(rand(n,n))
+            A = L*transpose(L)
+            A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
+            wa = zeros(n)
+            tron_A = ExaTron.TronDenseMatrix{Array}(n)
+            tron_A.vals .= A
+            ExaTron.nrm2!(wa, tron_A, n)
+
+            d_A = CuArray{Float64}(undef, (n,n))
+            d_out = CuArray{Float64}(undef, n)
+            h_wa = zeros(n)
+            copyto!(d_A, A)
+            @cuda threads=(n,n) blocks=nblk shmem=((n^2+n)*sizeof(Float64)) nrm2_test(n,d_A,d_out)
+            copyto!(h_wa, d_out)
+
+            @test norm(wa .- h_wa) <= 1e-10
         end
     end
 

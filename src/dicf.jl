@@ -199,18 +199,20 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
     zero = 0.0
     Lmn = L[tx,ty]
     @inbounds for j=1:n
-        if L[j,j] <= zero
-            # Need to inform icf() has failed.
-            return
-        end
-
         # Update the diagonal.
         if (tx == j) && (ty == j)
-            L[j,j] = sqrt(Lmn)
+            if Lmn > zero
+                L[j,j] = sqrt(Lmn)
+            else
+                L[j,j] = -1.0
+            end
         end
         CUDA.sync_threads()
 
         Ljj = L[j,j]
+        if Ljj <= zero
+            return -1
+        end
 
         # Update the jth column.
         if ty == j
@@ -218,16 +220,16 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
         end
         CUDA.sync_threads()
 
-        # Update the trailing submatrix. To avoid if-conditional, we update the
-        # whole matrix, but only the trailing part will be saved in next iterations.
+        # Update the trailing submatrix. To avoid if-conditional,
+        # we update the whole matrix, but only the trailing part
+        # will be saved in next iteration.
         Lmn = Lmn - L[tx,j] * L[ty,j]
     end
-    CUDA.sync_threads()
 
     if tx > ty
         L[ty,tx] = L[tx,ty]
     end
     CUDA.sync_threads()
 
-    return
+    return 0
 end

@@ -207,6 +207,31 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     end
 end
 
+function nrm2!(wa, A::CuDeviceArray{Float64}, n::Int)
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    v = A[tx,ty]^2
+
+    if tx > n || ty > n
+        v = 0.0
+    end
+
+    # Sum over the x-dimension.
+    offset = Int(blockDim().x/2)
+    while offset > 0
+        v += CUDA.shfl_down_sync(0xffffffff, v, offset)
+        offset = Int(floor(offset/2))
+    end
+
+    if tx == 1
+        wa[ty] = sqrt(v)
+    end
+    CUDA.sync_threads()
+
+    return
+end
+
 @inline getdiagvalue(A::TronSparseMatrixCSC, i) = A.diag_vals[i]
 @inline getdiagvalue(A::TronDenseMatrix, i) = A.vals[i,i]
 
@@ -263,12 +288,15 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
     tx = threadIdx().x
     ty = threadIdx().y
 
-    v = A[ty,tx]*z[tx]
+    v = 0.0
+    if tx <= n && ty <= n
+        v = A[ty,tx]*z[tx]
+    end
 
     # Sum over the x-dimension: v = sum_tx A[ty,tx]*z[tx].
     # The thread with tx=1 will have the sum in v.
 
-    offset = Int(n/2)
+    offset = Int(blockDim().x/2)
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
         offset = Int(floor(offset/2))
