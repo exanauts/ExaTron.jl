@@ -218,10 +218,10 @@ function nrm2!(wa, A::CuDeviceArray{Float64}, n::Int)
     end
 
     # Sum over the x-dimension.
-    offset = Int(blockDim().x/2)
+    offset = div(blockDim().x, 2)
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
-        offset = Int(floor(offset/2))
+        offset = div(offset, 2)
     end
 
     if tx == 1
@@ -296,10 +296,10 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
     # Sum over the x-dimension: v = sum_tx A[ty,tx]*z[tx].
     # The thread with tx=1 will have the sum in v.
 
-    offset = Int(blockDim().x/2)
+    offset = div(blockDim().x, 2)
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
-        offset = Int(floor(offset/2))
+        offset = div(offset, 2)
     end
 
     if tx == 1

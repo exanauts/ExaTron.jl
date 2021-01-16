@@ -60,10 +60,10 @@ function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
         v = x[tx]*x[tx]
     end
 
-    offset = Int(blockDim().x/2)
+    offset = div(blockDim().x, 2)
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
-        offset = Int(floor(offset/2))
+        offset = div(offset, 2)
     end
 
     v = sqrt(v)

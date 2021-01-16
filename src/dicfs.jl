@@ -169,10 +169,10 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
     CUDA.sync_warp()
 
     # Find the maximum alpha in a warp and put it in the first thread.
-    offset = Int(blockDim().x/2)
+    offset = div(blockDim().x, 2)
     while offset > 0
         alpha = max(alpha, CUDA.shfl_down_sync(0xffffffff, alpha, offset))
-        offset = Int(floor(offset/2))
+        offset = div(offset, 2)
     end
     # Broadcast it to the entire threads in a warp.
     alpha = CUDA.shfl_sync(0xffffffff, alpha, 1)
