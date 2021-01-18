@@ -920,7 +920,6 @@ Random.seed!(0)
             xu = x .+ abs.(rand(n))
             g = A*x .+ rand(n)
             s = rand(n)
-            alpha = 1.0
             delta = 2.0*norm(g)
             rtol = 1e-6
             cg_itermax = n
