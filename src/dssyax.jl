@@ -310,6 +310,29 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
     return
 end
 
+function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64},
+                  A::CuDeviceArray{Float64}, indfree::CuDeviceArray{Int},
+                  iwa::CuDeviceArray{Int})
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    if tx == 1 && ty == 1
+        @inbounds for j=1:nfree
+            jfree = indfree[j]
+            B[j,j] = A[jfree,jfree]
+            for i=jfree+1:n
+                if iwa[i] > 0
+                    B[iwa[i],j] = A[i,jfree]
+                    B[j,iwa[i]] = B[iwa[i],j]
+                end
+            end
+        end
+    end
+    CUDA.sync_threads()
+
+    return
+end
+
 function reorder!(B::TronDenseMatrix, A::TronDenseMatrix, indfree, nfree, iwa)
     nnz = 0
     @inbounds for j=1:nfree

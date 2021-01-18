@@ -109,7 +109,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # TODO
         dicfs(nfree, nnz, B, L,
               nv, alpha,
-              iwa, view(wa,1:n), view(wa,n+1:5*n))
+              iwa, view(wa,1:n), view(wa,n+1:2*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.
@@ -171,6 +171,168 @@ function dspcg(n,x,xl,xu,A,g,delta,
         @inbounds for j=1:nfree
             gfree[j] = w[indfree[j]] + g[indfree[j]]
         end
+        gfnormf = dnrm2(nfree, gfree, 1)
+
+        # Convergence and termination test.
+        # We terminate if the preconditioned conjugate gradient
+        # method encounters a direction of negative curvature, or
+        # if the step is at the trust region bound.
+
+        if gfnormf <= rtol*gfnorm
+            info = 1
+            return info, iters
+        elseif infotr == 3 || infotr == 4
+            info = 2
+            return info, iters
+        elseif iters > itermax
+            info = 3
+            return info, iters
+        end
+    end
+
+    return info, iters
+end
+
+function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
+               x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
+               xu::CuDeviceArray{Float64}, A::CuDeviceArray{Float64},
+               g::CuDeviceArray{Float64}, s::CuDeviceArray{Float64},
+               B::CuDeviceArray{Float64}, L::CuDeviceArray{Float64},
+               indfree::CuDeviceArray{Int}, gfree::CuDeviceArray{Float64},
+               w::CuDeviceArray{Float64}, iwa::CuDeviceArray{Int},
+               wa1::CuDeviceArray{Float64}, wa2::CuDeviceArray{Float64},
+               wa3::CuDeviceArray{Float64}, wa4::CuDeviceArray{Float64},
+               wa5::CuDeviceArray{Float64})
+
+    tx = threadIdx().x
+    ty = threadIdx().y
+
+    zero = 0.0
+    one = 1.0
+
+    # Compute A*(x[1] - x[0]) and store in w.
+
+    dssyax(n, A, s, w)
+
+    # Compute the Cauchy point.
+
+    daxpy(n,one,s,1,x,1)
+    dmid(n,x,xl,xu)
+
+    # Start the main iteration loop.
+    # There are at most n iterations because at each iteration
+    # at least one variable becomes active.
+
+    info = 3
+    iters = 0
+    for nfaces=1:n
+
+        # Determine the free variables at the current minimizer.
+        # The indices of the free variables are stored in the first
+        # n free positions of the array indfree.
+        # The array iwa is used to detect free variables by setting
+        # iwa[i] = nfree if the ith variable is free, otherwise iwa[i] = 0.
+
+        # Use a single thread to avoid multiple branch divergences.
+        # XXX: Would there be any gain in employing multiple threads?
+        nfree = 0
+        if tx == 1 && ty == 1
+            @inbounds for j=1:n
+                if xl[j] < x[j] && x[j] < xu[j]
+                    nfree = nfree + 1
+                    indfree[nfree] = j
+                    iwa[j] = nfree
+                else
+                    iwa[j] = 0
+                end
+            end
+            iwa[n+1] = nfree
+        end
+        CUDA.sync_threads()
+        nfree = iwa[n+1] # Share with all threads.
+
+        # Exit if there are no free constraints.
+
+        if nfree == 0
+            info = 1
+            return info, iters
+        end
+
+        # Obtain the submatrix of A for the free variables.
+        # Recall that iwa allows the detection of free variables.
+        reorder!(n, nfree, B, A, indfree, iwa)
+
+        # Compute the incomplete Cholesky factorization.
+        alpha = zero
+        # TODO
+        dicfs(nfree, alpha, B, L, wa1, wa2)
+
+        # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
+        # of q at x[k] for the free variables.
+        # Recall that w contains A*(x[k] - x[0]).
+        # Compute the norm of the reduced gradient Z'*g.
+
+        if tx == 1 && ty == 1
+            @inbounds for j=1:nfree
+                gfree[j] = w[indfree[j]] + g[indfree[j]]
+                wa1[j] = g[indfree[j]]
+            end
+        end
+        CUDA.sync_threads()
+        gfnorm = dnrm2(nfree,wa1,1)
+
+        # Save the trust region subproblem in the free variables
+        # to generate a direction p[k]. Store p[k] in the array w.
+
+        tol = rtol*gfnorm
+        stol = zero
+
+        infotr,itertr = dtrpcg(nfree,B,gfree,delta,L,
+                               tol,stol,itermax,w,
+                               wa1,wa2,wa3,wa4,wa5)
+
+        iters = iters + itertr
+        dtsol(nfree, L, w)
+
+        # Use a projected search to obtain the next iterate.
+        # The projected search algorithm stores s[k] in w.
+
+        if tx == 1 && ty == 1
+            @inbounds for j=1:nfree
+                wa1[j] = x[indfree[j]]
+                wa2[j] = xl[indfree[j]]
+                wa3[j] = xu[indfree[j]]
+            end
+        end
+        CUDA.sync_threads()
+
+        dprsrch(nfree,wa1,wa2,wa3,B,gfree,w,wa4,wa5)
+
+        # Update the minimizer and the step.
+        # Note that s now contains x[k+1] - x[0].
+
+        if tx == 1 && ty == 1
+            @inbounds for j=1:nfree
+                x[indfree[j]] = wa1[j]
+                s[indfree[j]] = s[indfree[j]] + w[j]
+            end
+        end
+        CUDA.sync_threads()
+
+        # Compute A*(x[k+1] - x[0]) and store in w.
+
+        dssyax(n, A, s, w)
+
+        # Compute the gradient grad q(x[k+1]) = g + A*(x[k+1] - x[0])
+        # of q at x[k+1] for the free variables.
+
+        if tx == 1 && ty == 1
+            @inbounds for j=1:nfree
+                gfree[j] = w[indfree[j]] + g[indfree[j]]
+            end
+        end
+        CUDA.sync_threads()
+
         gfnormf = dnrm2(nfree, gfree, 1)
 
         # Convergence and termination test.
