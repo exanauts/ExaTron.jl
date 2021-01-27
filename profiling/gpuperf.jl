@@ -26,7 +26,7 @@ function run_dicfs_gpu(n::Int, alpha::Float64,
 end
 
 function perf_dicfs(;n=8,nblk=5120)
-    println("Run dicfs using CPU . . .")
+    @printf("Run dicfs using CPU . . .\n")
     L = rand(n,n,nblk)
     A = zeros(n,n,nblk)
     tron_A = Array{ExaTron.TronDenseMatrix}(undef,nblk)
@@ -56,7 +56,7 @@ function perf_dicfs(;n=8,nblk=5120)
         L[:,:,i] .= tron_L[i].vals
     end
 
-    println("Run dicfs using GPU . . . ")
+    @printf("Run dicfs using GPU . . . \n")
     dA = CuArray{Float64}(undef,(n,n,nblk))
     d_out = CuArray{Float64}(undef,(n,n,nblk))
     for i=1:nblk
@@ -67,7 +67,7 @@ function perf_dicfs(;n=8,nblk=5120)
     h_L = zeros(n,n,nblk)
     copyto!(h_L, d_out)
 
-    println("norm(L(cpu) - L(gpu)): ", maximum(norm.(tril.(eachslice(L,dims=3)) .- tril.(eachslice(h_L,dims=3)))))
+    @printf("norm(L(cpu) - L(gpu)): %e\n", maximum(norm.(tril.(eachslice(L,dims=3)) .- tril.(eachslice(h_L,dims=3)))))
     return
 end
 
@@ -125,7 +125,7 @@ function run_spcg_gpu(n::Int, delta::Float64, rtol::Float64,
 end
 
 function perf_spcg(;n=8,nblk=5120)
-    println("Run spcg using CPU . . .")
+    @printf("Run spcg using CPU . . .\n")
     L = rand(n,n,nblk)
     A = zeros(n,n,nblk)
     tron_A = Array{ExaTron.TronDenseMatrix}(undef,nblk)
@@ -180,23 +180,24 @@ function perf_spcg(;n=8,nblk=5120)
                         view(gfree,:,i), view(w,:,i), view(wa,:,i),
                         view(iwa,:,i))
     end
-    println("   ", tcpu.time, " seconds.")
+    @printf("   %.6f seconds\n", tcpu.time)
 
-    println("Run spcg using GPU . . . ")
+    @printf("Run spcg using GPU . . . \n")
 
-    tgpu = @timed @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Int)+(12*n+3*(n^2))*sizeof(Float64)) run_spcg_gpu(n,delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out)
-    println("   ", tgpu.time, " seconds.")
+    tgpu = @timed CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Int)+(12*n+3*(n^2))*sizeof(Float64)) run_spcg_gpu(n,delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out)
+    @printf("   %.6f seconds\n", tgpu.time)
 
     h_x = zeros(n,nblk)
     copyto!(h_x, d_out)
 
-    println("norm(x(cpu) - x(gpu)): ", maximum(norm.(eachslice(x .- h_x,dims=2))))
+    @printf("norm(x(cpu) - x(gpu)): %e\n", maximum(norm.(eachslice(x .- h_x,dims=2))))
     return tcpu, tgpu
 end
 
 function perf_avg_spcg(;r=10,n=8,nblk=5120)
-    # Ignore time for the first run.
+    @printf("Warming up Julia code . . .\n")
     perf_spcg(;n=n,nblk=nblk)
+    @printf("DONE warm-up.\n")
 
     tcpu_time = 0
     tgpu_time = 0
@@ -208,8 +209,8 @@ function perf_avg_spcg(;r=10,n=8,nblk=5120)
     end
 
     @printf("Average of %d runs:\n", r)
-    @printf("   %.5e (CPU)\n", tcpu_time)
-    @printf("   %.5e (GPU)\n", tgpu_time)
+    @printf("   %.5e (CPU)\n", tcpu_time/r)
+    @printf("   %.5e (GPU)\n", tgpu_time/r)
     @printf("   %.5e (CPU/GPU)\n", tcpu_time/tgpu_time)
 
     return
