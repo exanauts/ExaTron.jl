@@ -60,13 +60,13 @@ end
 
 end
 
-@testset "PosDef QP: EyePreconditionner" begin
+@testset "PosDef QP: EyePreconditioner" begin
     n = 1000
     obj♯ = -193.05853878066543
     prob = build_problem(; n=n)
     @testset "Tron: Julia" begin
         prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
-        prob.precond = ExaTron.EyePreconditionner()
+        prob.precond = ExaTron.EyePreconditioner()
         ExaTron.solveProblem(prob)
         @test prob.f ≈ obj♯ atol=1e-8
     end

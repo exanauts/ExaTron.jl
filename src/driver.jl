@@ -4,7 +4,7 @@ mutable struct ExaTronProblem{VI, VD}
     nnz_a::Integer          # number of Hessian entries in the strict lower
     A::AbstractTronMatrix
     B::AbstractTronMatrix
-    precond::AbstractPreconditionner
+    precond::AbstractPreconditioner
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
     g::VD         # gradient

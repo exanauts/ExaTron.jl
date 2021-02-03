@@ -1,14 +1,14 @@
 
 """
-    AbstractPreconditionner
+    AbstractPreconditioner
 
 Abstract supertype to implement a preconditioner for
 conjugate gradient.
 """
-abstract type AbstractPreconditionner end
+abstract type AbstractPreconditioner end
 
 """
-    update!(P::AbstractPreconditionner, B::AbstractTronMatrix, nfree, nnz, iwa, wa1, wa2)
+    update!(P::AbstractPreconditioner, B::AbstractTronMatrix, nfree, nnz, iwa, wa1, wa2)
 
 Update coefficients of preconditioner according to the new matrix `B`.
 `nfree` is the degree of freedom, and `nnz` the current number of
@@ -18,7 +18,7 @@ elements in `B`.
 function update! end
 
 """
-    dstrsol(n, P::AbstractPreconditionner, r, task)
+    dstrsol(n, P::AbstractPreconditioner, r, task)
 
 Apply preconditioner on the `n` first components of the
 current vector `r`.
@@ -30,26 +30,26 @@ function dstrsol end
 
 
 """
-    EyePreconditionner <: AbstractPreconditionner
+    EyePreconditioner <: AbstractPreconditioner
 
 Apply identity as preconditioning. Equivalent to no preconditioning.
 
 """
-struct EyePreconditionner <: AbstractPreconditionner end
+struct EyePreconditioner <: AbstractPreconditioner end
 
-update!(e::EyePreconditionner, B::AbstractTronMatrix, nfree, nnz, iwa, wa1, wa2) = nothing
+update!(e::EyePreconditioner, B::AbstractTronMatrix, nfree, nnz, iwa, wa1, wa2) = nothing
 
-dstrsol(n, P::EyePreconditionner, r, task) = nothing
+dstrsol(n, P::EyePreconditioner, r, task) = nothing
 
 """
-    IncompleteCholesky <: AbstractPreconditionner
+    IncompleteCholesky <: AbstractPreconditioner
 
 Use an Incomplete Cholesky Factorization routine as a preconditioner.
 The incomplete factorization is computed when calling the function
 `update!`, and the factorization stored inside the object `IncompleteCholesky`.
 
 """
-struct IncompleteCholesky <: AbstractPreconditionner
+struct IncompleteCholesky <: AbstractPreconditioner
     L::AbstractTronMatrix
     memory::Int
     nv::Int
