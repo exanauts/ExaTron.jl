@@ -14,22 +14,26 @@ has_c_library() = !isnothing(Libdl.dlopen(EXATRON_LIBRARY; throw_error=false))
 tron_zeros(S, n) = fill!(S(undef, Int64(n)), zero(eltype(S)))
 tron_zeros(S, dims::Tuple) = fill!(S(undef, Int64(dims[1]), Int64(dims[1])), zero(eltype(S)))
 
+include("utils.jl")
+# BLAS routines
 include("daxpy.jl")
 include("dcopy.jl")
 include("ddot.jl")
 include("dmid.jl")
 include("dnrm2.jl")
 include("dscal.jl")
-include("dsel2.jl")
+# Sparse routine
 include("dssyax.jl")
-include("ihsort.jl")
-include("insort.jl")
+# ICFS
+include("ICFS/ICFS.jl")
+using .ICFS
+# Preconditioners
+include("preconditioners.jl")
+# Tron algorithm
 include("dstrsol.jl")
 include("dtrqsol.jl")
 include("dbreakpt.jl")
 include("dgpstep.jl")
-include("dicf.jl")
-include("dicfs.jl")
 include("dprsrch.jl")
 include("dcauchy.jl")
 include("dtrpcg.jl")

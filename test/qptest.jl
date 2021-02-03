@@ -29,9 +29,10 @@ function build_problem(; n=10)
     return ExaTron.createProblem(n, l, u, nnz(P), eval_f, eval_g, eval_h)
 end
 
-@testset "PosDef QP" begin
+@testset "PosDef QP: IncompleteCholesky" begin
     n = 1000
     obj♯ = -193.05853878066543
+    iter♯ = 3
     prob = build_problem(; n=n)
 
     @testset "Problem definition" begin
@@ -44,6 +45,7 @@ end
         prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
         ExaTron.solveProblem(prob)
         @test prob.f ≈ obj♯ atol=1e-8
+        @test prob.minor_iter == iter♯
     end
 
     if ExaTron.has_c_library()
@@ -52,7 +54,26 @@ end
             prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
             ExaTron.solveProblem(prob)
             @test prob.f ≈ obj♯ atol=1e-8
+            @test prob.minor_iter == iter♯
         end
+    end
+
+end
+
+@testset "PosDef QP: EyePreconditioner" begin
+    n = 1000
+    obj♯ = -193.05853878066543
+    prob = build_problem(; n=n)
+    @testset "Tron: Julia" begin
+        prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
+        prob.precond = ExaTron.EyePreconditioner()
+        ExaTron.solveProblem(prob)
+        @test prob.f ≈ obj♯ atol=1e-8
+    end
+    # Fortran backend supports only IncompleteCholesky
+    if ExaTron.has_c_library()
+        ExaTron.setOption(prob, "tron_code", :Fortran)
+        @test_throws Exception ExaTron.solveProblem(prob)
     end
 end
 

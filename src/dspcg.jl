@@ -53,7 +53,7 @@ Eliminated the nnz = max(nnz,1) statement.
 """
 function dspcg(n,x,xl,xu,A,g,delta,
                rtol,s,nv,itermax,
-               B, L,
+               B, precond,
                indfree,gfree,w,wa,iwa)
     zero = 0.0
     one = 1.0
@@ -82,7 +82,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # iwa[i] = nfree if the ith variable is free, otherwise iwa[i] = 0.
 
         nfree = 0
-        # TODO
+        # TODO: inactive! routine
         @inbounds for j=1:n
             if xl[j] < x[j] && x[j] < xu[j]
                 nfree = nfree + 1
@@ -104,12 +104,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # Recall that iwa allows the detection of free variables.
         nnz = reorder!(B, A, indfree, nfree, iwa)
 
-        # Compute the incomplete Cholesky factorization.
-        alpha = zero
-        # TODO
-        dicfs(nfree, nnz, B, L,
-              nv, alpha,
-              iwa, view(wa,1:n), view(wa,n+1:5*n))
+        update!(precond, B, nfree, nnz, iwa, view(wa,1:n), view(wa,n+1:5*n))
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.
@@ -121,7 +116,8 @@ function dspcg(n,x,xl,xu,A,g,delta,
             gfree[j] = w[indfree[j]] + g[indfree[j]]
             wa[j] = g[indfree[j]]
         end
-        gfnorm = dnrm2(nfree,wa,1)
+
+        gfnorm = dnrm2(nfree, wa, 1)
 
         # Save the trust region subproblem in the free variables
         # to generate a direction p[k]. Store p[k] in the array w.
@@ -129,13 +125,13 @@ function dspcg(n,x,xl,xu,A,g,delta,
         tol = rtol*gfnorm
         stol = zero
 
-        infotr,itertr = dtrpcg(nfree,B,gfree,delta, L,
+        infotr, itertr = dtrpcg(nfree,B,gfree,delta, precond,
                                tol,stol,itermax,w,
                                view(wa,1:n),view(wa,n+1:2*n),view(wa,2*n+1:3*n),
                                view(wa,3*n+1:4*n),view(wa,4*n+1:5*n))
 
         iters = iters + itertr
-        dstrsol(nfree,L, w,'T')
+        dstrsol(nfree, precond, w,'T')
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.

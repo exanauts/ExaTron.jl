@@ -4,7 +4,7 @@ mutable struct ExaTronProblem{VI, VD}
     nnz_a::Integer          # number of Hessian entries in the strict lower
     A::AbstractTronMatrix
     B::AbstractTronMatrix
-    L::AbstractTronMatrix
+    precond::AbstractPreconditioner
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
     g::VD         # gradient
@@ -39,32 +39,6 @@ mutable struct ExaTronProblem{VI, VD}
     ExaTronProblem{VI, VD}() where {VI, VD} = new{VI, VD}()
 end
 
-function gpnorm(n, x, x_l, x_u, g)
-    two_norm = 0.0
-    inf_norm = 0.0
-
-    for i=1:n
-        if x_l[i] != x_u[i]
-            if x[i] == x_l[i]
-                val = (min(g[i], 0.0))^2
-            elseif x[i] == x_u[i]
-                val = (max(g[i], 0.0))^2
-            else
-                val = g[i]^2
-            end
-
-            two_norm += val
-            val = sqrt(val)
-            if inf_norm < val
-                inf_norm = val
-            end
-        end
-    end
-
-    two_norm = sqrt(two_norm)
-
-    return two_norm, inf_norm
-end
 
 function set_default_options!(prob::ExaTronProblem)
     prob.options = Dict{String,Any}()
@@ -161,17 +135,19 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     if tron.options["matrix_type"] == :Sparse
         tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
         tron.B = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess))
-        tron.L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
+        L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
         tron.nnz_a = tron.A.nnz
+        tron.precond = IncompleteCholesky(L, p, 5)
     else
         tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
         if isa(x_l, Array)
             tron.B = TronDenseMatrix{Array}(n)
-            tron.L = TronDenseMatrix{Array}(n)
+            L = TronDenseMatrix{Array}(n)
         else
             tron.B = TronDenseMatrix{CuArray}(n)
-            tron.L = TronDenseMatrix{CuArray}(n)
+            L = TronDenseMatrix{CuArray}(n)
         end
+        tron.precond = IncompleteCholesky(L, p, 5)
         tron.nnz_a = n*n
     end
     tron.status = :NotSolved
@@ -198,6 +174,13 @@ function solveProblem(tron::ExaTronProblem)
     max_feval = tron.options["max_feval"]
     tcode = tron.options["tron_code"]
     max_minor = tron.options["max_minor"]
+
+    # Sanity check
+    if (tcode == :Fortran) && !isa(tron.precond, IncompleteCholesky)
+        error("Legacy Tron supports only IncompleteCholesky preconditioner." *
+              "Please change preconditioner or set `tron_code` option to `:Julia`")
+    end
+
 
     # Project x into its bound. Tron requires x to be feasible.
     tron.x .= max.(tron.x_l, min.(tron.x_u, tron.x))
@@ -263,8 +246,8 @@ function solveProblem(tron::ExaTronProblem)
                     tron.A.colptr, tron.A.rowval, frtol, fatol,
                     fmin, cgtol, itermax, delta,
                     task, tron.B.tril_vals, tron.B.diag_vals, tron.B.colptr,
-                    tron.B.rowval, tron.L.tril_vals, tron.L.diag_vals, tron.L.colptr,
-                    tron.L.rowval, tron.xc, tron.s, tron.indfree,
+                    tron.B.rowval, tron.precond.L.tril_vals, tron.precond.L.diag_vals, tron.precond.L.colptr,
+                    tron.precond.L.rowval, tron.xc, tron.s, tron.indfree,
                     isave, dsave, tron.wa, tron.iwa)
                 tron.delta = delta[]
             else
@@ -272,7 +255,7 @@ function solveProblem(tron::ExaTronProblem)
                                 tron.f, tron.g, tron.A,
                                 frtol, fatol,
                                 fmin, cgtol, itermax, tron.delta,
-                                task, tron.B, tron.L,
+                                task, tron.B, tron.precond,
                                 tron.xc, tron.s, tron.indfree,
                                 isave, dsave, tron.wa, tron.iwa)
             end
