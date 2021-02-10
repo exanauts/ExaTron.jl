@@ -250,6 +250,7 @@ function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
         end
         CUDA.sync_threads()
         nfree = iwa[n+1] # Share with all threads.
+        CUDA.sync_threads()
 
         # Exit if there are no free constraints.
 

@@ -59,6 +59,7 @@ function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
     if tx <= n  # No check on ty so that each warp has v.
         v = x[tx]*x[tx]
     end
+    CUDA.sync_threads()
 
     offset = div(blockDim().x, 2)
     while offset > 0

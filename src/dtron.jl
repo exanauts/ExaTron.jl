@@ -204,6 +204,15 @@ function dtron(n,x,xl,xu,f,g,A,
 
     # Save local variables.
 
+    #=
+    println("[CPU] work    = ", work)
+    println("[CPU] iter    = ", iter)
+    println("[CPU] iterscg = ", iterscg)
+    println("[CPU] fc      = ", fc)
+    println("[CPU] alphac  = ", alphac)
+    println("[CPU] prered  = ", prered)
+    =#
+
     if work == "COMPUTE"
         isave[1] = 1
     elseif work == "EVALUATE"
@@ -233,6 +242,9 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
                wa1::CuDeviceArray{Float64}, wa2::CuDeviceArray{Float64},
                wa3::CuDeviceArray{Float64}, wa4::CuDeviceArray{Float64},
                wa5::CuDeviceArray{Float64})
+    tx = threadIdx().x
+    ty = threadIdx().y
+
     zero = 0.0
     p5 = 0.5
     one = 1.0
@@ -408,6 +420,19 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
     end
 
     # Save local variables.
+
+    #=
+    if threadIdx().x == 1 && threadIdx().y == 1 && blockIdx().x == 3177
+        @cuprintln("[GPU] work    = ", work)
+        @cuprintln("[GPU] iter    = ", iter)
+        @cuprintln("[GPU] iterscg = ", iterscg)
+        @cuprintln("[GPU] fc      = ", fc)
+        @cuprintln("[GPU] alphac  = ", alphac)
+        @cuprintln("[GPU] prered  = ", prered)
+    end
+    =#
+
+    CUDA.sync_threads()
 
     isave[1] = work
     isave[2] = iter

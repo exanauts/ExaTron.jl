@@ -42,6 +42,7 @@ function dgpnorm(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
             v = sqrt(v)
         end
     end
+    CUDA.sync_threads()
 
     offset = div(blockDim().x, 2)
     while offset > 0

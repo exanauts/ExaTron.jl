@@ -40,9 +40,6 @@ end
 
 function dtrqsol(n::Int,x::CuDeviceArray{Float64},
                  p::CuDeviceArray{Float64},delta::Float64)
-    # All threads compute the same value, hence,
-    # no sync_threads() is needed.
-
     zero = 0.0
     sigma = zero
 
@@ -62,6 +59,7 @@ function dtrqsol(n::Int,x::CuDeviceArray{Float64},
     else
         sigma = zero
     end
+    CUDA.sync_threads()
 
     return sigma
 end
