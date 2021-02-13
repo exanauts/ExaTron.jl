@@ -1184,9 +1184,6 @@ Random.seed!(0)
                                x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
                                xu::CuDeviceArray{Float64}, dA::CuDeviceArray{Float64},
                                dc::CuDeviceArray{Float64})
-            tx = threadIdx().x
-            ty = threadIdx().y
-
             # We start with a shared memory allocation.
             # The first 3*n*sizeof(Float64) bytes are used for x, xl, and xu.
 

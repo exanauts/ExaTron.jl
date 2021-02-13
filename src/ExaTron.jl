@@ -5,6 +5,8 @@ using LinearAlgebra
 using CUDA
 using CUDA.CUBLAS
 
+using DelimitedFiles
+
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
 const BLAS_LIBRARY = :Tron
@@ -38,5 +40,11 @@ include("dtrpcg.jl")
 include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
+
+include("opfdata.jl")
+include("tron_kernel.jl")
+include("eval_kernel.jl")
+include("auglag_kernel.jl")
+include("acopf_admm_gpu.jl")
 
 end # module

@@ -1,5 +1,6 @@
 @testset "DenseMatrix" begin
-    tol = 1e-10
+    tol = 1e-8
+
     Random.seed!(0)
     for k=1:10
         n = 10
