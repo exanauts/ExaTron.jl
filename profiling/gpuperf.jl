@@ -344,11 +344,11 @@ function perf_avg(fname="perf_tron";r=10,n=8,nblk=5120,log=true)
         tgpu_time += tgpu.time
     end
 
-    @printf("\n ** Statistics:\n\n")
-    @printf("Number of iterations . . . %5d\n", r)
-    @printf("Average(CPU) . . . . . . . %.5e\n", tcpu_time/r)
-    @printf("Average(GPU) . . . . . . . %.5e\n", tgpu_time/r)
-    @printf("Average ratio(CPU/GPU) . . %.5e\n", tcpu_time/tgpu_time)
+    @printf("\n ** Summary\n\n")
+    @printf("Number of iterations . . . %-5d\n", r)
+    @printf("Average time (CPU) . . . . %-.5e\n", tcpu_time/r)
+    @printf("Average time (GPU) . . . . %-.5e\n", tgpu_time/r)
+    @printf("Average ratio(CPU/GPU) . . %-.5e\n", tcpu_time/tgpu_time)
 
     return
 end
