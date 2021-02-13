@@ -286,6 +286,8 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
         prered = dsave[3]
     end
 
+    CUDA.sync_threads()
+
     # Search for a lower function value.
 
     search = true
@@ -421,19 +423,6 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
 
     # Save local variables.
 
-    #=
-    if threadIdx().x == 1 && threadIdx().y == 1 && blockIdx().x == 3177
-        @cuprintln("[GPU] work    = ", work)
-        @cuprintln("[GPU] iter    = ", iter)
-        @cuprintln("[GPU] iterscg = ", iterscg)
-        @cuprintln("[GPU] fc      = ", fc)
-        @cuprintln("[GPU] alphac  = ", alphac)
-        @cuprintln("[GPU] prered  = ", prered)
-    end
-    =#
-
-    CUDA.sync_threads()
-
     isave[1] = work
     isave[2] = iter
     isave[3] = iterscg
@@ -441,6 +430,8 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
     dsave[1] = fc
     dsave[2] = alphac
     dsave[3] = prered
+
+    CUDA.sync_threads()
 
     return delta, task
 end
