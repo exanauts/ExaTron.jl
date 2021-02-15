@@ -66,7 +66,7 @@ end
     prob = build_problem(; n=n)
     @testset "Tron: Julia" begin
         prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
-        prob.precond = ExaTron.EyePreconditioner()
+        prob.options["cg_precond"] = :Eye
         ExaTron.solveProblem(prob)
         @test prob.f ≈ obj♯ atol=1e-8
     end

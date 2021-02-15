@@ -1,10 +1,10 @@
 mutable struct ExaTronProblem{VI, VD, TM <: AbstractTronMatrix}
     n::Cint                 # number of variables
-    nnz::Integer            # number of Hessian entries
-    nnz_a::Integer          # number of Hessian entries in the strict lower
+    nnz::Int                # number of Hessian entries
+    nnz_a::Int              # number of Hessian entries in the strict lower
     A::TM
     B::TM
-    precond::AbstractPreconditioner
+    L::TM
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
     g::VD         # gradient
@@ -30,10 +30,10 @@ mutable struct ExaTronProblem{VI, VD, TM <: AbstractTronMatrix}
     f::Cdouble
     gnorm_two::Float64
     gnorm_inf::Float64
-    nfev::Integer
-    ngev::Integer
-    nhev::Integer
-    minor_iter::Integer
+    nfev::Int
+    ngev::Int
+    nhev::Int
+    minor_iter::Int
     status::Symbol
 
     ExaTronProblem{VI, VD, TM}() where {VI, VD, TM} = new{VI, VD, TM}()
@@ -51,12 +51,13 @@ function set_default_options!(options::Dict{String, Any})
     options["p"] = 5
     options["verbose"] = 0
     options["tol"] = 1e-6
-    options["fatol"] = 0
+    options["fatol"] = 0.0
     options["frtol"] = 1e-12
     options["fmin"] = -1e32
     options["cgtol"] = 0.1
     options["tron_code"] = :Julia
     options["matrix_type"] = :Sparse
+    options["cg_precond"] = :ICFS
 
     return
 end
@@ -148,19 +149,17 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     if tron.options["matrix_type"] == :Sparse
         tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
         tron.B = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess))
-        L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
+        tron.L = TronSparseMatrixCSC{VI, VD}(n, Int64(nele_hess + n*p))
         tron.nnz_a = tron.A.nnz
-        tron.precond = IncompleteCholesky(L, p, 5)
     else
         tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
         if isa(x_l, Array)
             tron.B = TronDenseMatrix{Array{Float64, 2}}(n)
-            L = TronDenseMatrix{Array{Float64, 2}}(n)
+            tron.L = TronDenseMatrix{Array{Float64, 2}}(n)
         else
             tron.B = TronDenseMatrix{CuArray{Float64, 2}}(n)
-            L = TronDenseMatrix{CuArray{Float64, 2}}(n)
+            tron.L = TronDenseMatrix{CuArray{Float64, 2}}(n)
         end
-        tron.precond = IncompleteCholesky(L, p, 5)
         tron.nnz_a = n*n
     end
     tron.status = :NotSolved
@@ -179,21 +178,31 @@ function solveProblem(tron::ExaTronProblem)
 
     isave = VI(undef, 3)
     dsave = tron_zeros(VD, 3)
-    fatol = tron.options["fatol"]
-    frtol = tron.options["frtol"]
-    fmin = tron.options["fmin"]
-    cgtol = tron.options["cgtol"]
-    gtol = tron.options["tol"]
-    max_feval = tron.options["max_feval"]
-    tcode = tron.options["tron_code"]
-    max_minor = tron.options["max_minor"]
+    fatol = tron.options["fatol"]::Float64
+    frtol = tron.options["frtol"]::Float64
+    fmin = tron.options["fmin"]::Float64
+    cgtol = tron.options["cgtol"]::Float64
+    gtol = tron.options["tol"]::Float64
+    max_feval = tron.options["max_feval"]::Int
+    tcode = tron.options["tron_code"]::Symbol
+    max_minor = tron.options["max_minor"]::Int
+
+    # Build preconditioner
+    if tron.options["cg_precond"] == :ICFS
+        p = tron.options["p"]::Int
+        precond = IncompleteCholesky(tron.L, p, 5)
+    elseif tron.options["cg_precond"] == :Eye
+        precond = EyePreconditioner()
+    else
+        error("Wrong preconditioner. Currently only `:ICFS` and `:Eye` are supported.")
+    end
+
 
     # Sanity check
-    if (tcode == :Fortran) && !isa(tron.precond, IncompleteCholesky)
+    if (tcode == :Fortran) && !isa(precond, IncompleteCholesky)
         error("Legacy Tron supports only IncompleteCholesky preconditioner." *
               "Please change preconditioner or set `tron_code` option to `:Julia`")
     end
-
 
     # Project x into its bound. Tron requires x to be feasible.
     tron.x .= max.(tron.x_l, min.(tron.x_u, tron.x))
@@ -209,7 +218,7 @@ function solveProblem(tron::ExaTronProblem)
         # Evaluate the function.
 
         if Char(task[1]) == 'F' || unsafe_string(pointer(task), 5) == "START"
-            tron.f = tron.eval_f(tron.x)
+            tron.f = tron.eval_f(tron.x)::Cdouble
             tron.nfev += 1
             if tron.nfev >= max_feval
                 tron.status = :Maximum_Iterations_Exceeded
@@ -259,8 +268,8 @@ function solveProblem(tron::ExaTronProblem)
                     tron.A.colptr, tron.A.rowval, frtol, fatol,
                     fmin, cgtol, itermax, delta,
                     task, tron.B.tril_vals, tron.B.diag_vals, tron.B.colptr,
-                    tron.B.rowval, tron.precond.L.tril_vals, tron.precond.L.diag_vals, tron.precond.L.colptr,
-                    tron.precond.L.rowval, tron.xc, tron.s, tron.indfree,
+                    tron.B.rowval, tron.L.tril_vals, tron.L.diag_vals, tron.L.colptr,
+                    tron.L.rowval, tron.xc, tron.s, tron.indfree,
                     isave, dsave, tron.wa, tron.iwa)
                 tron.delta = delta[]
             else
@@ -268,7 +277,7 @@ function solveProblem(tron::ExaTronProblem)
                                 tron.f, tron.g, tron.A,
                                 frtol, fatol,
                                 fmin, cgtol, itermax, tron.delta,
-                                task, tron.B, tron.precond,
+                                task, tron.B, precond,
                                 tron.xc, tron.s, tron.indfree,
                                 isave, dsave, tron.wa, tron.iwa)
             end
