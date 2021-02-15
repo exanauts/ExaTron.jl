@@ -1,9 +1,9 @@
-mutable struct ExaTronProblem{VI, VD}
+mutable struct ExaTronProblem{VI, VD, TM <: AbstractTronMatrix}
     n::Cint                 # number of variables
     nnz::Integer            # number of Hessian entries
     nnz_a::Integer          # number of Hessian entries in the strict lower
-    A::AbstractTronMatrix
-    B::AbstractTronMatrix
+    A::TM
+    B::TM
     precond::AbstractPreconditioner
     indfree::VI   # a working array of dimension n
     iwa::VI       # a working array of dimension 3*n
@@ -36,24 +36,27 @@ mutable struct ExaTronProblem{VI, VD}
     minor_iter::Integer
     status::Symbol
 
-    ExaTronProblem{VI, VD}() where {VI, VD} = new{VI, VD}()
+    ExaTronProblem{VI, VD, TM}() where {VI, VD, TM} = new{VI, VD, TM}()
 end
 
 
 function set_default_options!(prob::ExaTronProblem)
     prob.options = Dict{String,Any}()
+    set_default_options!(prob.options)
+end
 
-    prob.options["max_feval"] = 500
-    prob.options["max_minor"] = 200
-    prob.options["p"] = 5
-    prob.options["verbose"] = 0
-    prob.options["tol"] = 1e-6
-    prob.options["fatol"] = 0
-    prob.options["frtol"] = 1e-12
-    prob.options["fmin"] = -1e32
-    prob.options["cgtol"] = 0.1
-    prob.options["tron_code"] = :Julia
-    prob.options["matrix_type"] = :Sparse
+function set_default_options!(options::Dict{String, Any})
+    options["max_feval"] = 500
+    options["max_minor"] = 200
+    options["p"] = 5
+    options["verbose"] = 0
+    options["tol"] = 1e-6
+    options["fatol"] = 0
+    options["frtol"] = 1e-12
+    options["fmin"] = -1e32
+    options["cgtol"] = 0.1
+    options["tron_code"] = :Julia
+    options["matrix_type"] = :Sparse
 
     return
 end
@@ -112,14 +115,24 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     @assert n == length(x_l) == length(x_u)
     @assert typeof(x_l) == typeof(x_u)
 
+    # Load options first, as we need to know :matrix_type for type inferrence
+    options_dict = Dict{String, Any}()
+    set_default_options!(options_dict)
+    for (name, value) in options
+        options_dict[string(name)] = value
+    end
+
     VI = Vector{Cint}
     VD = typeof(x_l)
-
-    tron = ExaTronProblem{VI, VD}()
-    set_default_options!(tron)
-    for (name, value) in options
-        setOption(tron, string(name), value)
+    if options_dict["matrix_type"] == :Sparse
+        TM = TronSparseMatrixCSC{VI, VD}
+    else
+        AT = isa(x_l, Array) ? Array{Float64, 2} : CuArray{Float64, 2}
+        TM = TronDenseMatrix{AT}
     end
+
+    tron = ExaTronProblem{VI, VD, TM}()
+    tron.options = options_dict
     instantiate_memory!(tron, n, Int64(nele_hess))
     copyto!(tron.x_l, 1, x_l, 1, n)
     copyto!(tron.x_u, 1, x_u, 1, n)
@@ -141,11 +154,11 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     else
         tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
         if isa(x_l, Array)
-            tron.B = TronDenseMatrix{Array}(n)
-            L = TronDenseMatrix{Array}(n)
+            tron.B = TronDenseMatrix{Array{Float64, 2}}(n)
+            L = TronDenseMatrix{Array{Float64, 2}}(n)
         else
-            tron.B = TronDenseMatrix{CuArray}(n)
-            L = TronDenseMatrix{CuArray}(n)
+            tron.B = TronDenseMatrix{CuArray{Float64, 2}}(n)
+            L = TronDenseMatrix{CuArray{Float64, 2}}(n)
         end
         tron.precond = IncompleteCholesky(L, p, 5)
         tron.nnz_a = n*n

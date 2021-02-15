@@ -5,7 +5,7 @@ import ExaTron: ICFS
     Random.seed!(0)
     for k=1:10
         n = 10
-        A = ExaTron.TronDenseMatrix{Array}(n)
+        A = ExaTron.TronDenseMatrix{Array{Float64, 2}}(n)
         B = zeros(n,n)
         for j=1:n, i=j:n
             v = rand(1)[1]
@@ -36,7 +36,7 @@ import ExaTron: ICFS
         for j=1:nfree
             iwa[indfree[j]] = j
         end
-        C = ExaTron.TronDenseMatrix{Array}(n)
+        C = ExaTron.TronDenseMatrix{Array{Float64, 2}}(n)
         ExaTron.reorder!(C, A, indfree, nfree, iwa)
         @test C.vals[1:nfree,1:nfree] == A.vals[indfree,indfree]
 

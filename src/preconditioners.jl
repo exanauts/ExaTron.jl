@@ -49,8 +49,8 @@ The incomplete factorization is computed when calling the function
 `update!`, and the factorization stored inside the object `IncompleteCholesky`.
 
 """
-struct IncompleteCholesky <: AbstractPreconditioner
-    L::AbstractTronMatrix
+struct IncompleteCholesky{TM <: AbstractTronMatrix} <: AbstractPreconditioner
+    L::TM
     memory::Int
     nv::Int
 end
