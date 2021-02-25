@@ -5,6 +5,7 @@ using LinearAlgebra
 using CUDA
 using CUDA.CUBLAS
 
+using Printf
 using DelimitedFiles
 
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
@@ -42,6 +43,8 @@ include("dtron.jl")
 include("driver.jl")
 
 include("opfdata.jl")
+include("bus_kernel.jl")
+include("generator_kernel.jl")
 include("tron_kernel.jl")
 include("eval_kernel.jl")
 include("auglag_kernel.jl")

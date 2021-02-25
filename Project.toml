@@ -8,8 +8,4 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-
-[compat]
-CUDA = "2.3.0"
-julia = "1.5"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"

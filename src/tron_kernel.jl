@@ -5,10 +5,16 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
                      x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
                      xu::CuDeviceArray{Float64},
                      param::CuDeviceArray{Float64},
+                     YffR::Float64, YffI::Float64,
+                     YftR::Float64, YftI::Float64,
+                     YttR::Float64, YttI::Float64,
+                     YtfR::Float64, YtfI::Float64)
+                     #=
                      YffR::CuDeviceArray{Float64}, YffI::CuDeviceArray{Float64},
                      YftR::CuDeviceArray{Float64}, YftI::CuDeviceArray{Float64},
                      YttR::CuDeviceArray{Float64}, YttI::CuDeviceArray{Float64},
                      YtfR::CuDeviceArray{Float64}, YtfI::CuDeviceArray{Float64})
+                     =#
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -56,15 +62,6 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
 
     while search
 
-        #=
-        if tx == 1 && ty == 1
-            @cuprintln("minor_iter = ", minor_iter, " task = ", task, " delta = ", delta)
-            @inbounds for i=1:n
-                @cuprintln(" x[", i, "] = ", x[i])
-            end
-        end
-        =#
-
         # [0|1]: Evaluate function.
 
         if task == 0 || task == 1
@@ -74,11 +71,6 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
                 search = false
             end
 
-            #=
-            if tx == 1 && ty == 1
-                @cuprintln(" f = ", f)
-            end
-            =#
         end
 
         # [2] G or H: Evaluate gradient and Hessian.
@@ -89,20 +81,6 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
             ngev += 1
             nhev += 1
             minor_iter += 1
-
-            #=
-            if tx == 1 && ty == 1
-                @inbounds for i=1:n
-                    @cuprintln(" g[", i, "] = ", g[i])
-                end
-
-                @inbounds for j=1:n
-                    @inbounds for i=j:n
-                        @cuprintln("A[", i, ",", j, "] = ", A[i,j])
-                    end
-                end
-            end
-            =#
         end
 
         # Initialize the trust region bound.
@@ -129,12 +107,6 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
                 task = 4
             end
 
-            #=
-            if tx == 1 && ty == 1
-                @cuprintln("gnorm_inf = ", gnorm_inf, " gtol = ", gtol, " task = ", task)
-            end
-            =#
-
             if minor_iter >= max_minor
                 status = 1
                 search = false
@@ -145,11 +117,6 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
         # [10] : warning fval is less than fmin
 
         if task == 4 || task == 10
-            #=
-            if tx == 1 && ty == 1
-                @cuprintln("returning task = ", task)
-            end
-            =#
             search = false
         end
     end
