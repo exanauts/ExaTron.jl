@@ -158,11 +158,12 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
                            YtfR::Array{Float64}, YtfI::Array{Float64},
                            frBound::Array{Float64}, toBound::Array{Float64})
     avg_auglag_it = 0
-    @inbounds for I=1:nline
-        x = zeros(n)
-        xl = zeros(n)
-        xu = zeros(n)
 
+    x = zeros(n)
+    xl = zeros(n)
+    xu = zeros(n)
+
+    @inbounds for I=1:nline
         @inbounds for i=1:n
             xl[i] = -Inf
             xu[i] = Inf
@@ -238,7 +239,7 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
         nele_hess = 26
         tron = ExaTron.createProblem(n, xl, xu, nele_hess, eval_f_cb, eval_g_cb, eval_h_cb;
                                      :tol => gtol, :matrix_type => :Dense, :max_minor => 200,
-                                     :frtol => 1e-10)
+                                     :frtol => 1e-12)
         tron.x .= x
         it = 0
         terminate = false
