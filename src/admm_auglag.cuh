@@ -291,10 +291,10 @@ void auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
                     param[start + 20] += mu*cviol3;
                     param[start + 21] += mu*cviol4;
                     param[start + 22] += mu*cviol5;
-
-                    eta = eta / pow(mu, 0.9);
-                    omega  = omega / mu;
                 }
+
+                eta = eta / pow(mu, 0.9);
+                omega  = omega / mu;
             }
         } else {
             mu = min(mu_max, mu*10);

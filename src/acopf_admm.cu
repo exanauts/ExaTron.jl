@@ -631,7 +631,15 @@ int main(int argc, char **argv)
     }
 
     if (use_gpu) {
+        cudaMemcpy(u_prev, cu_u_prev, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
         cudaMemcpy(u_curr, cu_u_curr, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
+        cudaMemcpy(v_curr, cu_v_curr, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
+        cudaMemcpy(v_prev, cu_v_prev, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
+        cudaMemcpy(rho, cu_rho, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
+        primal_residual(nvars, rp, u_curr, v_curr);
+        dual_residual(nvars, rd, v_prev, v_curr, rho);
+
+        printf("%10d\t%.6e\t%.6e\n", it, norm(nvars, rp), norm(nvars, rd));
     }
 
     double objval = 0;

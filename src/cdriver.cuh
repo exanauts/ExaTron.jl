@@ -162,12 +162,13 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
     L = B + n*n;
 
     A[n*ty + tx] = 0;
+    B[n*ty + tx] = 0;
+    L[n*ty + tx] = 0;
+
     cmid(n, x, xl, xu);
 
     task = 0;
     status = 0;
-    minor_iter = 0;
-    nfev = ngev = nhev = 0;
 
     delta = 0.0;
     fatol = 0.0;
@@ -176,6 +177,12 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
     gtol = 1e-6;
     cgtol = 0.1;
     cg_itermax = n;
+
+    f = 0.0;
+    nfev = 0;
+    ngev = 0;
+    nhev = 0;
+    minor_iter = 0;
 
     bool search = true;
     while (search) {
@@ -230,13 +237,15 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
 
         // [4] CONV: convergence was achieved.
 
-        if (task == 4) {
+        if (task == 4 || task == 10) {
             search = false;
         }
     }
 
     (*_status) = status;
     (*_minor_iter) = minor_iter;
+
+    __syncthreads();
 
     return;
 }

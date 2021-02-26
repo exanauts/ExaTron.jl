@@ -41,6 +41,8 @@ HPP_ACOPF  := src/admm_auglag.hpp src/admm_generator.hpp src/admm_bus.hpp \
 
 INCLUDES   := -I$(SOURCE_DIR) -I$(TEST_DIR)
 
+.PHONY: all test
+
 all: test/gputest src/ExaTron src/ExaTronCPU
 test/gputest: test/gputest.cu $(CUH_EXA) $(CUH_TEST)
 	$(NVCC) $(CFLAGS) $(INCLUDES) $(GENCODE_FLAGS) test/gputest.cu $(LDFLAGS) -o $@
@@ -48,6 +50,9 @@ src/ExaTron: src/acopf_admm.cu $(CUH_EXA) $(CUH_ACOPF)
 	$(NVCC) $(CFLAGS) $(INCLUDES) $(GENCODE_FLAGS) src/acopf_admm.cu $(LDFLAGS) -o $@
 src/ExaTronCPU: src/acopf_admm.cpp $(HPP_ACOPF)
 	$(CC) -O3 $(INCLUDES) src/acopf_admm.cpp -lm -o $@
+
+test:
+	./test/gputest 8 5120
 
 clean:
 	rm -rf *.o test/gputest src/ExaTron src/ExaTronCPU
