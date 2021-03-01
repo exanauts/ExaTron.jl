@@ -36,6 +36,7 @@ double eval_f_kernel(int n, double *x, double *param,
     f += 0.5*raug*(c5*c5);
 
     __syncthreads();
+
     return f;
 }
 
@@ -46,6 +47,8 @@ void eval_grad_f_kernel(int n, double *x, double *g, double *param,
                         double YttR, double YttI,
                         double YtfR, double YtfI)
 {
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
     int I = blockIdx.x;
 
     double c1, c2, c3, c4, c5;
@@ -86,16 +89,19 @@ void eval_grad_f_kernel(int n, double *x, double *g, double *param,
          raug*(-YftI)*c1 + raug*(-YftR)*c2 + raug*(YtfI)*c3 +
          raug*(YtfR)*c4 + raug*(2*x[7])*c5;
 
-    g[0] = g1;
-    g[1] = g2;
-    g[2] = g3;
-    g[3] = g4;
-    g[4] = g5;
-    g[5] = g6;
-    g[6] = g7;
-    g[7] = g8;
+    if (tx == 0 && ty == 0) {
+        g[0] = g1;
+        g[1] = g2;
+        g[2] = g3;
+        g[3] = g4;
+        g[4] = g5;
+        g[5] = g6;
+        g[6] = g7;
+        g[7] = g8;
+    }
 
     __syncthreads();
+
     return;
 }
 
@@ -117,56 +123,61 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
     raug = param[start + 23];
     c5 = (x[6]*x[6] + x[7]*x[7] - x[4]*x[5]);
 
-    // 1st column
-    A[0] = param[start + 6] + raug; // A[1,1]
-    A[4] = raug*(-YffR); // A[5,1]
-    A[6] = raug*(-YftR); // A[7,1]
-    A[7] = raug*(-YftI); // A[8,1]
+    if (tx == 0 && ty == 0) {
+        // 1st column
+        A[0] = param[start + 6] + raug; // A[1,1]
+        A[4] = raug*(-YffR); // A[5,1]
+        A[6] = raug*(-YftR); // A[7,1]
+        A[7] = raug*(-YftI); // A[8,1]
 
-    // 2nd columns
-    A[n + 1] = param[start + 7] + raug; // A[2,2]
-    A[n + 4] = raug*(YffI);  // A[5,2]
-    A[n + 6] = raug*(YftI);  // A[7,2]
-    A[n + 7] = raug*(-YftR); // A[8,2]
+        // 2nd columns
+        A[n + 1] = param[start + 7] + raug; // A[2,2]
+        A[n + 4] = raug*(YffI);  // A[5,2]
+        A[n + 6] = raug*(YftI);  // A[7,2]
+        A[n + 7] = raug*(-YftR); // A[8,2]
 
-    // 3rd column
-    A[n*2 + 2] = param[start + 8] + raug; // A[3,3]
-    A[n*2 + 5] = raug*(-YttR); // A[6,3]
-    A[n*2 + 6] = raug*(-YtfR); // A[7,3]
-    A[n*2 + 7] = raug*(YtfI);  // A[8,3]
+        // 3rd column
+        A[n*2 + 2] = param[start + 8] + raug; // A[3,3]
+        A[n*2 + 5] = raug*(-YttR); // A[6,3]
+        A[n*2 + 6] = raug*(-YtfR); // A[7,3]
+        A[n*2 + 7] = raug*(YtfI);  // A[8,3]
 
-    // 4th column
-    A[n*3 + 3] = param[start + 9] + raug; // A[4,4]
-    A[n*3 + 5] = raug*(YttI); // A[6,4]
-    A[n*3 + 6] = raug*(YtfI); // A[7,4]
-    A[n*3 + 7] = raug*(YtfR); // A[8,4]
+        // 4th column
+        A[n*3 + 3] = param[start + 9] + raug; // A[4,4]
+        A[n*3 + 5] = raug*(YttI); // A[6,4]
+        A[n*3 + 6] = raug*(YtfI); // A[7,4]
+        A[n*3 + 7] = raug*(YtfR); // A[8,4]
 
-    // 5th column
-    A[n*4 + 4] = param[start + 10] + raug*(YffR*YffR) + raug*(YffI*YffI) + raug*(x[5]*x[5]); // A[5,5]
-    A[n*4 + 5] = -(alrect + raug*c5) + raug*(x[4]*x[5]); // A[6,5]
-    A[n*4 + 6] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[5])*(2*x[6])); // A[7,5]
-    A[n*4 + 7] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[5])*(2*x[7])); // A[8,5]
+        // 5th column
+        A[n*4 + 4] = param[start + 10] + raug*(YffR*YffR) + raug*(YffI*YffI) + raug*(x[5]*x[5]); // A[5,5]
+        A[n*4 + 5] = -(alrect + raug*c5) + raug*(x[4]*x[5]); // A[6,5]
+        A[n*4 + 6] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[5])*(2*x[6])); // A[7,5]
+        A[n*4 + 7] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[5])*(2*x[7])); // A[8,5]
 
-    // 6th column
-    A[n*5 + 5] = param[start + 11] + raug*(YttR*YttR) + raug*(YttI*YttI) + raug*(x[4]*x[4]); // A[6,6]
-    A[n*5 + 6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[4])*(2*x[6])); // A[7,6]
-    A[n*5 + 7] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[4])*(2*x[7])); // A[8,6]
+        // 6th column
+        A[n*5 + 5] = param[start + 11] + raug*(YttR*YttR) + raug*(YttI*YttI) + raug*(x[4]*x[4]); // A[6,6]
+        A[n*5 + 6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[4])*(2*x[6])); // A[7,6]
+        A[n*5 + 7] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[4])*(2*x[7])); // A[8,6]
 
-    // 7th column
-    A[n*6 + 6] = (alrect + raug*c5)*2 + raug*(YftR*YftR) + raug*(YftI*YftI) +
-                 raug*(YtfR*YtfR) + raug*(YtfI*YtfI) + raug*((2*x[6])*(2*x[6])); // A[7,7]
-    A[n*6 + 7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
-                 raug*(YtfI*YtfR) + raug*((2*x[6])*(2*x[7])); // A[8,7]
+        // 7th column
+        A[n*6 + 6] = (alrect + raug*c5)*2 + raug*(YftR*YftR) + raug*(YftI*YftI) +
+                    raug*(YtfR*YtfR) + raug*(YtfI*YtfI) + raug*((2*x[6])*(2*x[6])); // A[7,7]
+        A[n*6 + 7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
+                    raug*(YtfI*YtfR) + raug*((2*x[6])*(2*x[7])); // A[8,7]
 
-    // 8th column
-    A[n*7 + 7] = (alrect + raug*c5)*2 + raug*(YftI*YftI) + raug*(YftR*YftR) +
-                 raug*(YtfI*YtfI) + raug*(YtfR*YtfR) + raug*((2*x[7])*(2*x[7])); // A[8,8]
+        // 8th column
+        A[n*7 + 7] = (alrect + raug*c5)*2 + raug*(YftI*YftI) + raug*(YftR*YftR) +
+                    raug*(YtfI*YtfI) + raug*(YtfR*YtfR) + raug*((2*x[7])*(2*x[7])); // A[8,8]
+    }
+
+    __syncthreads();
 
     if (tx > ty) {
         A[n*tx + ty] = A[n*ty + tx];
     }
 
     __syncthreads();
+
     return;
 }
 

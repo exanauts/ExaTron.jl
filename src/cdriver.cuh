@@ -32,6 +32,9 @@ void cdriver(int n, int max_feval, int max_minor,
     L = B + n*n;
 
     A[n*ty + tx] = 0;
+    B[n*ty + tx] = 0;
+    L[n*ty + tx] = 0;
+
     cmid(n, x, xl, xu);
 
     task = 0;

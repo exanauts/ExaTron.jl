@@ -7,6 +7,8 @@ int cicf(int n, double *L)
 
     Lmn = L[n*ty + tx];
     for (int j = 0; j < n; j++) {
+        __syncthreads();
+
         // Update the diagonal.
         if (tx == j && ty == j) {
             if (Lmn > 0) {
@@ -32,6 +34,8 @@ int cicf(int n, double *L)
         Lmn -= L[n*j + tx] * L[n*j + ty];
         //Lmn -= __dmul_rn(L[n*j + tx], L[n*j + ty]);
     }
+
+    __syncthreads();
 
     if (tx < n && ty < n && tx > ty) {
         L[n*tx + ty] = L[n*ty + tx];

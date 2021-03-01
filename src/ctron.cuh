@@ -5,6 +5,9 @@ void ctron(int n, double *x, double *xl, double *xu, double f, double *g,
            double *xc, double *s, int *indfree, double *gfree, int *isave,
            double *dsave, double *wa, int *iwa)
 {
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+
     int task, work, iter, iterscg, info, iters;
     double eta0, eta1, eta2, sigma1, sigma2, sigma3;
     double delta, alpha, alphac, fc, g0, prered, actred, snorm;
@@ -180,13 +183,15 @@ void ctron(int n, double *x, double *xl, double *xu, double f, double *g,
 
     // Save local variables.
 
-    isave[0] = work;
-    isave[1] = iter;
-    isave[2] = iterscg;
+    if (tx == 0 && ty == 0) {
+        isave[0] = work;
+        isave[1] = iter;
+        isave[2] = iterscg;
 
-    dsave[0] = fc;
-    dsave[1] = alphac;
-    dsave[2] = prered;
+        dsave[0] = fc;
+        dsave[1] = alphac;
+        dsave[2] = prered;
+    }
 
     (*_delta) = delta;
     (*_task) = task;
