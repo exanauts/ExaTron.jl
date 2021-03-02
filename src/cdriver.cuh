@@ -167,8 +167,7 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
     A[n*ty + tx] = 0;
     B[n*ty + tx] = 0;
     L[n*ty + tx] = 0;
-
-    cmid(n, x, xl, xu);
+    cmid(n, x, xl, xu);  // __syncthreads() will be called in cmid().
 
     task = 0;
     status = 0;
@@ -216,6 +215,8 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
             gnorm0 = cnrm2(n, g);
             delta = gnorm0;
         }
+
+        __syncthreads();
 
         // Call TRON.
 

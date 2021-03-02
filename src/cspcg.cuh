@@ -7,6 +7,10 @@ void cspcg(int n, double delta, double rtol, int itermax,
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
+    double alpha, gfnorm, gfnormf, tol, stol;
+    int info = 3, iters = 0, info_tr, iters_tr;
+    int nfree;
+
     // Compute A*(x1 - x0) and store in w.
     cssyax(n, A, s, w);
 
@@ -18,9 +22,6 @@ void cspcg(int n, double delta, double rtol, int itermax,
     // There are at most n ierations because at each iteration
     // at least one variable becomes active.
 
-    double alpha, gfnorm, gfnormf, tol, stol;
-    int info = 3, iters = 0, info_tr, iters_tr;
-    int nfree;
     for (int nfaces = 0; nfaces < n; nfaces++) {
 
         // Determine the free variables at the current minimizer.
@@ -150,5 +151,6 @@ void cspcg(int n, double delta, double rtol, int itermax,
 
     (*_info) = info;
     (*_iters) = iters;
+
     return;
 }

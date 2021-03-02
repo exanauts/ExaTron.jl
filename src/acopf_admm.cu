@@ -2,6 +2,7 @@
 #include <random>
 #include <math.h>
 #include <assert.h>
+#include <time.h>
 
 #include "consts.cuh"
 #include "network.cuh"
@@ -36,6 +37,7 @@
 #include "admm_auglag.cuh"
 #include "admm_generator.cuh"
 #include "admm_bus.cuh"
+#include "admm_rho.cuh"
 
 static void usage(const char *progname)
 {
@@ -441,17 +443,6 @@ void dual_residual_kernel(int n, double *rd, double *v_prev, double *v_curr, dou
     return;
 }
 
-__global__
-void norm_kernel(int n, double *x, double *v)
-{
-    int tid = threadIdx.x + (blockDim.x * blockIdx.x);
-
-    double val = 0;
-    if (tid < n) {
-        val = x[tid]*x[tid];
-    }
-}
-
 int main(int argc, char **argv)
 {
     if (argc < 6) {
@@ -512,11 +503,11 @@ int main(int argc, char **argv)
     get_branch_data(nw, &YshR, &YshI, &YffR, &YffI, &YftR, &YftI, &YttR, &YttI, &YtfR, &YtfI, &frbound, &tobound);
     get_branch_data(nw, &cu_YshR, &cu_YshI, &cu_YffR, &cu_YffI, &cu_YftR, &cu_YftI, &cu_YttR, &cu_YttI, &cu_YtfR, &cu_YtfI, &cu_frbound, &cu_tobound, true);
 
-    int nvars, pg_start, qg_start, pij_start, qij_start, pji_start, qji_start, wi_i_ij_start, wi_j_ji_start;
+    int nvars, pg_start, qg_start, pij_start, qij_start, pji_start, qji_start, wi_i_ij_start, wi_j_ji_start, pq_end;
     double *u_curr, *v_curr, *l_curr, *u_prev, *v_prev, *l_prev, *rho, *param, *wRIij;
-    double *rp, *rd;
+    double *rp, *rd, *rp_old, *rp_k0, *tau;
     double *cu_u_curr, *cu_v_curr, *cu_l_curr, *cu_u_prev, *cu_v_prev, *cu_l_prev, *cu_rho, *cu_param, *cu_wRIij;
-    double *cu_rp, *cu_rd;
+    double *cu_rp, *cu_rd, *cu_rp_old, *cu_rp_k0, *cu_tau;
 
     nvars = 2*nw->active_ngen + 6*nw->active_nbranch;
     pg_start = 0;
@@ -527,6 +518,7 @@ int main(int argc, char **argv)
     qji_start = pji_start + nw->active_nbranch;
     wi_i_ij_start = qji_start + nw->active_nbranch;
     wi_j_ji_start = wi_i_ij_start + nw->active_nbranch;
+    pq_end = qji_start + nw->active_nbranch - 1;
 
     u_curr = (double *)calloc(nvars, sizeof(double));
     v_curr = (double *)calloc(nvars, sizeof(double));
@@ -539,9 +531,13 @@ int main(int argc, char **argv)
     wRIij = (double *)calloc(2*nw->active_nbranch, sizeof(double));
     rp = (double *)calloc(nvars, sizeof(double));
     rd = (double *)calloc(nvars, sizeof(double));
+    rp_old = (double *)calloc(nvars, sizeof(double));
+    rp_k0 = (double *)calloc(nvars, sizeof(double));
+    tau = (double *)calloc(nvars*iterlim, sizeof(double));
 
     init_values(nw, pg_start, qg_start, pij_start, qij_start, pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
                 rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij);
+    memcpy(tau, rho, sizeof(double)*nvars);
 
     cudaMalloc(&cu_u_curr, sizeof(double)*nvars);
     cudaMalloc(&cu_v_curr, sizeof(double)*nvars);
@@ -554,6 +550,9 @@ int main(int argc, char **argv)
     cudaMalloc(&cu_wRIij, sizeof(double)*(2*nw->active_nbranch));
     cudaMalloc(&cu_rp, sizeof(double)*nvars);
     cudaMalloc(&cu_rd, sizeof(double)*nvars);
+    cudaMalloc(&cu_rp_old, sizeof(double)*nvars);
+    cudaMalloc(&cu_rp_k0, sizeof(double)*nvars);
+    cudaMalloc(&cu_tau, sizeof(double)*(nvars*iterlim));
     cudaMemcpy(cu_u_curr, u_curr, sizeof(double)*nvars, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_v_curr, v_curr, sizeof(double)*nvars, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_l_curr, l_curr, sizeof(double)*nvars, cudaMemcpyHostToDevice);
@@ -563,16 +562,29 @@ int main(int argc, char **argv)
     cudaMemcpy(cu_rho, rho, sizeof(double)*nvars, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_param, param, sizeof(double)*(24*nw->active_nbranch), cudaMemcpyHostToDevice);
     cudaMemcpy(cu_wRIij, wRIij, sizeof(double)*(2*nw->active_nbranch), cudaMemcpyHostToDevice);
+    cudaMemcpy(cu_tau, tau, sizeof(double)*(nvars*iterlim), cudaMemcpyHostToDevice);
 
     int it, max_auglag, shmem;
-    int n_tb_gen, n_tb_bus, n_tb_branch;
+    int n_tb_gen, n_tb_bus, n_tb_branch, n_tb_rho;
 
     it = 0;
     max_auglag = 50;
     n_tb_gen = (nw->active_ngen - 1) / 32 + 1;
     n_tb_bus = (nw->nbus - 1) / 32 + 1;
     n_tb_branch = nw->active_nbranch;
+    n_tb_rho = (nvars - 1) / 32 + 1;
     shmem = sizeof(double)*(14*n + 3*n*n) + sizeof(int)*(4*n);
+
+    printf("Setting CacheConfig to cudaFuncCachePreferShared . . .\n");
+    cudaFuncCache cacheConfig;
+    cudaDeviceGetCacheConfig(&cacheConfig);
+    if (cacheConfig != cudaFuncCachePreferShared) {
+        printf("CacheConfig was set to %d. Change it to cudaFuncCachePreferShared.\n", cacheConfig);
+        cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+    }
+
+    clock_t cpu_start, cpu_end;
+    cpu_start = clock();
 
     while (it < iterlim) {
         it++;
@@ -598,6 +610,11 @@ int main(int argc, char **argv)
             update_multiplier(nvars, u_curr, v_curr, l_curr, rho);
             primal_residual(nvars, rp, u_curr, v_curr);
             dual_residual(nvars, rd, v_prev, v_curr, rho);
+            primal_residual(nvars, rp_old, u_prev, v_prev);
+
+            if (((it + Kf_mean - 1) % Kf) == 0) {
+                copy_data(nvars, rp_k0, rp);
+            }
 
             printf("%10d\t%.6e\t%.6e\n", it, norm(nvars, rp), norm(nvars, rd));
         } else {
@@ -624,11 +641,29 @@ int main(int argc, char **argv)
             update_multiplier_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_u_curr, cu_v_curr, cu_l_curr, cu_rho);
             primal_residual_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_rp, cu_u_curr, cu_v_curr);
             dual_residual_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_rd, cu_v_prev, cu_v_curr, cu_rho);
+            //primal_residual_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_rp_old, cu_u_prev, cu_v_prev);
             cudaDeviceSynchronize();
+
+            /*
+            if (((it + Kf_mean - 1) % Kf) == 0) {
+                copy_data_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_rp_k0, cu_rp);
+                cudaDeviceSynchronize();
+            }
+
+            if (it > 1) {
+                update_rho_kernel<<<n_tb_rho, 32>>>(nvars, it, Kf, Kf_mean, pq_end, eps_rp, eps_rp_min, rt_inc, rt_dec,
+                                                    eta, rho_max, rho_min_pq, rho_min_w,
+                                                    cu_u_curr, cu_u_prev, cu_v_curr, cu_v_prev, cu_l_curr, cu_l_prev,
+                                                    cu_rho, cu_tau, cu_rp, cu_rp_old, cu_rp_k0);
+                cudaDeviceSynchronize();
+            }
+            */
 
             printf("%10d\n", it);
         }
     }
+
+    cpu_end = clock();
 
     if (use_gpu) {
         cudaMemcpy(u_prev, cu_u_prev, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
@@ -638,8 +673,6 @@ int main(int argc, char **argv)
         cudaMemcpy(rho, cu_rho, sizeof(double)*nvars, cudaMemcpyDeviceToHost);
         primal_residual(nvars, rp, u_curr, v_curr);
         dual_residual(nvars, rd, v_prev, v_curr, rho);
-
-        printf("%10d\t%.6e\t%.6e\n", it, norm(nvars, rp), norm(nvars, rd));
     }
 
     double objval = 0;
@@ -647,7 +680,10 @@ int main(int argc, char **argv)
         objval += c2[i]*((nw->baseMVA*u_curr[pg_start+i])*(nw->baseMVA*u_curr[pg_start+i])) +
                   c1[i]*(nw->baseMVA*u_curr[pg_start+i]) + c0[i];
     }
-    printf("Objval = %e\n", objval);
+
+    printf("%10s\t%12s\t%12s\t%12s\t%8s\n", "Iterations", "Objective", "PResidual", "DResidual", "CPU time");
+    printf("%10d\t%.6e\t%.6e\t%.6e\t%8.2f\n", it, objval, norm(nvars, rp), norm(nvars, rd),
+           ((double)(cpu_end - cpu_start) / CLOCKS_PER_SEC));
 
     free(pgmin);
     free(pgmax);
@@ -732,6 +768,9 @@ int main(int argc, char **argv)
     cudaFree(cu_wRIij);
     cudaFree(cu_rp);
     cudaFree(cu_rd);
+    cudaFree(cu_rp_old);
+    cudaFree(cu_rp_k0);
+    cudaFree(cu_tau);
 
     return 0;
 }
