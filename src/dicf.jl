@@ -211,6 +211,7 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
 
         Ljj = L[j,j]
         if Ljj <= zero
+            CUDA.sync_threads()
             return -1
         end
 
