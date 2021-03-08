@@ -68,11 +68,17 @@ void cspcg(int n, double delta, double rtol, int itermax,
         // Recall that w contains A*(x[k] - x[0]).
         // Compute the norm of the reduced gradient Z'*g.
 
+        /*
         if (tx == 0 && ty == 0) {
             for (int j = 0; j < nfree; j++) {
                 gfree[j] = w[indfree[j]] + g[indfree[j]];
                 wa[j] = g[indfree[j]];
             }
+        }
+        */
+        if (tx < nfree && ty == 0) {
+            gfree[tx] = w[indfree[tx]] + g[indfree[tx]];
+            wa[tx] = g[indfree[tx]];
         }
         __syncthreads();
         gfnorm = cnrm2(nfree, wa);
@@ -92,12 +98,19 @@ void cspcg(int n, double delta, double rtol, int itermax,
         // Use a projected search to obtain the next iterate.
         // The projected search algorithm stores s[k] in w.
 
+        /*
         if (tx == 0 && ty == 0) {
             for (int j = 0; j < nfree; j++) {
                 wa[j] = x[indfree[j]];
                 wa[n + j] = xl[indfree[j]];
                 wa[2*n + j] = xu[indfree[j]];
             }
+        }
+        */
+        if (tx < nfree && ty == 0) {
+            wa[tx] = x[indfree[tx]];
+            wa[n + tx] = xl[indfree[tx]];
+            wa[2*n + tx] = xu[indfree[tx]];
         }
         __syncthreads();
 
@@ -106,11 +119,17 @@ void cspcg(int n, double delta, double rtol, int itermax,
         // Update the minimizer and the step.
         // Note that s now contains x[k+1] - x[0].
 
+        /*
         if (tx == 0 && ty == 0) {
             for (int j = 0; j < nfree; j++) {
                 x[indfree[j]] = wa[j];
                 s[indfree[j]] += w[j];
             }
+        }
+        */
+        if (tx < nfree && ty == 0) {
+            x[indfree[tx]] = wa[tx];
+            s[indfree[tx]] += w[tx];
         }
         __syncthreads();
 
@@ -121,6 +140,7 @@ void cspcg(int n, double delta, double rtol, int itermax,
         // of q at x[k+1] for the free variables.
 
         if (tx == 0 && ty == 0) {
+            #pragma unroll
             for (int j = 0; j < nfree; j++) {
                 gfree[j] = w[indfree[j]] + g[indfree[j]];
             }

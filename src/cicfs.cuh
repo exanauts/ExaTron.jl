@@ -60,8 +60,8 @@ void cicfs(int n, double alpha, double *A, double *L, double *wa1, double *wa2)
                 nb++;
             } else {
                 if (tx < n && ty < n && tx >= ty) {
-                    L[ty*n + tx] /= wa2[tx];
-                    L[tx*n + ty] = L[ty*n + tx];
+                    L[n*ty + tx] /= wa2[tx];
+                    L[n*tx + ty] = L[n*ty + tx];
                 }
                 __syncthreads();
                 return;

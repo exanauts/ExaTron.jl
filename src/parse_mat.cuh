@@ -1,3 +1,11 @@
+#define ParseMat_Start       0x1f
+#define ParseMat_MVA         0x1
+#define ParseMat_Bus         0x2
+#define ParseMat_Generator   0x4
+#define ParseMat_Branch      0x8
+#define ParseMat_Gencost     0x10
+
+#if 0
 typedef enum
 {
     ParseMat_Start = 0,
@@ -7,6 +15,7 @@ typedef enum
     ParseMat_Branch,
     ParseMat_Gencost
 } ParseMatStage;
+#endif
 
 static int skipsection(FILE *fp, char **line, size_t *linecap)
 {
@@ -150,13 +159,15 @@ static int read_generator(Network *nw, FILE *fp, char **line,
         nw->gen[active].pb = !strcasecmp(tok, "-inf") ? -99999.0 : atof(tok);
         /*nw->gen[i].pb = !strcasecmp(tok, "-inf") ? -INF : atof(tok);*/
 
-        nw->gen[active].pc1 = atof(strtok(NULL, delim));
-        nw->gen[active].pc2 = atof(strtok(NULL, delim));
-        nw->gen[active].qc1min = atof(strtok(NULL, delim));
-        nw->gen[active].qc1max = atof(strtok(NULL, delim));
-        nw->gen[active].qc2min = atof(strtok(NULL, delim));
-        nw->gen[active].qc2max = atof(strtok(NULL, delim));
-        nw->gen[active].ramp_agc = atof(strtok(NULL, delim));
+        if (strchr(tok, ';') == NULL) {
+            nw->gen[active].pc1 = atof(strtok(NULL, delim));
+            nw->gen[active].pc2 = atof(strtok(NULL, delim));
+            nw->gen[active].qc1min = atof(strtok(NULL, delim));
+            nw->gen[active].qc1max = atof(strtok(NULL, delim));
+            nw->gen[active].qc2min = atof(strtok(NULL, delim));
+            nw->gen[active].qc2max = atof(strtok(NULL, delim));
+            nw->gen[active].ramp_agc = atof(strtok(NULL, delim));
+        }
 
         if (nw->gen[active].status == 1){
             nw->ngenbus[nw->b2i[nw->gen[active].i]]++;
@@ -386,7 +397,7 @@ int parse_mat(Network *nw, const char *filename, const char *delim)
     char *line = NULL;
     char keyword[64];
     size_t linecap = 1024;
-    ParseMatStage stage;
+    int stage;
 
     line = (char *)calloc(linecap, sizeof(char));
 
@@ -403,39 +414,39 @@ int parse_mat(Network *nw, const char *filename, const char *delim)
             strncpy(keyword, line, pos);
             keyword[pos] = '\0';
 
-            if (!strcmp(keyword, "mpc.baseMVA") && stage == ParseMat_Start) {
+            if (!strcmp(keyword, "mpc.baseMVA")) {
                 strtok(line, delim);
                 strtok(NULL, delim);
                 nw->baseMVA = atof(strtok(NULL, delim));
-                stage = ParseMat_MVA;
-            } else if (!strcmp(keyword, "mpc.bus") && stage == ParseMat_MVA) {
+                stage &= (~ParseMat_MVA);
+            } else if (!strcmp(keyword, "mpc.bus")) {
                 rc = read_bus(nw, fp, &line, &linecap, delim);
                 if (rc == OK) {
                     parse_build_busmap(nw);
-                    stage = ParseMat_Bus;
+                    stage &= (~ParseMat_Bus);
                 } else {
                     goto out;
                 }
-            } else if (!strcmp(keyword, "mpc.gen") && stage == ParseMat_Bus) {
+            } else if (!strcmp(keyword, "mpc.gen")) {
                 rc = read_generator(nw, fp, &line, &linecap, delim);
                 if (rc == OK) {
                     parse_build_genbusmap(nw);
-                    stage = ParseMat_Generator;
+                    stage &= (~ParseMat_Generator);
                 } else {
                     goto out;
                 }
-            } else if (!strcmp(keyword, "mpc.branch") && stage == ParseMat_Generator) {
+            } else if (!strcmp(keyword, "mpc.branch")) {
                 rc = read_branch(nw, fp, &line, &linecap, delim);
                 if (rc == OK) {
                     parse_build_fromtomap(nw);
-                    stage = ParseMat_Branch;
+                    stage &= (~ParseMat_Branch);
                 } else {
                     goto out;
                 }
-            } else if (!strcmp(keyword, "mpc.gencost") && stage == ParseMat_Branch) {
+            } else if (!strcmp(keyword, "mpc.gencost")) {
                 rc = read_gencost(nw, fp, &line, &linecap, delim);
                 if (rc == OK) {
-                    stage = ParseMat_Gencost;
+                    stage &= (~ParseMat_Gencost);
                 } else {
                     goto out;
                 }
@@ -444,7 +455,7 @@ int parse_mat(Network *nw, const char *filename, const char *delim)
     }
 
 out:
-    if (stage != ParseMat_Gencost) {
+    if (stage != 0) {
         rc = Error_InvalidFileFormat;
     }
 

@@ -1,4 +1,5 @@
-CUDA_PATH     ?= /nfs/gce/software/custom/linux-ubuntu18.04-x86_64/cuda/10.2
+#CUDA_PATH     ?= /nfs/gce/software/custom/linux-ubuntu18.04-x86_64/cuda/10.2
+CUDA_PATH     ?= /usr/local/cuda
 CUDA_INC_PATH ?= $(CUDA_PATH)/include
 CUDA_BIN_PATH ?= $(CUDA_PATH)/bin
 
@@ -15,7 +16,7 @@ GENCODE_SM70  := -gencode arch=compute_70,code=sm_70
 GENCODE_FLAGS := $(GENCODE_SM70)
 
 LDFLAGS    := -lcudart -lrt -lcurand -lm
-CFLAGS     := -O3 -lineinfo -Xptxas="-dlcm=ca -v"
+CFLAGS     := -O3 -lineinfo -Xptxas="-dlcm=ca -v" #-maxrregcount=80
 SOURCE_DIR  = ./src
 TEST_DIR    = ./test
 CUH_EXA    := src/cicfs.cuh src/cicf.cuh src/cnrm2.cuh src/cdot.cuh \
@@ -32,7 +33,7 @@ CUH_TEST   := test/gputest_utilities.cuh test/gputest_icf.cuh \
 			  test/gputest_prsrch.cuh test/gputest_trpcg.cuh test/gputest_trqsol.cuh \
 			  test/gputest_spcg.cuh test/gputest_tron.cuh test/gputest_gpnorm.cuh \
 			  test/gputest_driver.cuh
-CUH_ACOPF  := src/admm_auglag.cuh src/admm_generator.cuh src/admm_bus.cuh \
+CUH_ACOPF  := src/admm_auglag.cuh src/admm_generator.cuh src/admm_bus.cuh src/admm_rho.cuh \
               src/consts.cuh src/network.cuh src/parse_mat.cuh src/print.cuh \
 			  src/admittance.cuh
 HPP_ACOPF  := src/admm_auglag.hpp src/admm_generator.hpp src/admm_bus.hpp \

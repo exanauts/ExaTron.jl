@@ -19,10 +19,9 @@ double cgpnorm(int n, double *x, double *xl, double *xu, double *g)
     }
     __syncthreads();
 
-    int offset = blockDim.x / 2;
-    while (offset > 0) {
+    #pragma unroll
+    for (int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
         v = max(v, __shfl_down_sync(0xffffffff, v, offset));
-        offset >>= 1;
     }
     v = __shfl_sync(0xffffffff, v, 1);
     return v;

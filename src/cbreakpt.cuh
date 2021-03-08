@@ -5,6 +5,7 @@ void cbreakpt(int n, double *x, double *xl, double *xu, double *w,
     int nbrpt = 0;
     double brpt, brptmin = 0.0, brptmax = 0.0;
 
+    #pragma unroll
     for (int i = 0; i < n; i++) {
         if (x[i] < xu[i] && w[i] > 0.0) {
             nbrpt += 1;

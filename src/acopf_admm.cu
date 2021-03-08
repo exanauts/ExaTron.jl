@@ -41,12 +41,13 @@
 
 static void usage(const char *progname)
 {
-    printf("Usage: %s file iterlim rho_pq rho_va use_gpu\n", progname);
+    printf("Usage: %s file iterlim rho_pq rho_va use_gpu [gpu no]\n", progname);
     printf("  file   : MATPOWER power network file\n");
     printf("  iterlim: iteration limit of ADMM\n");
     printf("  rho_pq : initial rho for power flows\n");
     printf("  rho_va : initial rho for voltages\n");
     printf("  use_gpu: 0 for CPU and 1 for GPU\n");
+    printf("  gpu no : GPU device number to use\n");
 }
 
 void get_generator_data(Network *nw, double **_pgmin, double **_pgmax,
@@ -445,9 +446,29 @@ void dual_residual_kernel(int n, double *rd, double *v_prev, double *v_curr, dou
 
 int main(int argc, char **argv)
 {
+    int device = 0;
+
     if (argc < 6) {
         usage(argv[0]);
         exit(-1);
+    }
+
+    if (argc == 7) {
+        device = atoi(argv[6]);
+        if (device != 0 && device != 1) {
+            usage(argv[0]);
+            exit(-1);
+        }
+    }
+
+    int iterlim = atoi(argv[2]);
+    double rho_pq = atof(argv[3]);
+    double rho_va = atof(argv[4]);
+    bool use_gpu = (atoi(argv[5]) == 1) ? true : false;
+
+    if (use_gpu) {
+        printf("Set GPU device to use to %d.\n", device);
+        cudaSetDevice(device);
     }
 
     Network *nw = nw_alloc();
@@ -457,11 +478,6 @@ int main(int argc, char **argv)
                " The model may not be for OPF.\n", rc);
         return rc;
     }
-
-    int iterlim = atoi(argv[2]);
-    double rho_pq = atof(argv[3]);
-    double rho_va = atof(argv[4]);
-    bool use_gpu = (atoi(argv[5]) == 1) ? true : false;
 
     print_mat_stat(nw);
     admittance(nw);
@@ -533,11 +549,11 @@ int main(int argc, char **argv)
     rd = (double *)calloc(nvars, sizeof(double));
     rp_old = (double *)calloc(nvars, sizeof(double));
     rp_k0 = (double *)calloc(nvars, sizeof(double));
-    tau = (double *)calloc(nvars*iterlim, sizeof(double));
+    //tau = (double *)calloc(nvars*iterlim, sizeof(double));
 
     init_values(nw, pg_start, qg_start, pij_start, qij_start, pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
                 rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij);
-    memcpy(tau, rho, sizeof(double)*nvars);
+    //memcpy(tau, rho, sizeof(double)*nvars);
 
     cudaMalloc(&cu_u_curr, sizeof(double)*nvars);
     cudaMalloc(&cu_v_curr, sizeof(double)*nvars);
@@ -552,7 +568,7 @@ int main(int argc, char **argv)
     cudaMalloc(&cu_rd, sizeof(double)*nvars);
     cudaMalloc(&cu_rp_old, sizeof(double)*nvars);
     cudaMalloc(&cu_rp_k0, sizeof(double)*nvars);
-    cudaMalloc(&cu_tau, sizeof(double)*(nvars*iterlim));
+    //cudaMalloc(&cu_tau, sizeof(double)*(nvars*iterlim));
     cudaMemcpy(cu_u_curr, u_curr, sizeof(double)*nvars, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_v_curr, v_curr, sizeof(double)*nvars, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_l_curr, l_curr, sizeof(double)*nvars, cudaMemcpyHostToDevice);
@@ -562,7 +578,7 @@ int main(int argc, char **argv)
     cudaMemcpy(cu_rho, rho, sizeof(double)*nvars, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_param, param, sizeof(double)*(24*nw->active_nbranch), cudaMemcpyHostToDevice);
     cudaMemcpy(cu_wRIij, wRIij, sizeof(double)*(2*nw->active_nbranch), cudaMemcpyHostToDevice);
-    cudaMemcpy(cu_tau, tau, sizeof(double)*(nvars*iterlim), cudaMemcpyHostToDevice);
+    //cudaMemcpy(cu_tau, tau, sizeof(double)*(nvars*iterlim), cudaMemcpyHostToDevice);
 
     int it, max_auglag, shmem;
     int n_tb_gen, n_tb_bus, n_tb_branch, n_tb_rho;
@@ -575,12 +591,14 @@ int main(int argc, char **argv)
     n_tb_rho = (nvars - 1) / 32 + 1;
     shmem = sizeof(double)*(14*n + 3*n*n) + sizeof(int)*(4*n);
 
-    printf("Setting CacheConfig to cudaFuncCachePreferShared . . .\n");
-    cudaFuncCache cacheConfig;
-    cudaDeviceGetCacheConfig(&cacheConfig);
-    if (cacheConfig != cudaFuncCachePreferShared) {
-        printf("CacheConfig was set to %d. Change it to cudaFuncCachePreferShared.\n", cacheConfig);
-        cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+    if (use_gpu) {
+        printf("Setting CacheConfig to cudaFuncCachePreferShared . . .\n");
+        cudaFuncCache cacheConfig;
+        cudaDeviceGetCacheConfig(&cacheConfig);
+        if (cacheConfig != cudaFuncCachePreferShared) {
+            printf("CacheConfig was set to %d. Change it to cudaFuncCachePreferShared.\n", cacheConfig);
+            cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+        }
     }
 
     clock_t cpu_start, cpu_end;
@@ -726,6 +744,7 @@ int main(int argc, char **argv)
     free(wRIij);
     free(rp);
     free(rd);
+    //free(tau);
 
     cudaFree(cu_pgmin);
     cudaFree(cu_pgmax);
@@ -770,7 +789,7 @@ int main(int argc, char **argv)
     cudaFree(cu_rd);
     cudaFree(cu_rp_old);
     cudaFree(cu_rp_k0);
-    cudaFree(cu_tau);
+    //cudaFree(cu_tau);
 
     return 0;
 }

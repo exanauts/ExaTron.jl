@@ -1,10 +1,11 @@
 __device__
-void cnrm2_mat(int n, double *wa, double *A)
+void cnrm2_mat(int n, double * __restrict__ wa, const double * __restrict__ A)
 {
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
-    double v = A[n*ty + tx]*A[n*ty + tx];
+    //double v = A[n*ty + tx]*A[n*ty + tx];
+    double v = A[blockDim.x*ty + tx]*A[blockDim.x*ty + tx];
     if (tx >= n || ty >= n) {
         v = 0.0;
     }
@@ -24,7 +25,7 @@ void cnrm2_mat(int n, double *wa, double *A)
 }
 
 __device__
-double cnrm2(int n, double *x)
+double cnrm2(int n, const double * __restrict__ x)
 {
     int tx = threadIdx.x;
 

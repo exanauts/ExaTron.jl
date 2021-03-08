@@ -35,6 +35,7 @@ void ctrpcg(int n, double *A, double *g, double delta, double *L,
     }
 
     double ptq, alpha, sigma, rtr, rnorm, tnorm, beta;
+    #pragma unroll
     for (iters = 0; iters < itermax; iters++) {
 
         // Note:

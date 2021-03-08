@@ -114,10 +114,8 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
 {
     int tx = threadIdx.x;
     int ty = threadIdx.y;
-    int I = blockIdx.x;
-
+    int start = 24*blockIdx.x;
     double alrect, raug, c5;
-    int start = 24*I;
 
     alrect = param[start + 22];
     raug = param[start + 23];
@@ -147,7 +145,9 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
         A[n*3 + 5] = raug*(YttI); // A[6,4]
         A[n*3 + 6] = raug*(YtfI); // A[7,4]
         A[n*3 + 7] = raug*(YtfR); // A[8,4]
+    }
 
+    if (tx + blockDim.x*ty == 32) {
         // 5th column
         A[n*4 + 4] = param[start + 10] + raug*(YffR*YffR) + raug*(YffI*YffI) + raug*(x[5]*x[5]); // A[5,5]
         A[n*4 + 5] = -(alrect + raug*c5) + raug*(x[4]*x[5]); // A[6,5]
@@ -181,19 +181,20 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
     return;
 }
 
-__global__
-void auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
-                   int pij_start, int qij_start,
-                   int pji_start, int qji_start,
-                   int wi_i_ij_start, int wi_j_ji_start,
-                   double mu_max,
-                   double *u_curr, double *v_curr, double *l_curr,
-                   double *rho, double *wRIij, double *param,
-                   double *_YffR, double *_YffI,
-                   double *_YftR, double *_YftI,
-                   double *_YttR, double *_YttI,
-                   double *_YtfR, double *_YtfI,
-                   double *frBound, double *toBound)
+__global__ void
+__launch_bounds__(64, 12)
+auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
+              int pij_start, int qij_start,
+              int pji_start, int qji_start,
+              int wi_i_ij_start, int wi_j_ji_start,
+              double mu_max,
+              double *u_curr, double *v_curr, double *l_curr,
+              double *rho, double *wRIij, double *param,
+              double *_YffR, double *_YffI,
+              double *_YftR, double *_YftI,
+              double *_YttR, double *_YttI,
+              double *_YtfR, double *_YtfI,
+              double *frBound, double *toBound)
 {
     int tx = threadIdx.x;
     int ty = threadIdx.y;

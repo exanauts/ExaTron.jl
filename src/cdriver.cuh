@@ -216,7 +216,7 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
             delta = gnorm0;
         }
 
-        __syncthreads();
+        // __syncthreads(); // false positive
 
         // Call TRON.
 

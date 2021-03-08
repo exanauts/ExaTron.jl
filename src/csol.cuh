@@ -5,6 +5,7 @@ void cnsol(int n, double *L, double *r)
     int ty = threadIdx.y;
 
     // Solve L*x = r and store the result in r.
+    #pragma unroll
     for (int j = 0; j < n; j++) {
         if (tx == j && ty == j) {
             r[j] /= L[n*j + j];
@@ -27,6 +28,7 @@ void ctsol(int n, double *L, double *r)
     int ty = threadIdx.y;
 
     // Solve L'* = r and store the result in r.
+    #pragma unroll
     for (int j = n-1; j >= 0; j--) {
         if (tx == j && ty == j) {
             r[j] /= L[n*j + j];
