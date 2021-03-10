@@ -20,7 +20,8 @@ end
 
 function TronDenseMatrix{MD}(n::Int) where {MD}
     @assert n >= 1
-    return TronDenseMatrix{MD}(n, n, tron_zeros(MD{Float64}, (n, n)))
+    vals = tron_zeros(MD, (n, n))
+    return TronDenseMatrix{MD}(n, n, vals)
 end
 
 function TronDenseMatrix(A::TronDenseMatrix)
@@ -32,9 +33,9 @@ function TronDenseMatrix(I::VI, J::VI, V::VD, n) where {VI, VD}
     @assert length(I) == length(J) == length(V)
 
     if isa(V, Array)
-        A = TronDenseMatrix{Array}(n, n, tron_zeros(Array{eltype(V)}, (n, n)))
+        A = TronDenseMatrix{Array{Float64, 2}}(n, n, tron_zeros(Array{eltype(V)}, (n, n)))
     else
-        A = TronDenseMatrix{CuArray}(n, n, tron_zeros(CuArray{eltype(V)}, (n, n)))
+        A = TronDenseMatrix{CuArray{Float64, 2}}(n, n, tron_zeros(CuArray{eltype(V)}, (n, n)))
     end
     for i=1:length(I)
         @assert 1 <= I[i] <= n && 1 <= J[i] <= n && I[i] >= J[i]
