@@ -1,8 +1,12 @@
 function rho_kernel(
     n, k, Kf, Kf_mean, pq_end, eps_rp, eps_rp_min, rt_inc, rt_dec, eta,
     rho_max, rho_min_pq, rho_min_w,
-    u_curr, u_prev, v_curr, v_prev, l_curr, l_prev, rho,
-    tau, rp, rp_old, rp_k0
+    u_curr::CuDeviceArray{Float64}, u_prev::CuDeviceArray{Float64},
+    v_curr::CuDeviceArray{Float64}, v_prev::CuDeviceArray{Float64},
+    l_curr::CuDeviceArray{Float64}, l_prev::CuDeviceArray{Float64},
+    rho::CuDeviceArray{Float64}, tau::CuDeviceArray{Float64},
+    rp::CuDeviceArray{Float64}, rp_old::CuDeviceArray{Float64},
+    rp_k0::CuDeviceArray{Float64}
 )
     I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
@@ -19,21 +23,21 @@ function rho_kernel(
             rp_k0_v = rp_k0[I]
 
             if abs(delta_l) <= eps_rp_min
-                tau[k,I] = tau[k-1,I]
+                tau[I,k] = tau[I,k-1]
             elseif abs(delta_u) <= eps_rp_min && abs(delta_v) > eps_rp_min
-                tau[k,I] = beta
+                tau[I,k] = beta
             elseif abs(delta_u) > eps_rp_min && abs(delta_v) <= eps_rp_min
-                tau[k,I] = alpha
+                tau[I,k] = alpha
             elseif abs(delta_u) <= eps_rp_min && abs(delta_v) <= eps_rp_min
-                tau[k,I] = tau[k-1,I]
+                tau[I,k] = tau[I,k-1]
             else
-                tau[k,I] = sqrt(alpha*beta)
+                tau[I,k] = sqrt(alpha*beta)
             end
 
             if (k % Kf) == 0
                 mean_tau = 0
                 @inbounds for j=1:Kf_mean
-                    mean_tau += tau[k-j+1,I]
+                    mean_tau += tau[I,k-j+1]
                 end
                 mean_tau /= Kf_mean
                 if mean_tau >= rt_inc*rho_v
@@ -99,19 +103,19 @@ function rho_kernel_cpu(
             rp_k0_v = rp_k0[I]
 
             if abs(delta_l) <= eps_rp_min
-                tau[k,I] = tau[k-1,I]
+                tau[I,k] = tau[I,k-1]
             elseif abs(delta_u) <= eps_rp_min && abs(delta_v) > eps_rp_min
-                tau[k,I] = beta
+                tau[I,k] = beta
             elseif abs(delta_u) > eps_rp_min && abs(delta_v) <= eps_rp_min
-                tau[k,I] = alpha
+                tau[I,k] = alpha
             elseif abs(delta_u) <= eps_rp_min && abs(delta_v) <= eps_rp_min
-                tau[k,I] = tau[k-1,I]
+                tau[I,k] = tau[I,k-1]
             else
-                tau[k,I] = sqrt(alpha*beta)
+                tau[I,k] = sqrt(alpha*beta)
             end
 
             if (k % Kf) == 0
-                mean_tau = mean(tau[k - Kf_mean+1:k,I])
+                mean_tau = mean(tau[I,k - Kf_mean+1:k])
                 if mean_tau >= rt_inc*rho_v
                     if abs(rp_v) >= eps_rp && abs(rp_old_v) >= eps_rp
                         if abs(rp_v) > eta*abs(rp_k0_v) || abs(rp_old_v) > eta*abs(rp_k0_v)

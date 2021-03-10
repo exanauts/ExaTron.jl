@@ -197,38 +197,38 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
     ty = threadIdx().y
 
     zero = 0.0
-    Lmn = L[tx,ty]
+    Lmn = L[n*(ty-1) + tx]
     @inbounds for j=1:n
         # Update the diagonal.
         if (tx == j) && (ty == j)
             if Lmn > zero
-                L[j,j] = sqrt(Lmn)
+                L[n*(j-1) + j] = sqrt(Lmn)
             else
-                L[j,j] = -1.0
+                L[n*(j-1) + j] = -1.0
             end
         end
         CUDA.sync_threads()
 
-        Ljj = L[j,j]
+        Ljj = L[n*(j-1) + j]
         if Ljj <= zero
             CUDA.sync_threads()
             return -1
         end
 
         # Update the jth column.
-        if ty == j
-            L[tx,j] = Lmn / Ljj
+        if ty == j && tx > j && tx <= n
+            L[n*(j-1) + tx] = Lmn / Ljj
         end
         CUDA.sync_threads()
 
         # Update the trailing submatrix. To avoid if-conditional,
         # we update the whole matrix, but only the trailing part
         # will be saved in next iteration.
-        Lmn = Lmn - L[tx,j] * L[ty,j]
+        Lmn = Lmn - L[n*(j-1) + tx] * L[n*(j-1) + ty]
     end
 
-    if tx > ty
-        L[ty,tx] = L[tx,ty]
+    if tx <= n && ty <= n && tx > ty
+        L[n*(tx-1) + ty] = L[n*(ty-1) + tx]
     end
     CUDA.sync_threads()
 

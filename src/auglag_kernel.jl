@@ -147,17 +147,19 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
                            pij_start::Int, qij_start::Int,
                            pji_start::Int, qji_start::Int,
                            wi_i_ij_start::Int, wi_j_ji_start::Int,
+                           ti_i_ij_start::Int, ti_j_ji_start::Int,
                            mu_max::Float64,
-                           u_curr::Array{Float64}, v_curr::Array{Float64},
-                           l_curr::Array{Float64}, rho::Array{Float64},
-                           wRIij::Array{Float64},
-                           param::Array{Float64},
-                           YffR::Array{Float64}, YffI::Array{Float64},
-                           YftR::Array{Float64}, YftI::Array{Float64},
-                           YttR::Array{Float64}, YttI::Array{Float64},
-                           YtfR::Array{Float64}, YtfI::Array{Float64},
-                           frBound::Array{Float64}, toBound::Array{Float64})
+                           u_curr::Array{Float64,1}, v_curr::Array{Float64,1},
+                           l_curr::Array{Float64,1}, rho::Array{Float64,1},
+                           wRIij::Array{Float64,1},
+                           param::Array{Float64,2},
+                           YffR::Array{Float64,1}, YffI::Array{Float64,1},
+                           YftR::Array{Float64,1}, YftI::Array{Float64,1},
+                           YttR::Array{Float64,1}, YttI::Array{Float64,1},
+                           YtfR::Array{Float64,1}, YtfI::Array{Float64,1},
+                           frBound::Array{Float64,1}, toBound::Array{Float64,1})
     avg_auglag_it = 0
+    avg_minor_iter = 0
 
     x = zeros(n)
     xl = zeros(n)
@@ -173,6 +175,10 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
         xu[5] = frBound[2*I]
         xl[6] = toBound[2*(I-1)+1]
         xu[6] = toBound[2*I]
+        xl[9] = -pi
+        xu[9] = pi
+        xl[10] = -pi
+        xu[10] = pi
 
         x[1] = u_curr[pij_start+I]
         x[2] = u_curr[qij_start+I]
@@ -182,11 +188,8 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
         x[6] = min(xu[6], max(xl[6], u_curr[wi_j_ji_start+I]))
         x[7] = wRIij[2*(I-1)+1]
         x[8] = wRIij[2*I]
-
-        #=
-        @printf("  %10d %12.5e  %12.5e  %12.5e  %12.5e  %12.5e  %12.5e  %12.5e  %12.5e\n",
-                I, x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-        =#
+        x[9] = min(pi, max(-pi, u_curr[ti_i_ij_start+I]))
+        x[10] = min(pi, max(-pi, u_curr[ti_j_ji_start+I]))
 
         param[1,I] = l_curr[pij_start+I]
         param[2,I] = l_curr[qij_start+I]
@@ -214,6 +217,13 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
             mu = param[24,I]
         end
 
+        param[25,I] = l_curr[ti_i_ij_start+I]
+        param[26,I] = l_curr[ti_j_ji_start+I]
+        param[27,I] = rho[ti_i_ij_start+I]
+        param[28,I] = rho[ti_j_ji_start+I]
+        param[29,I] = v_curr[ti_i_ij_start+I]
+        param[30,I] = v_curr[ti_j_ji_start+I]
+
         function eval_f_cb(x)
             f= eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             return f
@@ -236,7 +246,7 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
         max_minor = 100
         gtol = 1e-6
 
-        nele_hess = 26
+        nele_hess = 33
         tron = ExaTron.createProblem(n, xl, xu, nele_hess, eval_f_cb, eval_g_cb, eval_h_cb;
                                      :tol => gtol, :matrix_type => :Dense, :max_minor => 200,
                                      :frtol => 1e-12)
@@ -251,14 +261,17 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
             status = ExaTron.solveProblem(tron)
             x .= tron.x
 
+            avg_minor_iter += tron.minor_iter
+
             # Check the termination condition.
             cviol1 = x[1] - (YffR[I]*x[5] + YftR[I]*x[7] + YftI[I]*x[8])
             cviol2 = x[2] - (-YffI[I]*x[5] - YftI[I]*x[7] + YftR[I]*x[8])
             cviol3 = x[3] - (YttR[I]*x[6] + YtfR[I]*x[7] - YtfI[I]*x[8])
             cviol4 = x[4] - (-YttI[I]*x[6] - YtfI[I]*x[7] - YtfR[I]*x[8])
             cviol5 = x[7]^2 + x[8]^2 - x[5]*x[6]
+            cviol6 = x[9] - x[10] - atan(x[8], x[7])
 
-            cnorm = max(abs(cviol1), abs(cviol2), abs(cviol3), abs(cviol4), abs(cviol5))
+            cnorm = max(abs(cviol1), abs(cviol2), abs(cviol3), abs(cviol4), abs(cviol5), abs(cviol6))
 
             if cnorm <= eta
                 if cnorm <= 1e-6
@@ -269,6 +282,7 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
                     param[21,I] += mu*cviol3
                     param[22,I] += mu*cviol4
                     param[23,I] += mu*cviol5
+                    param[31,I] += mu*cviol6
 
                     eta = eta / mu^0.9
                     omega  = omega / mu
@@ -294,6 +308,8 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
         u_curr[wi_j_ji_start+I] = x[6]
         wRIij[2*(I-1)+1] = x[7]
         wRIij[2*I] = x[8]
+        u_curr[ti_i_ij_start+I] = x[9]
+        u_curr[ti_j_ji_start+I] = x[10]
         param[24,I] = mu
     end
 

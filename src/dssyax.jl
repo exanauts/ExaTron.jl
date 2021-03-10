@@ -211,7 +211,7 @@ function nrm2!(wa, A::CuDeviceArray{Float64}, n::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 
-    v = A[tx,ty]^2
+    v = A[blockDim().x*(ty-1) + tx]^2
 
     if tx > n || ty > n
         v = 0.0
@@ -290,7 +290,7 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
 
     v = 0.0
     if tx <= n && ty <= n
-        v = A[ty,tx]*z[tx]
+        v = A[n*(tx-1) + ty]*z[tx]
     end
 
     # Sum over the x-dimension: v = sum_tx A[ty,tx]*z[tx].
@@ -319,11 +319,11 @@ function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64},
     if tx == 1 && ty == 1
         @inbounds for j=1:nfree
             jfree = indfree[j]
-            B[j,j] = A[jfree,jfree]
+            B[nfree*(j-1) + j] = A[n*(jfree-1) + jfree]
             for i=jfree+1:n
                 if iwa[i] > 0
-                    B[iwa[i],j] = A[i,jfree]
-                    B[j,iwa[i]] = B[iwa[i],j]
+                    B[nfree*(j-1) + iwa[i]] = A[n*(jfree-1) + i]
+                    B[nfree*(iwa[i]-1) + j] = B[nfree*(j-1) + iwa[i]]
                 end
             end
         end

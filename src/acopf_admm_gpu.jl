@@ -115,6 +115,7 @@ end
 
 function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
                      pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
+                     ti_i_ij_start, ti_j_ji_start,
                      rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
     lines = data.lines
     buses = data.buses
@@ -129,8 +130,10 @@ function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
     YshR = ybus.YshR; YshI = ybus.YshI
 
     for g=1:ngen
-        v_curr[pg_start+g] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
-        v_curr[qg_start+g] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        u_curr[pg_start+g] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
+        u_curr[qg_start+g] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        v_curr[pg_start+g] = u_curr[pg_start+g]
+        v_curr[qg_start+g] = u_curr[qg_start+g]
     end
 
     for l=1:nline
@@ -144,11 +147,21 @@ function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
         u_curr[pji_start+l] = YttR[l] * wji0 + YtfR[l] * wR0
         u_curr[qji_start+l] = -YttI[l] * wji0 - YtfI[l] * wR0
         u_curr[wi_j_ji_start+l] = wji0
-        #wRIij[2*(l-1)+1] = wR0
-        #wRIij[2*l] = 0.0
+        u_curr[ti_i_ij_start+l] = 0.0
+        u_curr[ti_j_ji_start+l] = 0.0
+        wRIij[2*(l-1)+1] = wR0
+        wRIij[2*l] = 0.0
 
-        v_curr[wi_i_ij_start+l] = 1.0
-        v_curr[wi_j_ji_start+l] = 1.0
+        #v_curr[wi_i_ij_start+l] = 1.0 # square of voltage magnitude of bus i
+        #v_curr[wi_j_ji_start+l] = 1.0 # square of voltage magnitude of bus j
+        v_curr[pij_start+l] = u_curr[pij_start+l]
+        v_curr[qij_start+l] = u_curr[qij_start+l]
+        v_curr[pji_start+l] = u_curr[pji_start+l]
+        v_curr[qji_start+l] = u_curr[qji_start+l]
+        v_curr[wi_i_ij_start+l] = wij0 # square of voltage magnitude of bus i
+        v_curr[wi_j_ji_start+l] = wji0 # square of voltage magnitude of bus j
+        v_curr[ti_i_ij_start+l] = 0.0 # voltage angle of bus i
+        v_curr[ti_j_ji_start+l] = 0.0 # voltage angle of bus j
     end
 
     l_curr .= 0
@@ -159,27 +172,31 @@ function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
     return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false)
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false, adjust_rho=false)
     data = opf_loaddata(case)
 
     ngen = length(data.generators)
     nline = length(data.lines)
     nbus = length(data.buses)
-    nvar = 2*ngen + 6*nline
+    nvar = 2*ngen + 8*nline
 
     baseMVA = data.baseMVA
-    n = 8
+    n = 10
     mu_max = 1e8
     rho_max = 1e6
     rho_min_pq = 5.0
     rho_min_w = 5.0
     eps_rp = 1e-4
     eps_rp_min = 1e-5
-    rt_inc = 2
-    rt_dec = 2
+    rt_inc = 2.0
+    rt_dec = 2.0
     eta = 0.99
     Kf = 100
     Kf_mean = 10
+
+    if use_gpu
+        CUDA.device!(1)
+    end
 
     ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
 
@@ -199,6 +216,9 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     qji_start = 2*ngen + 3*nline
     wi_i_ij_start = 2*ngen + 4*nline
     wi_j_ji_start = 2*ngen + 5*nline
+    ti_i_ij_start = 2*ngen + 6*nline
+    ti_j_ji_start = 2*ngen + 7*nline
+    pq_end = 2*ngen + 4*nline
 
     u_curr = zeros(nvar)
     v_curr = zeros(nvar)
@@ -211,12 +231,15 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     rp = zeros(nvar)
     rp_old = zeros(nvar)
     rp_k0 = zeros(nvar)
-    param = zeros(24, nline)
+    param = zeros(31, nline)
     wRIij = zeros(2*nline)
+    #tau = zeros(nvar, iterlim)
 
     init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
                 pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
+                ti_i_ij_start, ti_j_ji_start,
                 rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
+    #tau[:,1] .= rho
 
     cu_u_curr = CuArray{Float64}(undef, nvar)
     cu_v_curr = CuArray{Float64}(undef, nvar)
@@ -229,8 +252,9 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     cu_rp = CuArray{Float64}(undef, nvar)
     cu_rp_old = CuArray{Float64}(undef, nvar)
     cu_rp_k0 = CuArray{Float64}(undef, nvar)
-    cuParam = CuArray{Float64}(undef, (24, nline))
+    cuParam = CuArray{Float64}(undef, (31, nline))
     cuWRIij = CuArray{Float64}(undef, 2*nline)
+    #cu_tau = CuArray{Float64}(undef, (nvar, iterlim))
 
     copyto!(cu_u_curr, u_curr)
     copyto!(cu_v_curr, v_curr)
@@ -238,12 +262,14 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     copyto!(cu_rho, rho)
     copyto!(cuParam, param)
     copyto!(cuWRIij, wRIij)
+    #copyto!(cu_tau, tau)
 
     max_auglag = 50
 
     nblk_gen = div(ngen, 32, RoundUp)
     nblk_br = nline
     nblk_bus = div(nbus, 32, RoundUp)
+    nblk_rho = div(nvar, 32, RoundUp)
 
     ABSTOL = 1e-6
     RELTOL = 1e-5
@@ -252,7 +278,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     time_gen = time_br = time_bus = 0
 
     h_u_curr = zeros(nvar)
-    h_param = zeros(24, nline)
+    h_param = zeros(31, nline)
     h_wRIij = zeros(2*nline)
 
     while it < iterlim
@@ -266,19 +292,24 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             generator_kernel_cpu(baseMVA, ngen, pg_start, qg_start, u_curr, v_curr, l_curr, rho,
                                 pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
             auglag_it = auglag_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                        wi_i_ij_start, wi_j_ji_start, mu_max,
+                                        wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
                                         u_curr, v_curr, l_curr, rho,
                                         wRIij, param, YffR, YffI, YftR, YftI,
                                         YttR, YttI, YtfR, YtfI, FrBound, ToBound)
             bus_kernel_cpu(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
-                                pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
-                                FrStart, FrIdx, ToStart, ToIdx, GenStart,
-                                GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
+                           pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
+                           ti_i_ij_start, ti_j_ji_start,
+                           FrStart, FrIdx, ToStart, ToIdx, GenStart,
+                           GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
 
             l_curr .+= rho .* (u_curr .- v_curr)
             rd .= -rho .* (v_curr .- v_prev)
             rp .= u_curr .- v_curr
             rp_old .= u_prev .- v_prev
+
+            if ((it + Kf_mean-1) % Kf) == 0
+                rp_k0 .= rp
+            end
 
             primres = norm(rp)
             dualres = norm(rd)
@@ -287,6 +318,15 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*norm(l_curr)
 
             @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %.2f\n", it, primres, dualres, eps_pri, eps_dual, auglag_it)
+
+            if adjust_rho && it > 1
+                rho_kernel_cpu(nvar, it, Kf, Kf_mean, pq_end, eps_rp, eps_rp_min, rt_inc, rt_dec, eta,
+                               rho_max, rho_min_pq, rho_min_w,
+                               u_curr, u_prev, v_curr, v_prev, l_curr, l_prev,
+                               rho, tau, rp, rp_old, rp_k0)
+
+            end
+
         else
             cu_u_prev .= cu_u_curr
             cu_v_prev .= cu_v_curr
@@ -314,6 +354,10 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             cu_rp .= cu_u_curr .- cu_v_curr
             cu_rp_old .= cu_u_prev .- cu_v_prev
 
+            if adjust_rho && (it + Kf_mean-1) % Kf == 0
+                cu_rp_k0 .= cu_rp
+            end
+
             gpu_primres = CUDA.norm(cu_rp)
             gpu_dualres = CUDA.norm(cu_rd)
 
@@ -321,6 +365,13 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             gpu_eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*CUDA.norm(cu_l_curr)
 
             @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
+
+            if adjust_rho && it > 1
+                CUDA.@sync @cuda threads=32 blocks=nblk_rho rho_kernel(nvar, it, Kf, Kf_mean, pq_end, eps_rp, eps_rp_min, rt_inc, rt_dec, eta,
+                                                                       rho_max, rho_min_pq, rho_min_w,
+                                                                       cu_u_curr, cu_u_prev, cu_v_curr, cu_v_prev, cu_l_curr, cu_l_prev,
+                                                                       cu_rho, cu_tau, cu_rp, cu_rp_old, cu_rp_k0)
+            end
         end
     end
 

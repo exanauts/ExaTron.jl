@@ -1,5 +1,6 @@
 module ExaTron
 
+using Statistics
 using Libdl
 using LinearAlgebra
 using CUDA
@@ -47,6 +48,7 @@ include("bus_kernel.jl")
 include("generator_kernel.jl")
 include("tron_kernel.jl")
 include("eval_kernel.jl")
+include("rho_kernel.jl")
 include("auglag_kernel.jl")
 include("acopf_admm_gpu.jl")
 

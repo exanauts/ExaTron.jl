@@ -33,12 +33,12 @@ function dnsol(n::Int, L::CuDeviceArray{Float64},
 
     @inbounds for j=1:n
         if tx == j && ty == j
-            r[j] = r[j] / L[j,j]
+            r[j] = r[j] / L[n*(j-1) + j]
         end
         CUDA.sync_threads()
 
         if tx > j && ty == j
-            r[tx] = r[tx] - L[tx,j]*r[j]
+            r[tx] = r[tx] - L[n*(j-1) + tx]*r[j]
         end
         CUDA.sync_threads()
     end

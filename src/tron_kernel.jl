@@ -33,13 +33,13 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
     iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(Float64))
     isave = @cuDynamicSharedMem(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(Float64))
 
-    A = @cuDynamicSharedMem(Float64, (n,n), (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
-    B = @cuDynamicSharedMem(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
-    L = @cuDynamicSharedMem(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+    A = @cuDynamicSharedMem(Float64, n*n, (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
+    B = @cuDynamicSharedMem(Float64, n*n, (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+    L = @cuDynamicSharedMem(Float64, n*n, (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
 
-    A[tx,ty] = 0.0
-    B[tx,ty] = 0.0
-    L[tx,ty] = 0.0
+    A[n*(ty-1) + tx] = 0.0
+    B[n*(ty-1) + tx] = 0.0
+    L[n*(ty-1) + tx] = 0.0
 
     CUDA.sync_threads()
 

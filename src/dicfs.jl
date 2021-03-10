@@ -164,7 +164,7 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
 
     alpha = zero
     if tx <= n  # No check on ty so that each warp has alpha.
-        alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
+        alpha = (A[n*(tx-1) + tx] == zero) ? alphas : max(alpha, -A[n*(tx-1) + tx]*(wa2[tx]^2))
     end
     CUDA.sync_warp()
 
@@ -190,9 +190,11 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
     info = 0
 
     while true
-        L[tx,ty] = A[tx,ty]*wa2[tx]*wa2[ty]
-        if alpha != zero && tx == ty
-            L[tx,tx] = L[tx,tx] + alpha
+        if tx <= n && ty <= n
+            L[n*(ty-1) + tx] = A[n*(ty-1) + tx]*wa2[tx]*wa2[ty]
+            if alpha != zero && tx == ty
+                L[n*(tx-1) + tx] = L[n*(tx-1) + tx] + alpha
+            end
         end
         CUDA.sync_threads()
 
@@ -209,9 +211,9 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
                 alpha = alphas
                 nb = nb + 1
             else
-                if tx >= ty
-                    L[tx,ty] = L[tx,ty] / wa2[tx]
-                    L[ty,tx] = L[tx,ty]
+                if tx <= n && ty <= n && tx >= ty
+                    L[n*(ty-1) + tx] /= wa2[tx]
+                    L[n*(tx-1) + ty] = L[n*(ty-1) + tx]
                 end
                 CUDA.sync_threads()
                 return
