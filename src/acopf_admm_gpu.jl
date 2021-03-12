@@ -159,6 +159,52 @@ function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
     return
 end
 
+function copy_data_kernel(n::Int, dest::CuDeviceArray{Float64,1}, src::CuDeviceArray{Float64,1})
+    tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    if tx <= n
+        dest[tx] = src[tx]
+    end
+    return
+end
+
+function update_multiplier_kernel(n::Int, l_curr::CuDeviceArray{Float64,1},
+                                  u_curr::CuDeviceArray{Float64,1},
+                                  v_curr::CuDeviceArray{Float64,1},
+                                  rho::CuDeviceArray{Float64,1})
+    tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    if tx <= n
+        l_curr[tx] += rho[tx] * (u_curr[tx] - v_curr[tx])
+    end
+    return
+end
+
+function primal_residual_kernel(n::Int, rp::CuDeviceArray{Float64,1},
+                                u_curr::CuDeviceArray{Float64,1},
+                                v_curr::CuDeviceArray{Float64,1})
+    tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    if tx <= n
+        rp[tx] = u_curr[tx] - v_curr[tx]
+    end
+
+    return
+end
+
+function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
+                              v_prev::CuDeviceArray{Float64,1},
+                              v_curr::CuDeviceArray{Float64,1},
+                              rho::CuDeviceArray{Float64,1})
+    tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    if tx <= n
+        rd[tx] = -rho[tx] * (v_curr[tx] - v_prev[tx])
+    end
+
+    return
+end
+
 function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false)
     data = opf_loaddata(case)
 
@@ -180,6 +226,10 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     eta = 0.99
     Kf = 100
     Kf_mean = 10
+
+    if use_gpu
+        CUDA.device!(1)
+    end
 
     ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
 
@@ -255,6 +305,8 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     h_param = zeros(24, nline)
     h_wRIij = zeros(2*nline)
 
+    shmem_size = sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)
+
     while it < iterlim
         it += 1
 
@@ -288,19 +340,20 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
 
             @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %.2f\n", it, primres, dualres, eps_pri, eps_dual, auglag_it)
         else
-            cu_u_prev .= cu_u_curr
-            cu_v_prev .= cu_v_curr
-            cu_l_prev .= cu_l_curr
+            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_u_prev, cu_u_curr)
+            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_v_prev, cu_v_curr)
+            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_l_prev, cu_l_curr)
+            CUDA.synchronize()
 
             tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(baseMVA, ngen, pg_start, qg_start,
-                                                                                    cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                    cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0)
+                                                                                 cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
+                                                                                 cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0)
             time_gen += tgpu.time
-            tgpu = CUDA.@timed @cuda threads=(n,n) blocks=nblk_br shmem=(sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)) auglag_kernel(n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                                                                                                        wi_i_ij_start, wi_j_ji_start, mu_max,
-                                                                                                                        cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                                                        cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
-                                                                                                                        cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+                                                                                              wi_i_ij_start, wi_j_ji_start, mu_max,
+                                                                                              cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
+                                                                                              cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
+                                                                                              cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
             time_br += tgpu.time
             tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
                                                                            pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
@@ -309,15 +362,15 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
                                                                            cu_rho, cuYshR, cuYshI)
             time_bus += tgpu.time
 
-            cu_l_curr .+= cu_rho .* (cu_u_curr .- cu_v_curr)
-            cu_rd .= -cu_rho .* (cu_v_curr .- cu_v_prev)
-            cu_rp .= cu_u_curr .- cu_v_curr
-            cu_rp_old .= cu_u_prev .- cu_v_prev
+            @cuda threads=64 blocks=(div(nvar-1, 64)+1) update_multiplier_kernel(nvar, cu_l_curr, cu_u_curr, cu_v_curr, cu_rho)
+            @cuda threads=64 blocks=(div(nvar-1, 64)+1) primal_residual_kernel(nvar, cu_rp, cu_u_curr, cu_v_curr)
+            @cuda threads=64 blocks=(div(nvar-1, 64)+1) dual_residual_kernel(nvar, cu_rd, cu_v_prev, cu_v_curr, cu_rho)
+            CUDA.synchronize()
 
             gpu_primres = CUDA.norm(cu_rp)
             gpu_dualres = CUDA.norm(cu_rd)
 
-            gpu_eps_pri = sqrt(length(l_curr))*ABSTOL + RELTOL*max(CUDA.norm(cu_u_curr), CUDA.norm(-cu_v_curr))
+            gpu_eps_pri = sqrt(length(l_curr))*ABSTOL + RELTOL*max(CUDA.norm(cu_u_curr), CUDA.norm(cu_v_curr))
             gpu_eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*CUDA.norm(cu_l_curr)
 
             @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)

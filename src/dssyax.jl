@@ -148,7 +148,7 @@ function Base.fill!(w::CuDeviceArray{Float64}, val::Float64)
     tx = threadIdx().x
     ty = threadIdx().y
 
-    if ty == 1
+    if tx <= length(w) && ty == 1
         w[tx] = val
     end
     CUDA.sync_threads()
@@ -212,6 +212,14 @@ function nrm2!(wa, A::CuDeviceArray{Float64}, n::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 
+    v = 0.0
+    if tx <= n && ty == 1
+        for j=1:n
+            v += A[j,tx]^2
+        end
+        wa[tx] = sqrt(v)
+    end
+    #=
     v = A[tx,ty]^2
 
     if tx > n || ty > n
@@ -228,6 +236,7 @@ function nrm2!(wa, A::CuDeviceArray{Float64}, n::Int)
     if tx == 1
         wa[ty] = sqrt(v)
     end
+    =#
     CUDA.sync_threads()
 
     return
@@ -290,6 +299,14 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
     ty = threadIdx().y
 
     v = 0.0
+    if tx <= n && ty == 1
+        for j=1:n
+            v += A[tx,j]*z[j]
+        end
+        q[tx] = v
+    end
+    #=
+    v = 0.0
     if tx <= n && ty <= n
         v = A[ty,tx]*z[tx]
     end
@@ -306,6 +323,7 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
     if tx == 1
         q[ty] = v
     end
+    =#
     CUDA.sync_threads()
 
     return

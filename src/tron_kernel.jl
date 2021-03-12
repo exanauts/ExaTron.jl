@@ -16,7 +16,7 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
                      YtfR::CuDeviceArray{Float64}, YtfI::CuDeviceArray{Float64})
                      =#
     tx = threadIdx().x
-    ty = threadIdx().y
+    #ty = threadIdx().y
 
     g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
     xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
@@ -37,10 +37,18 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
     B = @cuDynamicSharedMem(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
     L = @cuDynamicSharedMem(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
 
-    A[tx,ty] = 0.0
-    B[tx,ty] = 0.0
-    L[tx,ty] = 0.0
-
+    if tx <= n
+        for j=1:n
+            A[tx,j] = 0.0
+            B[tx,j] = 0.0
+            L[tx,j] = 0.0
+        end
+        #=
+        A[tx,ty] = 0.0
+        B[tx,ty] = 0.0
+        L[tx,ty] = 0.0
+        =#
+    end
     CUDA.sync_threads()
 
     task = 0

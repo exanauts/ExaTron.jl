@@ -90,14 +90,16 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64}, g::CuDeviceArray{
                 raug*(-YftI)*c1 + raug*(-YftR)*c2 + raug*(YtfI)*c3 +
                 raug*(YtfR)*c4 + raug*(2*x[8])*c5
 
-    g[1] = g1
-    g[2] = g2
-    g[3] = g3
-    g[4] = g4
-    g[5] = g5
-    g[6] = g6
-    g[7] = g7
-    g[8] = g8
+    if tx == 1 && ty == 1
+        g[1] = g1
+        g[2] = g2
+        g[3] = g3
+        g[4] = g4
+        g[5] = g5
+        g[6] = g6
+        g[7] = g7
+        g[8] = g8
+    end
 
     CUDA.sync_threads()
     return
@@ -119,54 +121,68 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64}, A::CuDeviceArray{Float
     raug = param[24,I]
     c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
 
-    # 1st column
-    A[1,1] = param[7,I] + raug
-    A[5,1] = raug*(-YffR)
-    A[7,1] = raug*(-YftR)
-    A[8,1] = raug*(-YftI)
+    if tx == 1 && ty == 1
+        # 1st column
+        A[1,1] = param[7,I] + raug
+        A[5,1] = raug*(-YffR)
+        A[7,1] = raug*(-YftR)
+        A[8,1] = raug*(-YftI)
 
-    # 2nd columns
-    A[2,2] = param[8,I] + raug
-    A[5,2] = raug*(YffI)
-    A[7,2] = raug*(YftI)
-    A[8,2] = raug*(-YftR)
+        # 2nd columns
+        A[2,2] = param[8,I] + raug
+        A[5,2] = raug*(YffI)
+        A[7,2] = raug*(YftI)
+        A[8,2] = raug*(-YftR)
 
-    # 3rd column
-    A[3,3] = param[9,I] + raug
-    A[6,3] = raug*(-YttR)
-    A[7,3] = raug*(-YtfR)
-    A[8,3] = raug*(YtfI)
+        # 3rd column
+        A[3,3] = param[9,I] + raug
+        A[6,3] = raug*(-YttR)
+        A[7,3] = raug*(-YtfR)
+        A[8,3] = raug*(YtfI)
 
-    # 4th column
-    A[4,4] = param[10,I] + raug
-    A[6,4] = raug*(YttI)
-    A[7,4] = raug*(YtfI)
-    A[8,4] = raug*(YtfR)
+        # 4th column
+        A[4,4] = param[10,I] + raug
+        A[6,4] = raug*(YttI)
+        A[7,4] = raug*(YtfI)
+        A[8,4] = raug*(YtfR)
 
-    # 5th column
-    A[5,5] = param[11,I] + raug*(YffR^2) + raug*(YffI^2) + raug*(x[6]^2)
-    A[6,5] = -(alrect + raug*c5) + raug*(x[5]*x[6])
-    A[7,5] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[6])*(2*x[7]))
-    A[8,5] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[6])*(2*x[8]))
+        # 5th column
+        A[5,5] = param[11,I] + raug*(YffR^2) + raug*(YffI^2) + raug*(x[6]^2)
+        A[6,5] = -(alrect + raug*c5) + raug*(x[5]*x[6])
+        A[7,5] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[6])*(2*x[7]))
+        A[8,5] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[6])*(2*x[8]))
 
-    # 6th column
-    A[6,6] = param[12,I] + raug*(YttR^2) + raug*(YttI^2) + raug*(x[5]^2)
-    A[7,6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[5])*(2*x[7]))
-    A[8,6] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[5])*(2*x[8]))
+        # 6th column
+        A[6,6] = param[12,I] + raug*(YttR^2) + raug*(YttI^2) + raug*(x[5]^2)
+        A[7,6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[5])*(2*x[7]))
+        A[8,6] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[5])*(2*x[8]))
 
-    # 7th column
-    A[7,7] = (alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
-        raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7]))
-    A[8,7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
-        raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8]))
+        # 7th column
+        A[7,7] = (alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
+            raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7]))
+        A[8,7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
+            raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8]))
 
-    # 8th column
-    A[8,8] = (alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
-        raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8]))
+        # 8th column
+        A[8,8] = (alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
+            raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8]))
+    end
 
+    CUDA.sync_threads()
+
+    if tx <= n && ty == 1
+        @inbounds for j=1:n
+            if tx > j
+                A[j,tx] = A[tx,j]
+            end
+        end
+    end
+
+    #=
     if tx > ty
         A[ty,tx] = A[tx,ty]
     end
+    =#
 
     CUDA.sync_threads()
     return

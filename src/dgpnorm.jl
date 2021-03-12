@@ -22,7 +22,6 @@ end
 function dgpnorm(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
                  xu::CuDeviceArray{Float64}, g::CuDeviceArray{Float64})
     tx = threadIdx().x
-    ty = threadIdx().y
 
     # Q: Would it be better to use a single thread?
     # A: It is tricky to share values between threads.
@@ -44,7 +43,7 @@ function dgpnorm(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
     end
     CUDA.sync_threads()
 
-    offset = div(blockDim().x, 2)
+    offset = div(n, 2, RoundUp)
     while offset > 0
         v = max(v, CUDA.shfl_down_sync(0xffffffff, v, offset))
         offset = div(offset, 2)

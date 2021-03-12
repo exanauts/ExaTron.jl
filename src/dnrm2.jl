@@ -50,7 +50,6 @@ end
 
 function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
     tx = threadIdx().x
-    ty = threadIdx().y
 
     # All threads compute the Euclidean norm, hence,
     # no sync_threads() is needed.
@@ -61,7 +60,7 @@ function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
     end
     CUDA.sync_threads()
 
-    offset = div(blockDim().x, 2)
+    offset = div(n, 2, RoundUp)
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
         offset = div(offset, 2)

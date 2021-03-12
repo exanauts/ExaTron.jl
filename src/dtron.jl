@@ -243,7 +243,6 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
                wa3::CuDeviceArray{Float64}, wa4::CuDeviceArray{Float64},
                wa5::CuDeviceArray{Float64})
     tx = threadIdx().x
-    ty = threadIdx().y
 
     zero = 0.0
     p5 = 0.5

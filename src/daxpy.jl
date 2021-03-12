@@ -63,9 +63,8 @@ function daxpy(n::Int,da::Float64,
                dx::CuDeviceArray{Float64},incx::Int,
                dy::CuDeviceArray{Float64},incy::Int)
     tx = threadIdx().x
-    ty = threadIdx().y
 
-    if ty == 1
+    if tx <= n && threadIdx().y == 1
         dy[tx] = dy[tx] + da*dx[tx]
     end
     CUDA.sync_threads()

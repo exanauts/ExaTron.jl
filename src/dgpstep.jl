@@ -30,7 +30,7 @@ function dgpstep(n::Int,x::CuDeviceArray{Float64},xl::CuDeviceArray{Float64},
     tx = threadIdx().x
     ty = threadIdx().y
 
-    if ty == 1
+    if tx <= n && ty == 1
         # It might be better to process this using just a single thread,
         # rather than diverging between multiple threads.
 

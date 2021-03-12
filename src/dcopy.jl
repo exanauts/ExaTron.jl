@@ -68,7 +68,7 @@ function dcopy(n::Int,dx::CuDeviceArray{Float64},incx::Int,
     ty = threadIdx().y
 
     # Ignore incx and incy for now.
-    if ty == 1
+    if tx <= n && ty == 1
         dy[tx] = dx[tx]
     end
     CUDA.sync_threads()

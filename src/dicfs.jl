@@ -147,7 +147,7 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
     nrm2!(wa1, A, n)
 
     # Compute the scaling matrix D.
-    if ty == 1
+    if tx <= n && ty == 1
         wa2[tx] = (wa1[tx] > zero) ? one/sqrt(wa1[tx]) : one
     end
     CUDA.sync_threads()
@@ -169,7 +169,8 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
     CUDA.sync_warp()
 
     # Find the maximum alpha in a warp and put it in the first thread.
-    offset = div(blockDim().x, 2)
+    #offset = div(blockDim().x, 2)
+    offset = div(n, 2, RoundUp)
     while offset > 0
         alpha = max(alpha, CUDA.shfl_down_sync(0xffffffff, alpha, offset))
         offset = div(offset, 2)
@@ -190,10 +191,20 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
     info = 0
 
     while true
+        if tx <= n && ty == 1
+            for j=1:n
+                L[j,tx] = A[j,tx] * wa2[j] * wa2[tx]
+            end
+            if alpha != zero
+                L[tx,tx] += alpha
+            end
+        end
+        #=
         L[tx,ty] = A[tx,ty]*wa2[tx]*wa2[ty]
         if alpha != zero && tx == ty
             L[tx,tx] = L[tx,tx] + alpha
         end
+        =#
         CUDA.sync_threads()
 
         # Attempt a Cholesky factorization.
@@ -209,10 +220,20 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
                 alpha = alphas
                 nb = nb + 1
             else
+                if tx <= n && ty == 1
+                    @inbounds for j=1:n
+                        if tx >= j
+                            L[tx,j] /= wa2[tx]
+                            L[j,tx] = L[tx,j]
+                        end
+                    end
+                end
+                #=
                 if tx >= ty
                     L[tx,ty] = L[tx,ty] / wa2[tx]
                     L[ty,tx] = L[tx,ty]
                 end
+                =#
                 CUDA.sync_threads()
                 return
             end
