@@ -31,9 +31,20 @@ void cdriver(int n, int max_feval, int max_minor,
     B = A + n*n;
     L = B + n*n;
 
+    if (tx < n && ty == 0) {
+        #pragma unroll
+        for (int j = 0; j < n; j++) {
+            A[n*j + tx] = 0;
+            B[n*j + tx] = 0;
+            L[n*j + tx] = 0;
+        }
+    }
+
+    /*
     A[n*ty + tx] = 0;
     B[n*ty + tx] = 0;
     L[n*ty + tx] = 0;
+    */
 
     cmid(n, x, xl, xu);
 
@@ -164,9 +175,19 @@ void cdriver_auglag(int n, int max_feval, int max_minor,
     B = A + n*n;
     L = B + n*n;
 
+    if (tx < n && ty == 0) {
+        #pragma unroll
+        for (int j = 0; j < n; j++) {
+            A[n*j + tx] = 0;
+            B[n*j + tx] = 0;
+            L[n*j + tx] = 0;
+        }
+    }
+    /*
     A[n*ty + tx] = 0;
     B[n*ty + tx] = 0;
     L[n*ty + tx] = 0;
+    */
     cmid(n, x, xl, xu);  // __syncthreads() will be called in cmid().
 
     task = 0;

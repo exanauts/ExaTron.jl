@@ -145,9 +145,7 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
         A[n*3 + 5] = raug*(YttI); // A[6,4]
         A[n*3 + 6] = raug*(YtfI); // A[7,4]
         A[n*3 + 7] = raug*(YtfR); // A[8,4]
-    }
 
-    if (tx + blockDim.x*ty == 32) {
         // 5th column
         A[n*4 + 4] = param[start + 10] + raug*(YffR*YffR) + raug*(YffI*YffI) + raug*(x[5]*x[5]); // A[5,5]
         A[n*4 + 5] = -(alrect + raug*c5) + raug*(x[4]*x[5]); // A[6,5]
@@ -172,9 +170,19 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
 
     __syncthreads();
 
+    if (tx < n && ty == 0) {
+        #pragma unroll
+        for (int j = 0; j < n; j++) {
+            if (tx > j) {
+                A[n*tx + j] = A[n*j + tx];
+            }
+        }
+    }
+    /*
     if (tx > ty) {
         A[n*tx + ty] = A[n*ty + tx];
     }
+    */
 
     __syncthreads();
 
@@ -182,7 +190,7 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
 }
 
 __global__ void
-__launch_bounds__(64, 12)
+//__launch_bounds__(32, 16)
 auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
               int pij_start, int qij_start,
               int pji_start, int qji_start,
@@ -239,6 +247,7 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
     YtfR = _YtfR[I]; YtfI = _YtfI[I];
 
     int start = 24*I;
+
     param[start] = l_curr[pij_start+I];
     param[start + 1] = l_curr[qij_start+I];
     param[start + 2] = l_curr[pji_start+I];

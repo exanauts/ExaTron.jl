@@ -4,6 +4,15 @@ void cnrm2_mat(int n, double * __restrict__ wa, const double * __restrict__ A)
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
+    double v = 0.0;
+    if (tx < n && ty == 0) {
+        #pragma unroll
+        for (int j = 0; j < n; j++) {
+            v += A[n*tx + j]*A[n*tx + j];
+        }
+        wa[tx] = sqrt(v);
+    }
+    /*
     //double v = A[n*ty + tx]*A[n*ty + tx];
     double v = A[blockDim.x*ty + tx]*A[blockDim.x*ty + tx];
     if (tx >= n || ty >= n) {
@@ -19,6 +28,7 @@ void cnrm2_mat(int n, double * __restrict__ wa, const double * __restrict__ A)
     if (tx == 0) {
         wa[ty] = sqrt(v);
     }
+    */
     __syncthreads();
 
     return;
@@ -35,13 +45,13 @@ double cnrm2(int n, const double * __restrict__ x)
     }
     __syncthreads();
 
-    int offset = blockDim.x / 2;
-    while (offset > 0) {
+    //int offset = blockDim.x / 2;
+    #pragma unroll
+    for (int offset = (n-1)/2 + 1; offset > 0; offset >>= 1) {
         v += __shfl_down_sync(0xffffffff, v, offset);
-        offset >>= 1;
     }
 
     v = sqrt(v);
-    v = __shfl_sync(0xffffffff, v, 1);
+    v = __shfl_sync(0xffffffff, v, 0);
     return v;
 }

@@ -16,10 +16,19 @@ void cssyax(int n, const double * __restrict__ A,
     }
     __syncthreads();
 #else
+
     int tx = threadIdx.x;
     int ty = threadIdx.y;
     double v = 0.0;
 
+    if (tx < n && ty == 0) {
+        #pragma unroll
+        for (int j = 0; j < n; j++) {
+            v += A[n*j + tx]*z[j];
+        }
+        q[tx] = v;
+    }
+/*
     if (tx < n && ty < n) {
         v = A[n*tx + ty]*z[tx];
     }
@@ -35,7 +44,9 @@ void cssyax(int n, const double * __restrict__ A,
     if (tx == 0) {
         q[ty] = v;
     }
+*/
     __syncthreads();
+
 #endif
     return;
 }

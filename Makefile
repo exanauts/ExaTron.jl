@@ -16,7 +16,7 @@ GENCODE_SM70  := -gencode arch=compute_70,code=sm_70
 GENCODE_FLAGS := $(GENCODE_SM70)
 
 LDFLAGS    := -lcudart -lrt -lcurand -lm
-CFLAGS     := -O3 -lineinfo -Xptxas="-dlcm=ca -v" #-maxrregcount=80
+CFLAGS     := -O3 -lineinfo -Xptxas="-dlcm=ca -v" -maxrregcount=96
 SOURCE_DIR  = ./src
 TEST_DIR    = ./test
 CUH_EXA    := src/cicfs.cuh src/cicf.cuh src/cnrm2.cuh src/cdot.cuh \
@@ -44,16 +44,16 @@ INCLUDES   := -I$(SOURCE_DIR) -I$(TEST_DIR)
 
 .PHONY: all test
 
-all: test/gputest src/ExaTron src/ExaTronCPU
+all: test/gputest ExaTron ExaTronCPU
 test/gputest: test/gputest.cu $(CUH_EXA) $(CUH_TEST)
 	$(NVCC) $(CFLAGS) $(INCLUDES) $(GENCODE_FLAGS) test/gputest.cu $(LDFLAGS) -o $@
-src/ExaTron: src/acopf_admm.cu $(CUH_EXA) $(CUH_ACOPF)
+ExaTron: src/acopf_admm.cu $(CUH_EXA) $(CUH_ACOPF)
 	$(NVCC) $(CFLAGS) $(INCLUDES) $(GENCODE_FLAGS) src/acopf_admm.cu $(LDFLAGS) -o $@
-src/ExaTronCPU: src/acopf_admm.cpp $(HPP_ACOPF)
+ExaTronCPU: src/acopf_admm.cpp $(HPP_ACOPF)
 	$(CC) -O3 $(INCLUDES) src/acopf_admm.cpp -lm -o $@
 
 test:
 	./test/gputest 8 5120
 
 clean:
-	rm -rf *.o test/gputest src/ExaTron src/ExaTronCPU
+	rm -rf *.o test/gputest ExaTron ExaTronCPU

@@ -592,12 +592,12 @@ int main(int argc, char **argv)
     shmem = sizeof(double)*(14*n + 3*n*n) + sizeof(int)*(4*n);
 
     if (use_gpu) {
-        printf("Setting CacheConfig to cudaFuncCachePreferShared . . .\n");
+        printf("Setting CacheConfig to cudaFuncCachePreferEqual . . .\n");
         cudaFuncCache cacheConfig;
         cudaDeviceGetCacheConfig(&cacheConfig);
-        if (cacheConfig != cudaFuncCachePreferShared) {
-            printf("CacheConfig was set to %d. Change it to cudaFuncCachePreferShared.\n", cacheConfig);
-            cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+        if (cacheConfig != cudaFuncCachePreferEqual) {
+            printf("CacheConfig was set to %d. Change it to cudaFuncCachePreferEqual.\n", cacheConfig);
+            cudaDeviceSetCacheConfig(cudaFuncCachePreferEqual);
         }
     }
 
@@ -643,7 +643,7 @@ int main(int argc, char **argv)
             update_generator_kernel<<<n_tb_gen, 32>>>(nw->baseMVA, nw->active_ngen, pg_start, qg_start,
                                                       cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                       cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0);
-            auglag_kernel<<<n_tb_branch, dim3(n,n), shmem>>>(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+            auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
                                                             wi_i_ij_start, wi_j_ji_start, mu_max,
                                                             cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_wRIij,
                                                             cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,

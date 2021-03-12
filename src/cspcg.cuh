@@ -41,11 +41,12 @@ void cspcg(int n, double delta, double rtol, int itermax,
                     iwa[j] = 0;
                 }
             }
-            iwa[n] = nfree;
+            //iwa[n] = nfree;
         }
-        __syncthreads();
-        nfree = iwa[n];
-        __syncthreads();
+        nfree = __shfl_sync(0xffffffff, nfree, 0);
+//        __syncthreads();
+//        nfree = iwa[n];
+//        __syncthreads();
 
         if (nfree == 0) {
             (*_info) = 1;

@@ -1,4 +1,4 @@
-#if 1
+#if 0
 __device__
 int cicf(int n, double *L)
 {
@@ -55,6 +55,7 @@ int cicf(int n, double *L)
     int ty = threadIdx.y;
     double Ljj;
 
+    #pragma unroll
     for (int j = 0; j < n; j++) {
         if (j > 0) {
             if (tx >= j && tx < n && ty == 0) {
@@ -79,9 +80,19 @@ int cicf(int n, double *L)
 
     // __syncthreads(); // false positive from cuda-memcheck
 
+    if (tx < n && ty == 0) {
+        #pragma unroll
+        for (int j = 0; j < n; j++) {
+            if (tx > j) {
+                L[n*tx + j] = L[n*j + tx];
+            }
+        }
+    }
+    /*
     if (tx < n && ty < n && tx > ty) {
         L[n*tx + ty] = L[n*ty + tx];
     }
+    */
     __syncthreads();
 
     return 0;
