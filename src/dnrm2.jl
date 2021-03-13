@@ -48,7 +48,7 @@ else
     dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
 end
 
-function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
+function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
     tx = threadIdx().x
 
     # All threads compute the Euclidean norm, hence,
@@ -56,7 +56,7 @@ function dnrm2(n::Int,x::CuDeviceArray{Float64},incx::Int)
 
     v = 0.0
     if tx <= n  # No check on ty so that each warp has v.
-        v = x[tx]*x[tx]
+        @inbounds v = x[tx]*x[tx]
     end
     CUDA.sync_threads()
 

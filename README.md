@@ -12,3 +12,10 @@ over ACOPF problems without line limit.
 | ---: | ---: | ---: | ---: |
 |  case9241pegase | 2.404557e-03 | 8.329508e+00 | 145.96 |
 | case13654pegase | 5.425782e-03 | 9.923688e+00 | 163.81 |
+
+With `@inbounds` attached to every array access and the use of instruction
+parallelism instead of `for` loop, timings have reduced as follows:
+| Data | Time (secs) |
+| ---: | ---: |
+| case9241pegase | 145.96 -> 100.87 |
+| case13659pegase | 163.81 -> 118.85 |

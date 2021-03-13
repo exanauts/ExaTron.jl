@@ -1,5 +1,5 @@
-function eval_f_kernel(n::Int, x::CuDeviceArray{Float64},
-                       param::CuDeviceArray{Float64},
+function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
+                       param::CuDeviceArray{Float64,2},
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
                        YttR::Float64, YttI::Float64,
@@ -23,31 +23,33 @@ function eval_f_kernel(n::Int, x::CuDeviceArray{Float64},
         f += 0.5*(param[6+i,I]*(x[i] - param[12+i,I])^2)
     end
 
-    c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
-    c2 = (x[2] - (-YffI*x[5] - YftI*x[7] + YftR*x[8]))
-    c3 = (x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8]))
-    c4 = (x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8]))
-    c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+    @inbounds begin
+        c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
+        c2 = (x[2] - (-YffI*x[5] - YftI*x[7] + YftR*x[8]))
+        c3 = (x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8]))
+        c4 = (x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8]))
+        c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
 
-    f += param[19,I]*c1
-    f += param[20,I]*c2
-    f += param[21,I]*c3
-    f += param[22,I]*c4
-    f += param[23,I]*c5
+        f += param[19,I]*c1
+        f += param[20,I]*c2
+        f += param[21,I]*c3
+        f += param[22,I]*c4
+        f += param[23,I]*c5
 
-    raug = param[24,I]
-    f += 0.5*raug*c1^2
-    f += 0.5*raug*c2^2
-    f += 0.5*raug*c3^2
-    f += 0.5*raug*c4^2
-    f += 0.5*raug*c5^2
+        raug = param[24,I]
+        f += 0.5*raug*c1^2
+        f += 0.5*raug*c2^2
+        f += 0.5*raug*c3^2
+        f += 0.5*raug*c4^2
+        f += 0.5*raug*c5^2
+    end
 
     CUDA.sync_threads()
     return f
 end
 
-function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64}, g::CuDeviceArray{Float64},
-                            param::CuDeviceArray{Float64},
+function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
+                            param::CuDeviceArray{Float64,2},
                             YffR::Float64, YffI::Float64,
                             YftR::Float64, YftI::Float64,
                             YttR::Float64, YttI::Float64,
@@ -58,55 +60,57 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64}, g::CuDeviceArray{
     ty = threadIdx().y
     I = blockIdx().x
 
-    c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
-    c2 = (x[2] - (-YffI*x[5] - YftI*x[7] + YftR*x[8]))
-    c3 = (x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8]))
-    c4 = (x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8]))
-    c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+    @inbounds begin
+        c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
+        c2 = (x[2] - (-YffI*x[5] - YftI*x[7] + YftR*x[8]))
+        c3 = (x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8]))
+        c4 = (x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8]))
+        c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
 
-    g1 = param[1,I] + param[7,I]*(x[1] - param[13,I])
-    g2 = param[2,I] + param[8,I]*(x[2] - param[14,I])
-    g3 = param[3,I] + param[9,I]*(x[3] - param[15,I])
-    g4 = param[4,I] + param[10,I]*(x[4] - param[16,I])
-    g5 = param[5,I] + param[11,I]*(x[5] - param[17,I])
-    g6 = param[6,I] + param[12,I]*(x[6] - param[18,I])
+        g1 = param[1,I] + param[7,I]*(x[1] - param[13,I])
+        g2 = param[2,I] + param[8,I]*(x[2] - param[14,I])
+        g3 = param[3,I] + param[9,I]*(x[3] - param[15,I])
+        g4 = param[4,I] + param[10,I]*(x[4] - param[16,I])
+        g5 = param[5,I] + param[11,I]*(x[5] - param[17,I])
+        g6 = param[6,I] + param[12,I]*(x[6] - param[18,I])
 
-    raug = param[24,I]
-    g1 += param[19,I] + raug*c1
-    g2 += param[20,I] + raug*c2
-    g3 += param[21,I] + raug*c3
-    g4 += param[22,I] + raug*c4
+        raug = param[24,I]
+        g1 += param[19,I] + raug*c1
+        g2 += param[20,I] + raug*c2
+        g3 += param[21,I] + raug*c3
+        g4 += param[22,I] + raug*c4
 
-    g5 += param[19,I]*(-YffR) + param[20,I]*(YffI) + param[23,I]*(-x[6]) +
-                raug*(-YffR)*c1 + raug*(YffI)*c2 + raug*(-x[6])*c5
-    g6 += param[21,I]*(-YttR) + param[22,I]*(YttI) + param[23,I]*(-x[5]) +
-                raug*(-YttR)*c3 + raug*(YttI)*c4 + raug*(-x[5])*c5
-    g7 = param[19,I]*(-YftR) + param[20,I]*(YftI) + param[21,I]*(-YtfR) +
-                param[22,I]*(YtfI) + param[23,I]*(2*x[7]) +
-                raug*(-YftR)*c1 + raug*(YftI)*c2 + raug*(-YtfR)*c3 +
-                raug*(YtfI)*c4 + raug*(2*x[7])*c5
-    g8 = param[19,I]*(-YftI) + param[20,I]*(-YftR) + param[21,I]*(YtfI) +
-                param[22,I]*(YtfR) + param[23,I]*(2*x[8]) +
-                raug*(-YftI)*c1 + raug*(-YftR)*c2 + raug*(YtfI)*c3 +
-                raug*(YtfR)*c4 + raug*(2*x[8])*c5
+        g5 += param[19,I]*(-YffR) + param[20,I]*(YffI) + param[23,I]*(-x[6]) +
+                    raug*(-YffR)*c1 + raug*(YffI)*c2 + raug*(-x[6])*c5
+        g6 += param[21,I]*(-YttR) + param[22,I]*(YttI) + param[23,I]*(-x[5]) +
+                    raug*(-YttR)*c3 + raug*(YttI)*c4 + raug*(-x[5])*c5
+        g7 = param[19,I]*(-YftR) + param[20,I]*(YftI) + param[21,I]*(-YtfR) +
+                    param[22,I]*(YtfI) + param[23,I]*(2*x[7]) +
+                    raug*(-YftR)*c1 + raug*(YftI)*c2 + raug*(-YtfR)*c3 +
+                    raug*(YtfI)*c4 + raug*(2*x[7])*c5
+        g8 = param[19,I]*(-YftI) + param[20,I]*(-YftR) + param[21,I]*(YtfI) +
+                    param[22,I]*(YtfR) + param[23,I]*(2*x[8]) +
+                    raug*(-YftI)*c1 + raug*(-YftR)*c2 + raug*(YtfI)*c3 +
+                    raug*(YtfR)*c4 + raug*(2*x[8])*c5
 
-    if tx == 1 && ty == 1
-        g[1] = g1
-        g[2] = g2
-        g[3] = g3
-        g[4] = g4
-        g[5] = g5
-        g[6] = g6
-        g[7] = g7
-        g[8] = g8
+        if tx == 1 && ty == 1
+            g[1] = g1
+            g[2] = g2
+            g[3] = g3
+            g[4] = g4
+            g[5] = g5
+            g[6] = g6
+            g[7] = g7
+            g[8] = g8
+        end
     end
 
     CUDA.sync_threads()
     return
 end
 
-function eval_h_kernel(n::Int, x::CuDeviceArray{Float64}, A::CuDeviceArray{Float64},
-                       param::CuDeviceArray{Float64},
+function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
+                       param::CuDeviceArray{Float64,2},
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
                        YttR::Float64, YttI::Float64,
@@ -117,55 +121,57 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64}, A::CuDeviceArray{Float
     ty = threadIdx().y
     I = blockIdx().x
 
-    alrect = param[23,I]
-    raug = param[24,I]
-    c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+    @inbounds begin
+        alrect = param[23,I]
+        raug = param[24,I]
+        c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
 
-    if tx == 1 && ty == 1
-        # 1st column
-        A[1,1] = param[7,I] + raug
-        A[5,1] = raug*(-YffR)
-        A[7,1] = raug*(-YftR)
-        A[8,1] = raug*(-YftI)
+        if tx == 1 && ty == 1
+            # 1st column
+            A[1,1] = param[7,I] + raug
+            A[5,1] = raug*(-YffR)
+            A[7,1] = raug*(-YftR)
+            A[8,1] = raug*(-YftI)
 
-        # 2nd columns
-        A[2,2] = param[8,I] + raug
-        A[5,2] = raug*(YffI)
-        A[7,2] = raug*(YftI)
-        A[8,2] = raug*(-YftR)
+            # 2nd columns
+            A[2,2] = param[8,I] + raug
+            A[5,2] = raug*(YffI)
+            A[7,2] = raug*(YftI)
+            A[8,2] = raug*(-YftR)
 
-        # 3rd column
-        A[3,3] = param[9,I] + raug
-        A[6,3] = raug*(-YttR)
-        A[7,3] = raug*(-YtfR)
-        A[8,3] = raug*(YtfI)
+            # 3rd column
+            A[3,3] = param[9,I] + raug
+            A[6,3] = raug*(-YttR)
+            A[7,3] = raug*(-YtfR)
+            A[8,3] = raug*(YtfI)
 
-        # 4th column
-        A[4,4] = param[10,I] + raug
-        A[6,4] = raug*(YttI)
-        A[7,4] = raug*(YtfI)
-        A[8,4] = raug*(YtfR)
+            # 4th column
+            A[4,4] = param[10,I] + raug
+            A[6,4] = raug*(YttI)
+            A[7,4] = raug*(YtfI)
+            A[8,4] = raug*(YtfR)
 
-        # 5th column
-        A[5,5] = param[11,I] + raug*(YffR^2) + raug*(YffI^2) + raug*(x[6]^2)
-        A[6,5] = -(alrect + raug*c5) + raug*(x[5]*x[6])
-        A[7,5] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[6])*(2*x[7]))
-        A[8,5] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[6])*(2*x[8]))
+            # 5th column
+            A[5,5] = param[11,I] + raug*(YffR^2) + raug*(YffI^2) + raug*(x[6]^2)
+            A[6,5] = -(alrect + raug*c5) + raug*(x[5]*x[6])
+            A[7,5] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[6])*(2*x[7]))
+            A[8,5] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[6])*(2*x[8]))
 
-        # 6th column
-        A[6,6] = param[12,I] + raug*(YttR^2) + raug*(YttI^2) + raug*(x[5]^2)
-        A[7,6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[5])*(2*x[7]))
-        A[8,6] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[5])*(2*x[8]))
+            # 6th column
+            A[6,6] = param[12,I] + raug*(YttR^2) + raug*(YttI^2) + raug*(x[5]^2)
+            A[7,6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[5])*(2*x[7]))
+            A[8,6] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[5])*(2*x[8]))
 
-        # 7th column
-        A[7,7] = (alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
-            raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7]))
-        A[8,7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
-            raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8]))
+            # 7th column
+            A[7,7] = (alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
+                raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7]))
+            A[8,7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
+                raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8]))
 
-        # 8th column
-        A[8,8] = (alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
-            raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8]))
+            # 8th column
+            A[8,8] = (alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
+                raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8]))
+        end
     end
 
     CUDA.sync_threads()
@@ -177,12 +183,6 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64}, A::CuDeviceArray{Float
             end
         end
     end
-
-    #=
-    if tx > ty
-        A[ty,tx] = A[tx,ty]
-    end
-    =#
 
     CUDA.sync_threads()
     return

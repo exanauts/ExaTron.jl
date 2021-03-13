@@ -230,18 +230,18 @@ function dtron(n,x,xl,xu,f,g,A,
     return delta
 end
 
-function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
-               xu::CuDeviceArray{Float64}, f::Float64, g::CuDeviceArray{Float64},
-               A::CuDeviceArray{Float64}, frtol::Float64, fatol::Float64,
+function dtron(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
+               xu::CuDeviceArray{Float64,1}, f::Float64, g::CuDeviceArray{Float64,1},
+               A::CuDeviceArray{Float64,2}, frtol::Float64, fatol::Float64,
                fmin::Float64, cgtol::Float64, itermax::Int, delta::Float64, task::Int,
-               B::CuDeviceArray{Float64}, L::CuDeviceArray{Float64},
-               xc::CuDeviceArray{Float64}, s::CuDeviceArray{Float64},
-               indfree::CuDeviceArray{Int}, gfree::CuDeviceArray{Float64},
-               isave::CuDeviceArray{Int}, dsave::CuDeviceArray{Float64},
-               wa::CuDeviceArray{Float64}, iwa::CuDeviceArray{Int},
-               wa1::CuDeviceArray{Float64}, wa2::CuDeviceArray{Float64},
-               wa3::CuDeviceArray{Float64}, wa4::CuDeviceArray{Float64},
-               wa5::CuDeviceArray{Float64})
+               B::CuDeviceArray{Float64,2}, L::CuDeviceArray{Float64,2},
+               xc::CuDeviceArray{Float64,1}, s::CuDeviceArray{Float64,1},
+               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{Float64,1},
+               isave::CuDeviceArray{Int,1}, dsave::CuDeviceArray{Float64,1},
+               wa::CuDeviceArray{Float64,1}, iwa::CuDeviceArray{Int,1},
+               wa1::CuDeviceArray{Float64,1}, wa2::CuDeviceArray{Float64,1},
+               wa3::CuDeviceArray{Float64,1}, wa4::CuDeviceArray{Float64,1},
+               wa5::CuDeviceArray{Float64,1})
     tx = threadIdx().x
 
     zero = 0.0
@@ -275,14 +275,16 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
 
     else
 
-        # Restore local variables.
+        @inbounds begin
+            # Restore local variables.
 
-        work = isave[1]
-        iter = isave[2]
-        iterscg = isave[3]
-        fc = dsave[1]
-        alphac = dsave[2]
-        prered = dsave[3]
+            work = isave[1]
+            iter = isave[2]
+            iterscg = isave[3]
+            fc = dsave[1]
+            alphac = dsave[2]
+            prered = dsave[3]
+        end
     end
 
     CUDA.sync_threads()
@@ -420,15 +422,17 @@ function dtron(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
         work = 1 # "COMPUTE"
     end
 
-    # Save local variables.
+    @inbounds begin
+        # Save local variables.
 
-    isave[1] = work
-    isave[2] = iter
-    isave[3] = iterscg
+        isave[1] = work
+        isave[2] = iter
+        isave[3] = iterscg
 
-    dsave[1] = fc
-    dsave[2] = alphac
-    dsave[3] = prered
+        dsave[1] = fc
+        dsave[2] = alphac
+        dsave[3] = prered
+    end
 
     CUDA.sync_threads()
 

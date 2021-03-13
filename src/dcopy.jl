@@ -62,14 +62,14 @@ else
     dcopy(n,dx,incx,dy,incy) = tron_dcopy(n,dx,incx,dy,incy)
 end
 
-function dcopy(n::Int,dx::CuDeviceArray{Float64},incx::Int,
-               dy::CuDeviceArray{Float64},incy::Int)
+function dcopy(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
+               dy::CuDeviceArray{Float64,1},incy::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 
     # Ignore incx and incy for now.
     if tx <= n && ty == 1
-        dy[tx] = dx[tx]
+        @inbounds dy[tx] = dx[tx]
     end
     CUDA.sync_threads()
 

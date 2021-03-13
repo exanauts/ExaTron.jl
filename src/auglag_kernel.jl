@@ -3,15 +3,15 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
                        pji_start::Int, qji_start::Int,
                        wi_i_ij_start::Int, wi_j_ji_start::Int,
                        mu_max::Float64,
-                       u_curr::CuDeviceArray{Float64}, v_curr::CuDeviceArray{Float64},
-                       l_curr::CuDeviceArray{Float64}, rho::CuDeviceArray{Float64},
-                       wRIij::CuDeviceArray{Float64},
-                       param::CuDeviceArray{Float64},
-                       _YffR::CuDeviceArray{Float64}, _YffI::CuDeviceArray{Float64},
-                       _YftR::CuDeviceArray{Float64}, _YftI::CuDeviceArray{Float64},
-                       _YttR::CuDeviceArray{Float64}, _YttI::CuDeviceArray{Float64},
-                       _YtfR::CuDeviceArray{Float64}, _YtfI::CuDeviceArray{Float64},
-                       frBound::CuDeviceArray{Float64}, toBound::CuDeviceArray{Float64})
+                       u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
+                       l_curr::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
+                       wRIij::CuDeviceArray{Float64,1},
+                       param::CuDeviceArray{Float64,2},
+                       _YffR::CuDeviceArray{Float64,1}, _YffI::CuDeviceArray{Float64,1},
+                       _YftR::CuDeviceArray{Float64,1}, _YftI::CuDeviceArray{Float64,1},
+                       _YttR::CuDeviceArray{Float64,1}, _YttI::CuDeviceArray{Float64,1},
+                       _YtfR::CuDeviceArray{Float64,1}, _YtfI::CuDeviceArray{Float64,1},
+                       frBound::CuDeviceArray{Float64,1}, toBound::CuDeviceArray{Float64,1})
     tx = threadIdx().x
     ty = threadIdx().y
     I = blockIdx().x

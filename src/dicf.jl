@@ -239,7 +239,7 @@ end
 =#
 
 # Left-looking Cholesky
-function dicf(n::Int,L::CuDeviceArray{Float64})
+function dicf(n::Int,L::CuDeviceArray{Float64,2})
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -247,7 +247,7 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
         # Apply the pending updates.
         if j > 1
             if tx >= j && tx <= n && ty == 1
-                @inbounds for k=1:j-1
+                for k=1:j-1
                     L[tx,j] -= L[tx,k] * L[j,k]
                 end
             end
@@ -273,11 +273,6 @@ function dicf(n::Int,L::CuDeviceArray{Float64})
             end
         end
     end
-    #=
-    if tx > ty
-        L[ty,tx] = L[tx,ty]
-    end
-    =#
     CUDA.sync_threads()
 
     return 0

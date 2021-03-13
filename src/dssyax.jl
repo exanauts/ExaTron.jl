@@ -144,12 +144,12 @@ function Base.fill!(A::TronSparseMatrixCSC, val)
     fill!(A.tril_vals, val)
 end
 
-function Base.fill!(w::CuDeviceArray{Float64}, val::Float64)
+function Base.fill!(w::CuDeviceArray{Float64,1}, val::Float64)
     tx = threadIdx().x
     ty = threadIdx().y
 
     if tx <= length(w) && ty == 1
-        w[tx] = val
+        @inbounds w[tx] = val
     end
     CUDA.sync_threads()
 
@@ -208,16 +208,16 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     end
 end
 
-function nrm2!(wa, A::CuDeviceArray{Float64}, n::Int)
+function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 
     v = 0.0
     if tx <= n && ty == 1
-        for j=1:n
+        @inbounds for j=1:n
             v += A[j,tx]^2
         end
-        wa[tx] = sqrt(v)
+        @inbounds wa[tx] = sqrt(v)
     end
     #=
     v = A[tx,ty]^2
@@ -292,18 +292,18 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
     return
 end
 
-function dssyax(n::Int, A::CuDeviceArray{Float64},
-                z::CuDeviceArray{Float64},
-                q::CuDeviceArray{Float64})
+function dssyax(n::Int, A::CuDeviceArray{Float64,2},
+                z::CuDeviceArray{Float64,1},
+                q::CuDeviceArray{Float64,1})
     tx = threadIdx().x
     ty = threadIdx().y
 
     v = 0.0
     if tx <= n && ty == 1
-        for j=1:n
+        @inbounds for j=1:n
             v += A[tx,j]*z[j]
         end
-        q[tx] = v
+        @inbounds q[tx] = v
     end
     #=
     v = 0.0
@@ -329,12 +329,13 @@ function dssyax(n::Int, A::CuDeviceArray{Float64},
     return
 end
 
-function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64},
-                  A::CuDeviceArray{Float64}, indfree::CuDeviceArray{Int},
-                  iwa::CuDeviceArray{Int})
+function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64,2},
+                  A::CuDeviceArray{Float64,2}, indfree::CuDeviceArray{Int,1},
+                  iwa::CuDeviceArray{Int,1})
     tx = threadIdx().x
     ty = threadIdx().y
 
+    #=
     if tx == 1 && ty == 1
         @inbounds for j=1:nfree
             jfree = indfree[j]
@@ -347,6 +348,20 @@ function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64},
             end
         end
     end
+    =#
+    if tx <= nfree && ty == 1
+        @inbounds begin
+            jfree = indfree[tx]
+            B[tx,tx] = A[jfree,jfree]
+            for i=jfree+1:n
+                if iwa[i] > 0
+                    B[iwa[i],tx] = A[i,jfree]
+                    B[tx,iwa[i]] = B[iwa[i],tx]
+                end
+            end
+        end
+    end
+
     CUDA.sync_threads()
 
     return

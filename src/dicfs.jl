@@ -128,10 +128,10 @@ function dicfs(n, nnz, A, L,
     return
 end
 
-function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
-               L::CuDeviceArray{Float64},
-               wa1::CuDeviceArray{Float64},
-               wa2::CuDeviceArray{Float64})
+function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64,2},
+               L::CuDeviceArray{Float64,2},
+               wa1::CuDeviceArray{Float64,1},
+               wa2::CuDeviceArray{Float64,1})
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -148,7 +148,7 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
 
     # Compute the scaling matrix D.
     if tx <= n && ty == 1
-        wa2[tx] = (wa1[tx] > zero) ? one/sqrt(wa1[tx]) : one
+        @inbounds wa2[tx] = (wa1[tx] > zero) ? one/sqrt(wa1[tx]) : one
     end
     CUDA.sync_threads()
 
@@ -164,7 +164,7 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
 
     alpha = zero
     if tx <= n  # No check on ty so that each warp has alpha.
-        alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
+        @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
     end
     CUDA.sync_warp()
 
@@ -192,19 +192,13 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
 
     while true
         if tx <= n && ty == 1
-            for j=1:n
+            @inbounds for j=1:n
                 L[j,tx] = A[j,tx] * wa2[j] * wa2[tx]
             end
             if alpha != zero
-                L[tx,tx] += alpha
+                @inbounds L[tx,tx] += alpha
             end
         end
-        #=
-        L[tx,ty] = A[tx,ty]*wa2[tx]*wa2[ty]
-        if alpha != zero && tx == ty
-            L[tx,tx] = L[tx,tx] + alpha
-        end
-        =#
         CUDA.sync_threads()
 
         # Attempt a Cholesky factorization.
@@ -228,12 +222,6 @@ function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64},
                         end
                     end
                 end
-                #=
-                if tx >= ty
-                    L[tx,ty] = L[tx,ty] / wa2[tx]
-                    L[ty,tx] = L[tx,ty]
-                end
-                =#
                 CUDA.sync_threads()
                 return
             end

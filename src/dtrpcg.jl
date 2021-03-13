@@ -82,7 +82,7 @@ function dtrpcg(n,A,g,delta,L,
         return info, iters
     end
 
-    @inbounds for iters=1:itermax
+    for iters=1:itermax
 
         # Note:
         # Q(w) = 0.5*w'Bw + h'w, where B=L^{-1}AL^{-T}, h=L^{-1}g.

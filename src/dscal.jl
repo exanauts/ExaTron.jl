@@ -56,13 +56,13 @@ else
     dscal(n,da,dx,incx) = tron_dscal(n, da, dx, incx)
 end
 
-function dscal(n::Int,da::Float64,dx::CuDeviceArray{Float64},incx::Int)
+function dscal(n::Int,da::Float64,dx::CuDeviceArray{Float64,1},incx::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 
     # Ignore incx for now.
     if tx <= n && ty == 1
-        dx[tx] = da*dx[tx]
+        @inbounds dx[tx] = da*dx[tx]
     end
     CUDA.sync_threads()
 

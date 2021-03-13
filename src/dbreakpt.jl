@@ -45,8 +45,8 @@ function dbreakpt(n,x,xl,xu,w)
     return nbrpt,brptmin,brptmax
 end
 
-function dbreakpt(n::Int, x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
-                  xu::CuDeviceArray{Float64}, w::CuDeviceArray{Float64})
+function dbreakpt(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
+                  xu::CuDeviceArray{Float64,1}, w::CuDeviceArray{Float64,1})
     zero = 0.0
     nbrpt = 0
     brptmin = zero

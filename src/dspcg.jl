@@ -194,15 +194,15 @@ function dspcg(n,x,xl,xu,A,g,delta,
 end
 
 function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
-               x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
-               xu::CuDeviceArray{Float64}, A::CuDeviceArray{Float64},
-               g::CuDeviceArray{Float64}, s::CuDeviceArray{Float64},
-               B::CuDeviceArray{Float64}, L::CuDeviceArray{Float64},
-               indfree::CuDeviceArray{Int}, gfree::CuDeviceArray{Float64},
-               w::CuDeviceArray{Float64}, iwa::CuDeviceArray{Int},
-               wa1::CuDeviceArray{Float64}, wa2::CuDeviceArray{Float64},
-               wa3::CuDeviceArray{Float64}, wa4::CuDeviceArray{Float64},
-               wa5::CuDeviceArray{Float64})
+               x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
+               xu::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
+               g::CuDeviceArray{Float64,1}, s::CuDeviceArray{Float64,1},
+               B::CuDeviceArray{Float64,2}, L::CuDeviceArray{Float64,2},
+               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{Float64,1},
+               w::CuDeviceArray{Float64,1}, iwa::CuDeviceArray{Int,1},
+               wa1::CuDeviceArray{Float64,1}, wa2::CuDeviceArray{Float64,1},
+               wa3::CuDeviceArray{Float64,1}, wa4::CuDeviceArray{Float64,1},
+               wa5::CuDeviceArray{Float64,1})
 
     tx = threadIdx().x
     ty = threadIdx().y
@@ -246,11 +246,8 @@ function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
                     iwa[j] = 0
                 end
             end
-            iwa[n+1] = nfree
         end
-        CUDA.sync_threads()
-        nfree = iwa[n+1] # Share with all threads.
-        CUDA.sync_threads()
+        nfree = CUDA.shfl_sync(0xffffffff, nfree, 1)
 
         # Exit if there are no free constraints.
 
@@ -265,7 +262,6 @@ function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
 
         # Compute the incomplete Cholesky factorization.
         alpha = zero
-        # TODO
         dicfs(nfree, alpha, B, L, wa1, wa2)
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
@@ -273,10 +269,10 @@ function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
         # Recall that w contains A*(x[k] - x[0]).
         # Compute the norm of the reduced gradient Z'*g.
 
-        if tx == 1 && ty == 1
-            @inbounds for j=1:nfree
-                gfree[j] = w[indfree[j]] + g[indfree[j]]
-                wa1[j] = g[indfree[j]]
+        if tx <= nfree && ty == 1
+            @inbounds begin
+                gfree[tx] = w[indfree[tx]] + g[indfree[tx]]
+                wa1[tx] = g[indfree[tx]]
             end
         end
         CUDA.sync_threads()
@@ -292,17 +288,17 @@ function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
                                tol,stol,itermax,w,
                                wa1,wa2,wa3,wa4,wa5)
 
-        iters = iters + itertr
+        iters += itertr
         dtsol(nfree, L, w)
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.
 
-        if tx == 1 && ty == 1
-            @inbounds for j=1:nfree
-                wa1[j] = x[indfree[j]]
-                wa2[j] = xl[indfree[j]]
-                wa3[j] = xu[indfree[j]]
+        if tx <= nfree && ty == 1
+            @inbounds begin
+                wa1[tx] = x[indfree[tx]]
+                wa2[tx] = xl[indfree[tx]]
+                wa3[tx] = xu[indfree[tx]]
             end
         end
         CUDA.sync_threads()
@@ -312,10 +308,10 @@ function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
         # Update the minimizer and the step.
         # Note that s now contains x[k+1] - x[0].
 
-        if tx == 1 && ty == 1
-            @inbounds for j=1:nfree
-                x[indfree[j]] = wa1[j]
-                s[indfree[j]] = s[indfree[j]] + w[j]
+        if tx <= nfree && ty == 1
+            @inbounds begin
+                x[indfree[tx]] = wa1[tx]
+                s[indfree[tx]] += w[tx]
             end
         end
         CUDA.sync_threads()
