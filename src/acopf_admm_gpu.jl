@@ -205,7 +205,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false)
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false, gpu_no=1)
     data = opf_loaddata(case)
 
     ngen = length(data.generators)
@@ -228,7 +228,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     Kf_mean = 10
 
     if use_gpu
-        CUDA.device!(1)
+        CUDA.device!(gpu_no)
     end
 
     ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)

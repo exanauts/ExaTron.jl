@@ -26,50 +26,54 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
             xu[i] = Inf
         end
 
-        xl[5] = frBound[2*(I-1)+1]
-        xu[5] = frBound[2*I]
-        xl[6] = toBound[2*(I-1)+1]
-        xu[6] = toBound[2*I]
+        @inbounds begin
+            xl[5] = frBound[2*(I-1)+1]
+            xu[5] = frBound[2*I]
+            xl[6] = toBound[2*(I-1)+1]
+            xu[6] = toBound[2*I]
 
-        x[1] = u_curr[pij_start+I]
-        x[2] = u_curr[qij_start+I]
-        x[3] = u_curr[pji_start+I]
-        x[4] = u_curr[qji_start+I]
-        x[5] = min(xu[5], max(xl[5], u_curr[wi_i_ij_start+I]))
-        x[6] = min(xu[6], max(xl[6], u_curr[wi_j_ji_start+I]))
-        x[7] = wRIij[2*(I-1)+1]
-        x[8] = wRIij[2*I]
+            x[1] = u_curr[pij_start+I]
+            x[2] = u_curr[qij_start+I]
+            x[3] = u_curr[pji_start+I]
+            x[4] = u_curr[qji_start+I]
+            x[5] = min(xu[5], max(xl[5], u_curr[wi_i_ij_start+I]))
+            x[6] = min(xu[6], max(xl[6], u_curr[wi_j_ji_start+I]))
+            x[7] = wRIij[2*(I-1)+1]
+            x[8] = wRIij[2*I]
+        end
     end
 
-    YffR = _YffR[I]; YffI = _YffI[I]
-    YftR = _YftR[I]; YftI = _YftI[I]
-    YttR = _YttR[I]; YttI = _YttI[I]
-    YtfR = _YtfR[I]; YtfI = _YtfI[I]
+    @inbounds begin
+        YffR = _YffR[I]; YffI = _YffI[I]
+        YftR = _YftR[I]; YftI = _YftI[I]
+        YttR = _YttR[I]; YttI = _YttI[I]
+        YtfR = _YtfR[I]; YtfI = _YtfI[I]
 
-    param[1,I] = l_curr[pij_start+I]
-    param[2,I] = l_curr[qij_start+I]
-    param[3,I] = l_curr[pji_start+I]
-    param[4,I] = l_curr[qji_start+I]
-    param[5,I] = l_curr[wi_i_ij_start+I]
-    param[6,I] = l_curr[wi_j_ji_start+I]
-    param[7,I] = rho[pij_start+I]
-    param[8,I] = rho[qij_start+I]
-    param[9,I] = rho[pji_start+I]
-    param[10,I] = rho[qji_start+I]
-    param[11,I] = rho[wi_i_ij_start+I]
-    param[12,I] = rho[wi_j_ji_start+I]
-    param[13,I] = v_curr[pij_start+I]
-    param[14,I] = v_curr[qij_start+I]
-    param[15,I] = v_curr[pji_start+I]
-    param[16,I] = v_curr[qji_start+I]
-    param[17,I] = v_curr[wi_i_ij_start+I]
-    param[18,I] = v_curr[wi_j_ji_start+I]
+        param[1,I] = l_curr[pij_start+I]
+        param[2,I] = l_curr[qij_start+I]
+        param[3,I] = l_curr[pji_start+I]
+        param[4,I] = l_curr[qji_start+I]
+        param[5,I] = l_curr[wi_i_ij_start+I]
+        param[6,I] = l_curr[wi_j_ji_start+I]
+        param[7,I] = rho[pij_start+I]
+        param[8,I] = rho[qij_start+I]
+        param[9,I] = rho[pji_start+I]
+        param[10,I] = rho[qji_start+I]
+        param[11,I] = rho[wi_i_ij_start+I]
+        param[12,I] = rho[wi_j_ji_start+I]
+        param[13,I] = v_curr[pij_start+I]
+        param[14,I] = v_curr[qij_start+I]
+        param[15,I] = v_curr[pji_start+I]
+        param[16,I] = v_curr[qji_start+I]
+        param[17,I] = v_curr[wi_i_ij_start+I]
+        param[18,I] = v_curr[wi_j_ji_start+I]
+    end
 
     if major_iter == 1
-        param[24,I] = 10.0
+        @inbounds param[24,I] = 10.0
         mu = 10.0
     else
-        mu = param[24,I]
+        @inbounds mu = param[24,I]
     end
 
     CUDA.sync_threads()
@@ -90,12 +94,14 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
         status, minor_iter = tron_kernel(n, max_feval, max_minor, gtol, x, xl, xu,
                                          param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
 
-        # Check the termination condition.
-        cviol1 = x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8])
-        cviol2 = x[2] - (-YffI*x[5] - YftI*x[7] + YftR*x[8])
-        cviol3 = x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8])
-        cviol4 = x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8])
-        cviol5 = x[7]^2 + x[8]^2 - x[5]*x[6]
+        @inbounds begin
+            # Check the termination condition.
+            cviol1 = x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8])
+            cviol2 = x[2] - (-YffI*x[5] - YftI*x[7] + YftR*x[8])
+            cviol3 = x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8])
+            cviol4 = x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8])
+            cviol5 = x[7]^2 + x[8]^2 - x[5]*x[6]
+        end
 
         cnorm = max(abs(cviol1), abs(cviol2), abs(cviol3), abs(cviol4), abs(cviol5))
 
@@ -104,11 +110,13 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
                 terminate = true
             else
                 if tx == 1 && ty == 1
-                    param[19,I] += mu*cviol1
-                    param[20,I] += mu*cviol2
-                    param[21,I] += mu*cviol3
-                    param[22,I] += mu*cviol4
-                    param[23,I] += mu*cviol5
+                    @inbounds begin
+                        param[19,I] += mu*cviol1
+                        param[20,I] += mu*cviol2
+                        param[21,I] += mu*cviol3
+                        param[22,I] += mu*cviol4
+                        param[23,I] += mu*cviol5
+                    end
                 end
 
                 eta = eta / CUDA.pow(mu, 0.9)
@@ -118,7 +126,7 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
             mu = min(mu_max, mu*10)
             eta = 1 / CUDA.pow(mu, 0.1)
             omega = 1 / mu
-            param[24,I] = mu
+            @inbounds param[24,I] = mu
         end
 
         if it >= max_auglag
@@ -128,15 +136,17 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
         CUDA.sync_threads()
     end
 
-    u_curr[pij_start+I] = x[1]
-    u_curr[qij_start+I] = x[2]
-    u_curr[pji_start+I] = x[3]
-    u_curr[qji_start+I] = x[4]
-    u_curr[wi_i_ij_start+I] = x[5]
-    u_curr[wi_j_ji_start+I] = x[6]
-    wRIij[2*(I-1)+1] = x[7]
-    wRIij[2*I] = x[8]
-    param[24,I] = mu
+    @inbounds begin
+        u_curr[pij_start+I] = x[1]
+        u_curr[qij_start+I] = x[2]
+        u_curr[pji_start+I] = x[3]
+        u_curr[qji_start+I] = x[4]
+        u_curr[wi_i_ij_start+I] = x[5]
+        u_curr[wi_j_ji_start+I] = x[6]
+        wRIij[2*(I-1)+1] = x[7]
+        wRIij[2*I] = x[8]
+        param[24,I] = mu
+    end
 
     CUDA.sync_threads()
 
