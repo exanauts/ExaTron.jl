@@ -19,9 +19,11 @@ function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
     @inbounds for i=1:6
         f += param[i,I]*x[i]
     end
+    @inbounds f += param[25,I]*x[9] + param[26,I]*x[10]
     @inbounds for i=1:6
         f += 0.5*(param[6+i,I]*(x[i] - param[12+i,I])^2)
     end
+    @inbounds f += 0.5*(param[27,I]*(x[9] - param[29,I])^2 + param[28,I]*(x[10] - param[30,I])^2)
 
     @inbounds begin
         c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
@@ -29,12 +31,14 @@ function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
         c3 = (x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8]))
         c4 = (x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8]))
         c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+        c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
         f += param[19,I]*c1
         f += param[20,I]*c2
         f += param[21,I]*c3
         f += param[22,I]*c4
         f += param[23,I]*c5
+        f += param[31,I]*c6
 
         raug = param[24,I]
         f += 0.5*raug*c1^2
@@ -42,6 +46,7 @@ function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
         f += 0.5*raug*c3^2
         f += 0.5*raug*c4^2
         f += 0.5*raug*c5^2
+        f += 0.5*raug*c6^2
     end
 
     CUDA.sync_threads()
@@ -66,6 +71,7 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
         c3 = (x[3] - (YttR*x[6] + YtfR*x[7] - YtfI*x[8]))
         c4 = (x[4] - (-YttI*x[6] - YtfI*x[7] - YtfR*x[8]))
         c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+        c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
         g1 = param[1,I] + param[7,I]*(x[1] - param[13,I])
         g2 = param[2,I] + param[8,I]*(x[2] - param[14,I])
@@ -73,6 +79,9 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
         g4 = param[4,I] + param[10,I]*(x[4] - param[16,I])
         g5 = param[5,I] + param[11,I]*(x[5] - param[17,I])
         g6 = param[6,I] + param[12,I]*(x[6] - param[18,I])
+
+        g9 = param[25,I] + param[27,I]*(x[9] - param[29,I])
+        g10 = param[26,I] + param[28,I]*(x[10] - param[30,I])
 
         raug = param[24,I]
         g1 += param[19,I] + raug*c1
@@ -93,6 +102,11 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
                     raug*(-YftI)*c1 + raug*(-YftR)*c2 + raug*(YtfI)*c3 +
                     raug*(YtfR)*c4 + raug*(2*x[8])*c5
 
+        g7 += (param[31,I] + raug*c6)*(x[8] / (x[7]^2 + x[8]^2))
+        g8 += (-((param[31,I] + raug*c6)*(x[7] / (x[7]^2 + x[8]^2))))
+        g9 += param[31,I] + raug*c6
+        g10 += (-(param[31,I] + raug*c6))
+
         if tx == 1 && ty == 1
             g[1] = g1
             g[2] = g2
@@ -102,6 +116,8 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
             g[6] = g6
             g[7] = g7
             g[8] = g8
+            g[9] = g9
+            g[10] = g10
         end
     end
 
@@ -123,8 +139,10 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Flo
 
     @inbounds begin
         alrect = param[23,I]
+        altheta = param[31,I]
         raug = param[24,I]
         c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+        c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
         if tx == 1 && ty == 1
             # 1st column
@@ -164,13 +182,30 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Flo
 
             # 7th column
             A[7,7] = (alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
-                raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7]))
+                raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7])) +
+                (altheta + raug*c6)*((-2*x[7]*x[8]) / (x[7]^2 + x[8]^2)^2) +
+                raug*(x[8] / (x[7]^2 + x[8]^2))^2
             A[8,7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
-                raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8]))
+                raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8])) +
+                (altheta + raug*c6)*((x[7]^2 - x[8]^2)/(x[7]^2 + x[8]^2)^2) +
+                raug*((x[8]/(x[7]^2 + x[8]^2))*(-x[7]/(x[7]^2 + x[8]^2)))
+            A[9,7] = raug*(x[8]/(x[7]^2 + x[8]^2))
+            A[10,7] = -raug*(x[8]/(x[7]^2 + x[8]^2))
 
             # 8th column
             A[8,8] = (alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
-                raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8]))
+                raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8])) +
+                (altheta + raug*c6)*((2*x[7]*x[8]) / (x[7]^2 + x[8]^2)^2) +
+                raug*(-x[7]/(x[7]^2 + x[8]^2))^2
+            A[9,8] = raug*(-x[7]/(x[7]^2 + x[8]^2))
+            A[10,8] = -raug*(-x[7]/(x[7]^2 + x[8]^2))
+
+            # 9th column
+            A[9,9] = param[27,I] + raug
+            A[10,9] = -raug
+
+            # 10th column
+            A[10,10] = param[28,I] + raug
         end
     end
 
@@ -193,19 +228,23 @@ function eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR
 
     @inbounds begin
         f += sum(param[i,I]*x[i] for i=1:6)
+        f += param[25,I]*x[9] + param[26,I]*x[10]
         f += 0.5*sum(param[6+i,I]*(x[i] - param[12+i,I])^2 for i=1:6)
+        f += 0.5*(param[27,I]*(x[9] - param[29,I])^2 + param[28,I]*(x[10] - param[30,I])^2)
 
         c1 = (x[1] - (YffR[I]*x[5] + YftR[I]*x[7] + YftI[I]*x[8]))
         c2 = (x[2] - (-YffI[I]*x[5] - YftI[I]*x[7] + YftR[I]*x[8]))
         c3 = (x[3] - (YttR[I]*x[6] + YtfR[I]*x[7] - YtfI[I]*x[8]))
         c4 = (x[4] - (-YttI[I]*x[6] - YtfI[I]*x[7] - YtfR[I]*x[8]))
         c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+        c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
         f += param[19,I]*c1
         f += param[20,I]*c2
         f += param[21,I]*c3
         f += param[22,I]*c4
         f += param[23,I]*c5
+        f += param[31,I]*c6
 
         raug = param[24,I]
         f += 0.5*raug*c1^2
@@ -213,6 +252,7 @@ function eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR
         f += 0.5*raug*c3^2
         f += 0.5*raug*c4^2
         f += 0.5*raug*c5^2
+        f += 0.5*raug*c6^2
     end
 
     return f
@@ -227,10 +267,14 @@ function eval_grad_f_kernel_cpu(I, x, g, param, YffR, YffI, YftR, YftI, YttR, Yt
         c3 = (x[3] - (YttR[I]*x[6] + YtfR[I]*x[7] - YtfI[I]*x[8]))
         c4 = (x[4] - (-YttI[I]*x[6] - YtfI[I]*x[7] - YtfR[I]*x[8]))
         c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+        c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
         @inbounds for i=1:6
             g[i] += param[i,I] + param[6+i,I]*(x[i] - param[12+i,I])
         end
+
+        g[9] += param[25,I] + param[27,I]*(x[9] - param[29,I])
+        g[10] += param[26,I] + param[28,I]*(x[10] - param[30,I])
 
         raug = param[24,I]
         g[1] += param[19,I] + raug*c1
@@ -249,6 +293,11 @@ function eval_grad_f_kernel_cpu(I, x, g, param, YffR, YffI, YftR, YftI, YttR, Yt
                 param[22,I]*(YtfR[I]) + param[23,I]*(2*x[8]) +
                 raug*(-YftI[I])*c1 + raug*(-YftR[I])*c2 + raug*(YtfI[I])*c3 +
                 raug*(YtfR[I])*c4 + raug*(2*x[8])*c5
+
+        g[7] += (param[31,I] + raug*c6)*(x[8] / (x[7]^2 + x[8]^2))
+        g[8] += (-((param[31,I] + raug*c6)*(x[7] / (x[7]^2 + x[8]^2))))
+        g[9] += param[31,I] + raug*c6
+        g[10] += (-(param[31,I] + raug*c6))
     end
 
     return
@@ -259,8 +308,8 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
 
     @inbounds begin
         # Sparsity pattern of lower-triangular of Hessian.
-        #     1   2   3   4   5   6   7   8
-        #    ------------------------------
+        #     1   2   3   4   5   6   7   8   9   10
+        #    ---------------------------------------
         # 1 | x
         # 2 |     x
         # 3 |         x
@@ -269,7 +318,9 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
         # 6 |         x   x   x   x
         # 7 | x   x   x   x   x   x   x
         # 8 | x   x   x   x   x   x   x   x
-        #    ------------------------------
+        # 9 |                         x   x   x
+        # 10|                         x   x   x   x
+        #    ---------------------------------------
         if mode == :Structure
             # This doesn't need parallel computation.
             # Move this routine somewhere else.
@@ -313,14 +364,27 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
             # 7th column
             rows[nz] = 7; cols[nz] = 7; nz += 1
             rows[nz] = 8; cols[nz] = 7; nz += 1
+            rows[nz] = 9; cols[nz] = 7; nz += 1
+            rows[nz] = 10; cols[nz] = 7; nz += 1
 
             # 8th column
-            rows[nz] = 8; cols[nz] = 8
+            rows[nz] = 8; cols[nz] = 8; nz += 1
+            rows[nz] = 9; cols[nz] = 8; nz += 1
+            rows[nz] = 10; cols[nz] = 8; nz += 1
+
+            # 9th column
+            rows[nz] = 9; cols[nz] = 9; nz += 1
+            rows[nz] = 10; cols[nz] = 9; nz += 1
+
+            # 10th column
+            rows[nz] = 10; cols[nz] = 10; nz += 1
         else
             nz = 1
             alrect = param[23,I]
+            altheta = param[31,I]
             raug = param[24,I]
             c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
+            c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
             # 1st column
             # (1,1)
@@ -407,16 +471,48 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
             # (7,7)
             values[nz] = (alrect + raug*c5)*2 + raug*(YftR[I]^2) + raug*(YftI[I]^2) +
                 raug*(YtfR[I]^2) + raug*(YtfI[I]^2) + raug*((2*x[7])*(2*x[7]))
+            values[nz] += (altheta + raug*c6)*((-2*x[7]*x[8]) / (x[7]^2 + x[8]^2)^2) # (l6 + rho*c6)*nabla^2_x7x7 c6
+            values[nz] += raug*(x[8] / (x[7]^2 + x[8]^2))^2 # rho*(nabla_x7 c6)^2
             nz += 1
             # (8,7)
             values[nz] = raug*(YftR[I]*YftI[I]) + raug*(YftI[I]*(-YftR[I])) + raug*((-YtfR[I])*YtfI[I]) +
                 raug*(YtfI[I]*YtfR[I]) + raug*((2*x[7])*(2*x[8]))
+            values[nz] += (altheta + raug*c6)*((x[7]^2 - x[8]^2)/(x[7]^2 + x[8]^2)^2) # (l6 + rho*c6)*nabla^2_x8x7 c6
+            values[nz] += raug*((x[8]/(x[7]^2 + x[8]^2))*(-x[7]/(x[7]^2 + x[8]^2))) # (rho*(nabla_x7 c6)*(nabla_x8 c6))
+            nz += 1
+            # (9,7)
+            values[nz] = raug*(x[8]/(x[7]^2 + x[8]^2))
+            nz += 1
+            # (10,7)
+            values[nz] = -raug*(x[8]/(x[7]^2 + x[8]^2))
             nz += 1
 
             # 8th column
             # (8,8)
             values[nz] = (alrect + raug*c5)*2 + raug*(YftI[I]^2) + raug*(YftR[I]^2) +
                 raug*(YtfI[I]^2) + raug*(YtfR[I]^2) + raug*((2*x[8])*(2*x[8]))
+            values[nz] += (altheta + raug*c6)*((2*x[7]*x[8]) / (x[7]^2 + x[8]^2)^2) # (l6 + rho*c6)*nabla^2_x8x8 c6
+            values[nz] += raug*(-x[7]/(x[7]^2 + x[8]^2))^2
+            nz += 1
+            # (9,8)
+            values[nz] = raug*(-x[7]/(x[7]^2 + x[8]^2))
+            nz += 1
+            # (10,8)
+            values[nz] = -raug*(-x[7]/(x[7]^2 + x[8]^2))
+            nz += 1
+
+            # 9th column
+            # (9,9)
+            values[nz] = param[27,I] + raug
+            nz += 1
+            # (10,9)
+            values[nz] = -raug
+            nz += 1
+
+            # 10th column
+            # (10,10)
+            values[nz] = param[28,I] + raug
+            nz += 1
         end
     end
 
