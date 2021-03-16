@@ -12,7 +12,7 @@ This package can be installed by cloning this repository:
 ] add https://github.com/exanauts/ExaTron.jl
 ```
 
-# Performance ExaTron with ADMM on GPUs
+## Performance ExaTron with ADMM on GPUs
 
 With `@inbounds` attached to every array access and the use of instruction
 parallelism instead of `for` loop, timings have reduced significantly.
