@@ -259,6 +259,7 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
     xu = shmem + 2*n;
 
     if (tx == 0 && ty == 0) {
+        #pragma unroll
         for (int j = 0; j < n; j++) {
             xl[j] = -INF;
             xu[j] = INF;
@@ -336,6 +337,7 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
     terminate = false;
 
     double cviol1, cviol2, cviol3, cviol4, cviol5, cviol6, cnorm;
+
     while (!terminate) {
         it += 1;
 
@@ -345,6 +347,7 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
                        &eval_f_kernel, &eval_grad_f_kernel, &eval_h_kernel);
 
         // Check the termination condition.
+
         cviol1 = x[0] - (YffR*x[4] + YftR*x[6] + YftI*x[7]);
         cviol2 = x[1] - (-YffI*x[4] - YftI*x[6] + YftR*x[7]);
         cviol3 = x[2] - (YttR*x[5] + YtfR*x[6] - YtfI*x[7]);

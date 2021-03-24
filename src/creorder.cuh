@@ -30,7 +30,7 @@ void creorder(int n, int nfree, double * __restrict__ B, const double * __restri
         for (int i = jfree+1; i < n; i++) {
             if (iwa[i] > 0) {
                 B[nfree*tx + iwa[i]] = A[n*jfree + i];
-                B[nfree*iwa[i] + tx] = B[nfree*tx + iwa[i]];
+                B[nfree*iwa[i] + tx] = A[n*jfree + i];
             }
         }
     }

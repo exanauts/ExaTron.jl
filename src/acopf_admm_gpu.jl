@@ -323,18 +323,21 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             v_prev .= v_curr
             l_prev .= l_curr
 
-            generator_kernel_cpu(baseMVA, ngen, pg_start, qg_start, u_curr, v_curr, l_curr, rho,
-                                 pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
-            auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+            tcpu = @timed generator_kernel_cpu(baseMVA, ngen, pg_start, qg_start, u_curr, v_curr, l_curr, rho,
+                                               pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
+            time_gen += tcpu.time
+            tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
                                           wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
                                           u_curr, v_curr, l_curr, rho,
                                           wRIij, param, YffR, YffI, YftR, YftI,
                                           YttR, YttI, YtfR, YtfI, FrBound, ToBound)
-            bus_kernel_cpu(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
+            time_br += tcpu.time
+            tcpu = @timed bus_kernel_cpu(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
                            pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
                            ti_i_ij_start, ti_j_ji_start,
                            FrStart, FrIdx, ToStart, ToIdx, GenStart,
                            GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
+            time_bus += tcpu.time
 
             l_curr .+= rho .* (u_curr .- v_curr)
             rd .= -rho .* (v_curr .- v_prev)
@@ -390,12 +393,12 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
 
     if use_gpu
         copyto!(u_curr, cu_u_curr)
-        @printf(" ** [GPU] Kernel time\n")
-        @printf("Generator = %.2f\n", time_gen)
-        @printf("Branch    = %.2f\n", time_br)
-        @printf("Bus       = %.2f\n", time_bus)
-        @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
     end
+    @printf(" ** Time\n")
+    @printf("Generator = %.2f\n", time_gen)
+    @printf("Branch    = %.2f\n", time_br)
+    @printf("Bus       = %.2f\n", time_bus)
+    @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
 
     objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(baseMVA*u_curr[pg_start + g])^2 +
                  data.generators[g].coeff[data.generators[g].n-1]*(baseMVA*u_curr[pg_start + g]) +
