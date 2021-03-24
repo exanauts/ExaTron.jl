@@ -1,17 +1,18 @@
-# ExaTron
+# ExaTron.jl
+
 This is a TRON solver implementation in Julia.
 The intention is to make it work on GPUs as well.
 Currently, we translated the Fortran implementation of [TRON](https://www.mcs.anl.gov/~more/tron)
 into Julia.
 
-# Performance ExaTron with ADMM on GPUs
-Below is a table showing performance statistics of ExaTron used with ADMM on GPUs
-over ACOPF problems without line limit.
+## Installation
 
-| Data | Primal feasibility | Dual feasibility | Time (secs) |
-| ---: | ---: | ---: | ---: |
-|  case9241pegase | 2.404557e-03 | 8.329508e+00 | 145.96 |
-| case13654pegase | 5.425782e-03 | 9.923688e+00 | 163.81 |
+This package can be installed by cloning this repository:
+```julia
+] add https://github.com/exanauts/ExaTron.jl
+```
+
+## Performance ExaTron with ADMM on GPUs
 
 With `@inbounds` attached to every array access and the use of instruction
 parallelism instead of `for` loop, timings have reduced significantly.
@@ -40,3 +41,19 @@ from Ipopt.
 | case9241pegase  | 16,049 | 3.158906e+05 | 6.464865e-03 | 5.607324e+00 | 139.41 | 50.0 | 5000.0 | 6,000 |
 | case13659pegase | 20,467 | 3.861735e+05 | 5.794895e-03 | 8.512909e+00 | 187.97 | 50.0 | 5000.0 | 7,000 |
 
+## Citing this package
+
+```
+@misc{ExaTron.jl.0.0.0,
+  author       = {Kim, Youngdae and Pacaud, Fran\ccois and Kim, Kibaek},
+  title        = {{ExaTron.jl: GPU-capable TRON solver in Julia}},
+  month        = Mar,
+  year         = 2021,
+  version      = {0.0.0},
+  url          = {https://github.com/exanauts/ExaTron.jl}
+}
+```
+
+## Acknowledgements
+
+This material is based upon work supported by the U.S. Department of Energy, Office of Science, under contract number DE-AC02-06CH11357.
