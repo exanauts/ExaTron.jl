@@ -20,7 +20,7 @@ double cgpnorm(int n, double *x, double *xl, double *xu, double *g)
     __syncthreads();
 
     #pragma unroll
-    for (int offset = (n-1)/2 + 1; offset > 0; offset >>= 1) {
+    for (int offset = 16; offset > 0; offset >>= 1) {
         v = max(v, __shfl_down_sync(0xffffffff, v, offset));
     }
     v = __shfl_sync(0xffffffff, v, 0);

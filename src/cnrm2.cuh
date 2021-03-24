@@ -47,7 +47,7 @@ double cnrm2(int n, const double * __restrict__ x)
 
     //int offset = blockDim.x / 2;
     #pragma unroll
-    for (int offset = (n-1)/2 + 1; offset > 0; offset >>= 1) {
+    for (int offset = 16; offset > 0; offset >>= 1) {
         v += __shfl_down_sync(0xffffffff, v, offset);
     }
 

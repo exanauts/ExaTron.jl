@@ -45,10 +45,10 @@ function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,
     end
     CUDA.sync_threads() # Maybe redundant since we will call shfl_sync() at the end.
 
-    offset = div(n, 2, RoundUp)
+    offset = 16
     while offset > 0
         v = max(v, CUDA.shfl_down_sync(0xffffffff, v, offset))
-        offset = div(offset, 2)
+        offset >>= 1
     end
 
     v = CUDA.shfl_sync(0xffffffff, v, 1)

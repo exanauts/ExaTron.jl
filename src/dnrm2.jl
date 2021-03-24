@@ -60,10 +60,10 @@ function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
     end
     CUDA.sync_threads()
 
-    offset = div(n, 2, RoundUp)
+    offset = 16
     while offset > 0
         v += CUDA.shfl_down_sync(0xffffffff, v, offset)
-        offset = div(offset, 2)
+        offset >>= 1
     end
 
     v = sqrt(v)

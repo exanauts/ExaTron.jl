@@ -26,7 +26,7 @@ void cicfs(int n, double alpha, double *A, double *L, double *wa1, double *wa2)
 
     // Find the maximum alpha in a warp and put it in the first thread.
     #pragma unroll
-    for (int offset = (n-1)/2 + 1; offset > 0; offset >>= 1) {
+    for (int offset = 16; offset > 0; offset >>= 1) {
         alpha = max(alpha, __shfl_down_sync(0xffffffff, alpha, offset));
     }
     // Broadcast it to the entire threads in a warp.
