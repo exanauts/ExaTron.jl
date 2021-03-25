@@ -210,7 +210,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false, gpu_no=1)
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false, use_polar=true, gpu_no=1)
     data = opf_loaddata(case)
 
     ngen = length(data.generators)
@@ -219,7 +219,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     nvar = 2*ngen + 8*nline
 
     baseMVA = data.baseMVA
-    n = 10
+    n = (use_polar == true) ? 4 : 10
     mu_max = 1e8
     rho_max = 1e6
     rho_min_pq = 5.0
@@ -326,11 +326,20 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             tcpu = @timed generator_kernel_cpu(baseMVA, ngen, pg_start, qg_start, u_curr, v_curr, l_curr, rho,
                                                pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
             time_gen += tcpu.time
-            tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                          wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                                          u_curr, v_curr, l_curr, rho,
-                                          wRIij, param, YffR, YffI, YftR, YftI,
-                                          YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+
+            if use_polar
+                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+                                            wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                                            u_curr, v_curr, l_curr, rho,
+                                            wRIij, param, YffR, YffI, YftR, YftI,
+                                            YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+            else
+                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+                                            wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                                            u_curr, v_curr, l_curr, rho,
+                                            wRIij, param, YffR, YffI, YftR, YftI,
+                                            YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+            end
             time_br += tcpu.time
             tcpu = @timed bus_kernel_cpu(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
                            pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
@@ -362,11 +371,19 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                  cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0)
             time_gen += tgpu.time
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                                                                              wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                                                                                              cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                              cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
-                                                                                              cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
+            if use_polar
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, pij_start, qij_start, pji_start, qji_start,
+                                                                                                 wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+                                                                                                 cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
+                                                                                                 cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
+                                                                                                 cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
+            else
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+                                                                                                  wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
+                                                                                                  cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
+                                                                                                  cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
+            end
             time_br += tgpu.time
             tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
                                                                            pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,

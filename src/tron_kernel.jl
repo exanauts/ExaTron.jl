@@ -1,7 +1,7 @@
 """
 Driver to run TRON on GPU. This should be called from a kernel.
 """
-function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
+function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, use_polar::Bool,
                      x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
                      xu::CuDeviceArray{Float64,1},
                      param::CuDeviceArray{Float64,2},
@@ -61,7 +61,11 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
         # [0|1]: Evaluate function.
 
         if task == 0 || task == 1
-            f = eval_f_kernel(n, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            if use_polar
+                f = eval_f_polar_kernel(n, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            else
+                f = eval_f_kernel(n, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            end
             nfev += 1
             if nfev >= max_feval
                 search = false
@@ -72,8 +76,13 @@ function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
         # [2] G or H: Evaluate gradient and Hessian.
 
         if task == 0 || task == 2
-            eval_grad_f_kernel(n, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-            eval_h_kernel(n, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            if use_polar
+                eval_grad_f_polar_kernel(n, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_h_polar_kernel(n, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            else
+                eval_grad_f_kernel(n, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_h_kernel(n, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            end
             ngev += 1
             nhev += 1
             minor_iter += 1

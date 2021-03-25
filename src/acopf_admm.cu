@@ -34,6 +34,7 @@
 
 #include "gputest_utilities.cuh"
 
+#include "admm_polar.cuh"
 #include "admm_auglag.cuh"
 #include "admm_generator.cuh"
 #include "admm_bus.cuh"
@@ -41,13 +42,14 @@
 
 static void usage(const char *progname)
 {
-    printf("Usage: %s file iterlim rho_pq rho_va use_gpu [gpu no]\n", progname);
+    printf("Usage: %s file iterlim rho_pq rho_va form use_gpu [gpu no]\n", progname);
     printf("  file   : MATPOWER power network file\n");
     printf("  iterlim: iteration limit of ADMM\n");
     printf("  rho_pq : initial rho for power flows\n");
     printf("  rho_va : initial rho for voltages\n");
+    printf("  form   : 0 for rectangular 1 for polar\n");
     printf("  use_gpu: 0 for CPU and 1 for GPU\n");
-    printf("  gpu no : GPU device number to use\n");
+    printf("  gpu no : GPU device number to use, default 0\n");
 }
 
 void get_generator_data(Network *nw, double **_pgmin, double **_pgmax,
@@ -453,13 +455,13 @@ int main(int argc, char **argv)
 {
     int device = 0;
 
-    if (argc < 6) {
+    if (argc < 7) {
         usage(argv[0]);
         exit(-1);
     }
 
-    if (argc == 7) {
-        device = atoi(argv[6]);
+    if (argc == 8) {
+        device = atoi(argv[7]);
         if (device != 0 && device != 1) {
             usage(argv[0]);
             exit(-1);
@@ -469,7 +471,8 @@ int main(int argc, char **argv)
     int iterlim = atoi(argv[2]);
     double rho_pq = atof(argv[3]);
     double rho_va = atof(argv[4]);
-    bool use_gpu = (atoi(argv[5]) == 1) ? true : false;
+    bool use_polar = (atoi(argv[5]) == 1) ? true : false;
+    bool use_gpu = (atoi(argv[6]) == 1) ? true : false;
 
     if (use_gpu) {
         printf("Set GPU device to use to %d.\n", device);
@@ -491,7 +494,7 @@ int main(int argc, char **argv)
     double mu_max, rho_max, rho_min_pq, rho_min_w, eps_rp, eps_rp_min;
     double rt_inc, rt_dec, eta;
 
-    n = 10;
+    n = use_polar ? 4 : 10;
     mu_max = 1e8;
     rho_max = 1e6;
     rho_min_pq = 5.0;
@@ -624,11 +627,19 @@ int main(int argc, char **argv)
             update_generator(nw->baseMVA, nw->active_ngen, pg_start, qg_start,
                              u_curr, v_curr, l_curr, rho,
                              pgmin, pgmax, qgmin, qgmax, c2, c1, c0);
-            auglag(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                   wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                   u_curr, v_curr, l_curr, rho, wRIij,
-                   param, YffR, YffI, YftR, YftI, YttR, YttI,
-                   YtfR, YtfI, frbound, tobound);
+            if (use_polar) {
+                polar(nw->active_nbranch, n, pij_start, qij_start, pji_start, qji_start,
+                      wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+                      u_curr, v_curr, l_curr, rho,
+                      param, YffR, YffI, YftR, YftI, YttR, YttI,
+                      YtfR, YtfI, frbound, tobound);
+            } else {
+                auglag(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+                       wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                       u_curr, v_curr, l_curr, rho, wRIij,
+                       param, YffR, YffI, YftR, YftI, YttR, YttI,
+                       YtfR, YtfI, frbound, tobound);
+            }
             update_bus(nw->baseMVA, nw->nbus, pg_start, qg_start, pij_start, qij_start,
                        pji_start, qji_start, wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
                        fr_start, fr_idx, to_start, to_idx, gen_start, gen_idx,
@@ -652,11 +663,19 @@ int main(int argc, char **argv)
             update_generator_kernel<<<n_tb_gen, 32>>>(nw->baseMVA, nw->active_ngen, pg_start, qg_start,
                                                       cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                       cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0);
-            auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                                      wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                                                      cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_wRIij,
-                                                      cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
-                                                      cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
+            if (use_polar) {
+                polar_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, pij_start, qij_start, pji_start, qji_start,
+                                                         wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+                                                         cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
+                                                         cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
+                                                         cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
+            } else {
+                auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
+                                                        wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                                                        cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_wRIij,
+                                                        cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
+                                                        cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
+            }
             cudaDeviceSynchronize();
 
             update_bus_kernel<<<n_tb_bus, 32>>>(nw->baseMVA, nw->nbus, pg_start, qg_start, pij_start, qij_start,

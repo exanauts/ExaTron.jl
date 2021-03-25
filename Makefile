@@ -16,7 +16,7 @@ GENCODE_SM70  := -gencode arch=compute_70,code=sm_70
 GENCODE_FLAGS := $(GENCODE_SM70)
 
 LDFLAGS    := -lcudart -lrt -lcurand -lm
-CFLAGS     := -O3 -lineinfo -Xptxas="-dlcm=ca -v" -maxrregcount=96
+CFLAGS     := -O3 -lineinfo -Xptxas="-dlcm=ca -v" #-maxrregcount=128
 SOURCE_DIR  = ./src
 TEST_DIR    = ./test
 CUH_EXA    := src/cicfs.cuh src/cicf.cuh src/cnrm2.cuh src/cdot.cuh \
@@ -35,7 +35,7 @@ CUH_TEST   := test/gputest_utilities.cuh test/gputest_icf.cuh \
 			  test/gputest_driver.cuh
 CUH_ACOPF  := src/admm_auglag.cuh src/admm_generator.cuh src/admm_bus.cuh src/admm_rho.cuh \
               src/consts.cuh src/network.cuh src/parse_mat.cuh src/print.cuh \
-			  src/admittance.cuh
+			  src/admittance.cuh src/admm_polar.cuh
 HPP_ACOPF  := src/admm_auglag.hpp src/admm_generator.hpp src/admm_bus.hpp \
               src/consts.hpp src/network.hpp src/parse_mat.hpp src/print.hpp \
 			  src/admittance.hpp src/gputest_utilities.hpp
