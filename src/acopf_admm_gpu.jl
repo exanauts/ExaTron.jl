@@ -370,6 +370,11 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(baseMVA, ngen, pg_start, qg_start,
                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                  cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0)
+            # MPI routines to be implemented:
+            #  - Broadcast cu_v_curr and cu_l_curr to GPUs.
+            #  - Collect cu_u_curr.
+            #  - div(nblk_br / number of GPUs, RoundUp)
+
             time_gen += tgpu.time
             if use_polar
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, pij_start, qij_start, pji_start, qji_start,
