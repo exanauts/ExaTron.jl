@@ -1,8 +1,5 @@
 function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
-                       pij_start::Int, qij_start::Int,
-                       pji_start::Int, qji_start::Int,
-                       wi_i_ij_start::Int, wi_j_ji_start::Int,
-                       ti_i_ij_start::Int, ti_j_ji_start::Int,
+                       line_start::Int,
                        mu_max::Float64,
                        u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
                        l_curr::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
@@ -21,6 +18,8 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
     xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
     xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
 
+    pij_idx = line_start + 8*(I-1)
+
     if tx == 1 && ty == 1
         @inbounds for i=1:n
             xl[i] = -Inf
@@ -37,16 +36,16 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
             xl[10] = -2*pi
             xu[10] = 2*pi
 
-            x[1] = u_curr[pij_start+I]
-            x[2] = u_curr[qij_start+I]
-            x[3] = u_curr[pji_start+I]
-            x[4] = u_curr[qji_start+I]
-            x[5] = min(xu[5], max(xl[5], u_curr[wi_i_ij_start+I]))
-            x[6] = min(xu[6], max(xl[6], u_curr[wi_j_ji_start+I]))
+            x[1] = u_curr[pij_idx]
+            x[2] = u_curr[pij_idx+1]
+            x[3] = u_curr[pij_idx+2]
+            x[4] = u_curr[pij_idx+3]
+            x[5] = min(xu[5], max(xl[5], u_curr[pij_idx+4]))
+            x[6] = min(xu[6], max(xl[6], u_curr[pij_idx+5]))
             x[7] = wRIij[2*(I-1)+1]
             x[8] = wRIij[2*I]
-            x[9] = min(xu[9], max(xl[9], u_curr[ti_i_ij_start+I]))
-            x[10] = min(xu[10], max(xl[10], u_curr[ti_j_ji_start+I]))
+            x[9] = min(xu[9], max(xl[9], u_curr[pij_idx+6]))
+            x[10] = min(xu[10], max(xl[10], u_curr[pij_idx+7]))
         end
     end
 
@@ -56,31 +55,31 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
         YttR = _YttR[I]; YttI = _YttI[I]
         YtfR = _YtfR[I]; YtfI = _YtfI[I]
 
-        param[1,I] = l_curr[pij_start+I]
-        param[2,I] = l_curr[qij_start+I]
-        param[3,I] = l_curr[pji_start+I]
-        param[4,I] = l_curr[qji_start+I]
-        param[5,I] = l_curr[wi_i_ij_start+I]
-        param[6,I] = l_curr[wi_j_ji_start+I]
-        param[7,I] = rho[pij_start+I]
-        param[8,I] = rho[qij_start+I]
-        param[9,I] = rho[pji_start+I]
-        param[10,I] = rho[qji_start+I]
-        param[11,I] = rho[wi_i_ij_start+I]
-        param[12,I] = rho[wi_j_ji_start+I]
-        param[13,I] = v_curr[pij_start+I]
-        param[14,I] = v_curr[qij_start+I]
-        param[15,I] = v_curr[pji_start+I]
-        param[16,I] = v_curr[qji_start+I]
-        param[17,I] = v_curr[wi_i_ij_start+I]
-        param[18,I] = v_curr[wi_j_ji_start+I]
+        param[1,I] = l_curr[pij_idx]
+        param[2,I] = l_curr[pij_idx+1]
+        param[3,I] = l_curr[pij_idx+2]
+        param[4,I] = l_curr[pij_idx+3]
+        param[5,I] = l_curr[pij_idx+4]
+        param[6,I] = l_curr[pij_idx+5]
+        param[7,I] = rho[pij_idx]
+        param[8,I] = rho[pij_idx+1]
+        param[9,I] = rho[pij_idx+2]
+        param[10,I] = rho[pij_idx+3]
+        param[11,I] = rho[pij_idx+4]
+        param[12,I] = rho[pij_idx+5]
+        param[13,I] = v_curr[pij_idx]
+        param[14,I] = v_curr[pij_idx+1]
+        param[15,I] = v_curr[pij_idx+2]
+        param[16,I] = v_curr[pij_idx+3]
+        param[17,I] = v_curr[pij_idx+4]
+        param[18,I] = v_curr[pij_idx+5]
 
-        param[25,I] = l_curr[ti_i_ij_start+I]
-        param[26,I] = l_curr[ti_j_ji_start+I]
-        param[27,I] = rho[ti_i_ij_start+I]
-        param[28,I] = rho[ti_j_ji_start+I]
-        param[29,I] = v_curr[ti_i_ij_start+I]
-        param[30,I] = v_curr[ti_j_ji_start+I]
+        param[25,I] = l_curr[pij_idx+6]
+        param[26,I] = l_curr[pij_idx+7]
+        param[27,I] = rho[pij_idx+6]
+        param[28,I] = rho[pij_idx+7]
+        param[29,I] = v_curr[pij_idx+6]
+        param[30,I] = v_curr[pij_idx+7]
     end
 
     if major_iter == 1
@@ -153,16 +152,16 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
     end
 
     @inbounds begin
-        u_curr[pij_start+I] = x[1]
-        u_curr[qij_start+I] = x[2]
-        u_curr[pji_start+I] = x[3]
-        u_curr[qji_start+I] = x[4]
-        u_curr[wi_i_ij_start+I] = x[5]
-        u_curr[wi_j_ji_start+I] = x[6]
+        u_curr[pij_idx] = x[1]
+        u_curr[pij_idx+1] = x[2]
+        u_curr[pij_idx+2] = x[3]
+        u_curr[pij_idx+3] = x[4]
+        u_curr[pij_idx+4] = x[5]
+        u_curr[pij_idx+5] = x[6]
         wRIij[2*(I-1)+1] = x[7]
         wRIij[2*I] = x[8]
-        u_curr[ti_i_ij_start+I] = x[9]
-        u_curr[ti_j_ji_start+I] = x[10]
+        u_curr[pij_idx+6] = x[9]
+        u_curr[pij_idx+7] = x[10]
         param[24,I] = mu
     end
 
@@ -172,11 +171,7 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
 end
 
 function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
-                           pij_start::Int, qij_start::Int,
-                           pji_start::Int, qji_start::Int,
-                           wi_i_ij_start::Int, wi_j_ji_start::Int,
-                           ti_i_ij_start::Int, ti_j_ji_start::Int,
-                           mu_max::Float64,
+                           line_start::Int, mu_max::Float64,
                            u_curr::Array{Float64}, v_curr::Array{Float64},
                            l_curr::Array{Float64}, rho::Array{Float64},
                            wRIij::Array{Float64},
@@ -208,40 +203,37 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
         xl[10] = -2*pi
         xu[10] = 2*pi
 
-        x[1] = u_curr[pij_start+I]
-        x[2] = u_curr[qij_start+I]
-        x[3] = u_curr[pji_start+I]
-        x[4] = u_curr[qji_start+I]
-        x[5] = min(xu[5], max(xl[5], u_curr[wi_i_ij_start+I]))
-        x[6] = min(xu[6], max(xl[6], u_curr[wi_j_ji_start+I]))
+        pij_idx = line_start + 8*(I-1)
+
+        x[1] = u_curr[pij_idx]
+        x[2] = u_curr[pij_idx+1]
+        x[3] = u_curr[pij_idx+2]
+        x[4] = u_curr[pij_idx+3]
+        x[5] = min(xu[5], max(xl[5], u_curr[pij_idx+4]))
+        x[6] = min(xu[6], max(xl[6], u_curr[pij_idx+5]))
         x[7] = wRIij[2*(I-1)+1]
         x[8] = wRIij[2*I]
-        x[9] = min(xu[9], max(xl[9], u_curr[ti_i_ij_start+I]))
-        x[10] = min(xu[10], max(xl[10], u_curr[ti_j_ji_start+I]))
+        x[9] = min(xu[9], max(xl[9], u_curr[pij_idx+6]))
+        x[10] = min(xu[10], max(xl[10], u_curr[pij_idx+7]))
 
-        #=
-        @printf("  %10d %12.5e  %12.5e  %12.5e  %12.5e  %12.5e  %12.5e  %12.5e  %12.5e\n",
-                I, x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-        =#
-
-        param[1,I] = l_curr[pij_start+I]
-        param[2,I] = l_curr[qij_start+I]
-        param[3,I] = l_curr[pji_start+I]
-        param[4,I] = l_curr[qji_start+I]
-        param[5,I] = l_curr[wi_i_ij_start+I]
-        param[6,I] = l_curr[wi_j_ji_start+I]
-        param[7,I] = rho[pij_start+I]
-        param[8,I] = rho[qij_start+I]
-        param[9,I] = rho[pji_start+I]
-        param[10,I] = rho[qji_start+I]
-        param[11,I] = rho[wi_i_ij_start+I]
-        param[12,I] = rho[wi_j_ji_start+I]
-        param[13,I] = v_curr[pij_start+I]
-        param[14,I] = v_curr[qij_start+I]
-        param[15,I] = v_curr[pji_start+I]
-        param[16,I] = v_curr[qji_start+I]
-        param[17,I] = v_curr[wi_i_ij_start+I]
-        param[18,I] = v_curr[wi_j_ji_start+I]
+        param[1,I] = l_curr[pij_idx]
+        param[2,I] = l_curr[pij_idx+1]
+        param[3,I] = l_curr[pij_idx+2]
+        param[4,I] = l_curr[pij_idx+3]
+        param[5,I] = l_curr[pij_idx+4]
+        param[6,I] = l_curr[pij_idx+5]
+        param[7,I] = rho[pij_idx]
+        param[8,I] = rho[pij_idx+1]
+        param[9,I] = rho[pij_idx+2]
+        param[10,I] = rho[pij_idx+3]
+        param[11,I] = rho[pij_idx+4]
+        param[12,I] = rho[pij_idx+5]
+        param[13,I] = v_curr[pij_idx]
+        param[14,I] = v_curr[pij_idx+1]
+        param[15,I] = v_curr[pij_idx+2]
+        param[16,I] = v_curr[pij_idx+3]
+        param[17,I] = v_curr[pij_idx+4]
+        param[18,I] = v_curr[pij_idx+5]
 
         if major_iter == 1
             param[24,I] = 10.0
@@ -250,12 +242,12 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
             mu = param[24,I]
         end
 
-        param[25,I] = l_curr[ti_i_ij_start+I]
-        param[26,I] = l_curr[ti_j_ji_start+I]
-        param[27,I] = rho[ti_i_ij_start+I]
-        param[28,I] = rho[ti_j_ji_start+I]
-        param[29,I] = v_curr[ti_i_ij_start+I]
-        param[30,I] = v_curr[ti_j_ji_start+I]
+        param[25,I] = l_curr[pij_idx+6]
+        param[26,I] = l_curr[pij_idx+7]
+        param[27,I] = rho[pij_idx+6]
+        param[28,I] = rho[pij_idx+7]
+        param[29,I] = v_curr[pij_idx+6]
+        param[30,I] = v_curr[pij_idx+7]
 
         function eval_f_cb(x)
             f= eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
@@ -334,16 +326,16 @@ function auglag_kernel_cpu(n::Int, nline::Int, major_iter::Int, max_auglag::Int,
 
         avg_auglag_it += it
         avg_minor_it += (avg_tron_minor / it)
-        u_curr[pij_start+I] = x[1]
-        u_curr[qij_start+I] = x[2]
-        u_curr[pji_start+I] = x[3]
-        u_curr[qji_start+I] = x[4]
-        u_curr[wi_i_ij_start+I] = x[5]
-        u_curr[wi_j_ji_start+I] = x[6]
+        u_curr[pij_idx] = x[1]
+        u_curr[pij_idx+1] = x[2]
+        u_curr[pij_idx+2] = x[3]
+        u_curr[pij_idx+3] = x[4]
+        u_curr[pij_idx+4] = x[5]
+        u_curr[pij_idx+5] = x[6]
         wRIij[2*(I-1)+1] = x[7]
         wRIij[2*I] = x[8]
-        u_curr[ti_i_ij_start+I] = x[9]
-        u_curr[ti_j_ji_start+I] = x[10]
+        u_curr[pij_idx+6] = x[9]
+        u_curr[pij_idx+7] = x[10]
         param[24,I] = mu
     end
 

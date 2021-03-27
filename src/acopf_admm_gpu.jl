@@ -113,9 +113,7 @@ function get_branch_data(data; use_gpu=false)
     end
 end
 
-function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
-                     pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
-                     ti_i_ij_start, ti_j_ji_start,
+function init_values(data, ybus, gen_start, line_start,
                      rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
     lines = data.lines
     buses = data.buses
@@ -130,36 +128,42 @@ function init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
     YshR = ybus.YshR; YshI = ybus.YshI
 
     for g=1:ngen
-        u_curr[pg_start+g] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
-        u_curr[qg_start+g] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        pg_idx = gen_start + 2*(g-1)
+        u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
+        u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
     end
+
+    rho .= rho_pq
 
     for l=1:nline
         wij0 = (buses[BusIdx[lines[l].from]].Vmax^2 + buses[BusIdx[lines[l].from]].Vmin^2) / 2
         wji0 = (buses[BusIdx[lines[l].to]].Vmax^2 + buses[BusIdx[lines[l].to]].Vmin^2) / 2
         wR0 = sqrt(wij0 * wji0)
 
-        u_curr[pij_start+l] = YffR[l] * wij0 + YftR[l] * wR0
-        u_curr[qij_start+l] = -YffI[l] * wij0 - YftI[l] * wR0
-        u_curr[wi_i_ij_start+l] = wij0
-        u_curr[pji_start+l] = YttR[l] * wji0 + YtfR[l] * wR0
-        u_curr[qji_start+l] = -YttI[l] * wji0 - YtfI[l] * wR0
-        u_curr[wi_j_ji_start+l] = wji0
-        u_curr[ti_i_ij_start+l] = 0.0
-        u_curr[ti_j_ji_start+l] = 0.0
+        pij_idx = line_start + 8*(l-1)
+        u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        u_curr[pij_idx+4] = wij0
+        u_curr[pij_idx+5] = wji0
+        u_curr[pij_idx+6] = 0.0
+        u_curr[pij_idx+7] = 0.0
         wRIij[2*(l-1)+1] = wR0
         wRIij[2*l] = 0.0
 
-        v_curr[wi_i_ij_start+l] = wij0
-        v_curr[wi_j_ji_start+l] = wji0
-        v_curr[ti_i_ij_start+l] = 0.0
-        v_curr[ti_j_ji_start+l] = 0.0
+        v_curr[pij_idx+4] = wij0
+        v_curr[pij_idx+5] = wji0
+        v_curr[pij_idx+6] = 0.0
+        v_curr[pij_idx+7] = 0.0
+
+        rho[pij_idx+4:pij_idx+7] .= rho_va
     end
 
     l_curr .= 0
 
-    rho[1:2*ngen+4*nline] .= rho_pq
-    rho[2*ngen+4*nline+1:end] .= rho_va
+#    rho[1:2*ngen+4*nline] .= rho_pq
+#    rho[2*ngen+4*nline+1:end] .= rho_va
 
     return
 end
@@ -246,8 +250,9 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     cuYshR, cuYshI, cuYffR, cuYffI, cuYftR, cuYftI, cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound = get_branch_data(data; use_gpu=true)
     cu_FrStart, cu_FrIdx, cu_ToStart, cu_ToIdx, cu_GenStart, cu_GenIdx, cu_Pd, cu_Qd = get_bus_data(data; use_gpu=true)
 
-    pg_start = 0
-    qg_start = ngen
+    gen_start = 1
+    line_start = 2*ngen + 1
+    #=
     pij_start = 2*ngen
     qij_start = 2*ngen + nline
     pji_start = 2*ngen + 2*nline
@@ -256,6 +261,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     wi_j_ji_start = 2*ngen + 5*nline
     ti_i_ij_start = 2*ngen + 6*nline
     ti_j_ji_start = 2*ngen + 7*nline
+    =#
 
     u_curr = zeros(nvar)
     v_curr = zeros(nvar)
@@ -271,9 +277,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     param = zeros(31, nline)
     wRIij = zeros(2*nline)
 
-    init_values(data, ybus, pg_start, qg_start, pij_start, qij_start,
-                pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
-                ti_i_ij_start, ti_j_ji_start,
+    init_values(data, ybus, gen_start, line_start,
                 rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
 
     cu_u_curr = CuArray{Float64}(undef, nvar)
@@ -323,29 +327,25 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             v_prev .= v_curr
             l_prev .= l_curr
 
-            tcpu = @timed generator_kernel_cpu(baseMVA, ngen, pg_start, qg_start, u_curr, v_curr, l_curr, rho,
-                                               pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
+            tcpu = @timed generator_kernel_cpu(baseMVA, ngen, gen_start, u_curr, v_curr, l_curr, rho,
+                                               pgmin, pgmax, qgmin, qgmax, c2, c1)
             time_gen += tcpu.time
 
             if use_polar
-                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                            wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                                            u_curr, v_curr, l_curr, rho,
-                                            wRIij, param, YffR, YffI, YftR, YftI,
-                                            YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, line_start,
+                                                                    u_curr, v_curr, l_curr, rho,
+                                                                    param, YffR, YffI, YftR, YftI,
+                                                                    YttR, YttI, YtfR, YtfI, FrBound, ToBound)
             else
-                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                            wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                                            u_curr, v_curr, l_curr, rho,
-                                            wRIij, param, YffR, YffI, YftR, YftI,
-                                            YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, line_start, mu_max,
+                                                                     u_curr, v_curr, l_curr, rho,
+                                                                     wRIij, param, YffR, YffI, YftR, YftI,
+                                                                     YttR, YttI, YtfR, YtfI, FrBound, ToBound)
             end
             time_br += tcpu.time
-            tcpu = @timed bus_kernel_cpu(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
-                           pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
-                           ti_i_ij_start, ti_j_ji_start,
-                           FrStart, FrIdx, ToStart, ToIdx, GenStart,
-                           GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
+            tcpu = @timed bus_kernel_cpu(baseMVA, nbus, gen_start, line_start,
+                                         FrStart, FrIdx, ToStart, ToIdx, GenStart,
+                                         GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
             time_bus += tcpu.time
 
             l_curr .+= rho .* (u_curr .- v_curr)
@@ -367,9 +367,9 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_l_prev, cu_l_curr)
             CUDA.synchronize()
 
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(baseMVA, ngen, pg_start, qg_start,
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(baseMVA, ngen, gen_start,
                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                 cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0)
+                                                                                 cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1)
             # MPI routines to be implemented:
             #  - Broadcast cu_v_curr and cu_l_curr to GPUs.
             #  - Collect cu_u_curr.
@@ -377,22 +377,18 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
 
             time_gen += tgpu.time
             if use_polar
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, pij_start, qij_start, pji_start, qji_start,
-                                                                                                 wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, line_start,
                                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                                  cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                                                                                                  cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
             else
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                                                                                  wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, line_start, mu_max,
                                                                                                   cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                                   cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                                                                                                   cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
             end
             time_br += tgpu.time
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(baseMVA, nbus, pg_start, qg_start, pij_start, qij_start,
-                                                                           pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
-                                                                           ti_i_ij_start, ti_j_ji_start,
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(baseMVA, nbus, gen_start, line_start,
                                                                            cu_FrStart, cu_FrIdx, cu_ToStart, cu_ToIdx, cu_GenStart,
                                                                            cu_GenIdx, cu_Pd, cu_Qd, cu_u_curr, cu_v_curr, cu_l_curr,
                                                                            cu_rho, cuYshR, cuYshI)
@@ -422,8 +418,8 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     @printf("Bus       = %.2f\n", time_bus)
     @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
 
-    objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(baseMVA*u_curr[pg_start + g])^2 +
-                 data.generators[g].coeff[data.generators[g].n-1]*(baseMVA*u_curr[pg_start + g]) +
+    objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(baseMVA*u_curr[gen_start+2*(g-1)])^2 +
+                 data.generators[g].coeff[data.generators[g].n-1]*(baseMVA*u_curr[gen_start+2*(g-1)]) +
                  data.generators[g].coeff[data.generators[g].n]
                  for g in 1:ngen)
     @printf("Objective value = %.6e\n", objval)
