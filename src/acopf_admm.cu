@@ -315,48 +315,49 @@ void get_branch_data(Network *nw, double **_YshR, double **_YshI,
     return;
 }
 
-void init_values(Network *nw, int pg_start, int qg_start, int pij_start, int qij_start,
-                 int pji_start, int qji_start, int wi_i_ij_start, int wi_j_ji_start,
-                 int ti_i_ij_start, int ti_j_ji_start,
+void init_values(Network *nw, int generator_start, int line_start,
                  double rho_pq, double rho_va,
                  double *u_curr, double *v_curr, double *l_curr, double *rho, double *wRIij)
 {
     for (int i = 0; i < nw->active_ngen; i++) {
-        u_curr[pg_start+i] = 0.5*(nw->gen[i].pb / nw->baseMVA + nw->gen[i].pt / nw->baseMVA);
-        u_curr[qg_start+i] = 0.5*(nw->gen[i].qb / nw->baseMVA + nw->gen[i].qt / nw->baseMVA);
+        u_curr[generator_start+2*i] = 0.5*(nw->gen[i].pb / nw->baseMVA + nw->gen[i].pt / nw->baseMVA);
+        u_curr[generator_start+2*i+1] = 0.5*(nw->gen[i].qb / nw->baseMVA + nw->gen[i].qt / nw->baseMVA);
+    }
+
+    for (int i = 0; i < 2*nw->active_ngen + 8*nw->active_nbranch; i++) {
+        rho[i] = rho_pq;
     }
 
     for (int i = 0; i < nw->active_nbranch; i++) {
+        int pij_idx = line_start + 8*i;
         int fr = nw->b2i[nw->branch[i].fr];
         int to = nw->b2i[nw->branch[i].to];
         double wij0 = (nw->bus[fr].nvhi*nw->bus[fr].nvhi + nw->bus[fr].nvlo*nw->bus[fr].nvlo) / 2;
         double wji0 = (nw->bus[to].nvhi*nw->bus[to].nvhi + nw->bus[to].nvlo*nw->bus[to].nvlo) / 2;
         double wR0 = sqrt(wij0 * wji0);
 
-        u_curr[pij_start+i] = nw->YffR[i] * wij0 + nw->YftR[i] * wR0;
-        u_curr[qij_start+i] = -nw->YffI[i] * wij0 - nw->YftI[i] * wR0;
-        u_curr[wi_i_ij_start+i] = wij0;
-        u_curr[pji_start+i] = nw->YttR[i] * wji0 + nw->YtfR[i] * wR0;
-        u_curr[qji_start+i] = -nw->YttI[i] * wji0 - nw->YtfI[i] * wR0;
-        u_curr[wi_j_ji_start+i] = wji0;
-        u_curr[ti_i_ij_start+i] = 0.0;
-        u_curr[ti_j_ji_start+i] = 0.0;
+        u_curr[pij_idx] = nw->YffR[i] * wij0 + nw->YftR[i] * wR0;
+        u_curr[pij_idx+1] = -nw->YffI[i] * wij0 - nw->YftI[i] * wR0;
+        u_curr[pij_idx+2] = nw->YttR[i] * wji0 + nw->YtfR[i] * wR0;
+        u_curr[pij_idx+3] = -nw->YttI[i] * wji0 - nw->YtfI[i] * wR0;
+        u_curr[pij_idx+4] = wij0;
+        u_curr[pij_idx+5] = wji0;
+        u_curr[pij_idx+6] = 0.0;
+        u_curr[pij_idx+7] = 0.0;
         wRIij[2*i] = wR0;
         wRIij[2*i+1] = 0.0;
 
-        v_curr[wi_i_ij_start+i] = wij0;
-        v_curr[wi_j_ji_start+i] = wji0;
-        v_curr[ti_i_ij_start+i] = 0.0;
-        v_curr[ti_j_ji_start+i] = 0.0;
+        v_curr[pij_idx+4] = wij0;
+        v_curr[pij_idx+5] = wji0;
+        v_curr[pij_idx+6] = 0.0;
+        v_curr[pij_idx+7] = 0.0;
+
+        for (int j = 0; j < 4; j++) {
+            rho[pij_idx+4+j] = rho_va;
+        }
     }
 
     memset(l_curr, 0, sizeof(double)*(2*nw->active_ngen + 8*nw->active_nbranch));
-    for (int i = 0; i < 2*nw->active_ngen + 4*nw->active_nbranch; i++) {
-        rho[i] = rho_pq;
-    }
-    for (int i = 2*nw->active_ngen + 4*nw->active_nbranch; i < 2*nw->active_ngen + 8*nw->active_nbranch; i++) {
-        rho[i] = rho_va;
-    }
 
     return;
 }
@@ -527,26 +528,15 @@ int main(int argc, char **argv)
     get_branch_data(nw, &YshR, &YshI, &YffR, &YffI, &YftR, &YftI, &YttR, &YttI, &YtfR, &YtfI, &frbound, &tobound);
     get_branch_data(nw, &cu_YshR, &cu_YshI, &cu_YffR, &cu_YffI, &cu_YftR, &cu_YftI, &cu_YttR, &cu_YttI, &cu_YtfR, &cu_YtfI, &cu_frbound, &cu_tobound, true);
 
-    int nvars, pg_start, qg_start, pij_start, qij_start, pji_start, qji_start, wi_i_ij_start, wi_j_ji_start, pq_end;
-    int ti_i_ij_start, ti_j_ji_start;
+    int nvars, generator_start, line_start;
     double *u_curr, *v_curr, *l_curr, *u_prev, *v_prev, *l_prev, *rho, *param, *wRIij;
     double *rp, *rd, *rp_old, *rp_k0, *tau;
     double *cu_u_curr, *cu_v_curr, *cu_l_curr, *cu_u_prev, *cu_v_prev, *cu_l_prev, *cu_rho, *cu_param, *cu_wRIij;
     double *cu_rp, *cu_rd, *cu_rp_old, *cu_rp_k0, *cu_tau;
 
     nvars = 2*nw->active_ngen + 8*nw->active_nbranch;
-    pg_start = 0;
-    qg_start = pg_start + nw->active_ngen;
-    pij_start = qg_start + nw->active_ngen;
-    qij_start = pij_start + nw->active_nbranch;
-    pji_start = qij_start + nw->active_nbranch;
-    qji_start = pji_start + nw->active_nbranch;
-    wi_i_ij_start = qji_start + nw->active_nbranch;
-    wi_j_ji_start = wi_i_ij_start + nw->active_nbranch;
-    ti_i_ij_start = wi_j_ji_start + nw->active_nbranch;
-    ti_j_ji_start = ti_i_ij_start + nw->active_nbranch;
-
-    pq_end = qji_start + nw->active_nbranch - 1;
+    generator_start = 0;
+    line_start = 2*nw->active_ngen;
 
     u_curr = (double *)calloc(nvars, sizeof(double));
     v_curr = (double *)calloc(nvars, sizeof(double));
@@ -563,8 +553,7 @@ int main(int argc, char **argv)
     rp_k0 = (double *)calloc(nvars, sizeof(double));
     //tau = (double *)calloc(nvars*iterlim, sizeof(double));
 
-    init_values(nw, pg_start, qg_start, pij_start, qij_start, pji_start, qji_start, wi_i_ij_start, wi_j_ji_start,
-                ti_i_ij_start, ti_j_ji_start, rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij);
+    init_values(nw, generator_start, line_start, rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij);
     //memcpy(tau, rho, sizeof(double)*nvars);
 
     cudaMalloc(&cu_u_curr, sizeof(double)*nvars);
@@ -624,24 +613,21 @@ int main(int argc, char **argv)
             copy_data(nvars, v_prev, v_curr);
             copy_data(nvars, l_prev, l_curr);
 
-            update_generator(nw->baseMVA, nw->active_ngen, pg_start, qg_start,
+            update_generator(nw->baseMVA, nw->active_ngen, generator_start,
                              u_curr, v_curr, l_curr, rho,
                              pgmin, pgmax, qgmin, qgmax, c2, c1, c0);
             if (use_polar) {
-                polar(nw->active_nbranch, n, pij_start, qij_start, pji_start, qji_start,
-                      wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+                polar(nw->active_nbranch, n, line_start,
                       u_curr, v_curr, l_curr, rho,
                       param, YffR, YffI, YftR, YftI, YttR, YttI,
                       YtfR, YtfI, frbound, tobound);
             } else {
-                auglag(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                       wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
+                auglag(nw->active_nbranch, n, it, max_auglag, line_start, mu_max,
                        u_curr, v_curr, l_curr, rho, wRIij,
                        param, YffR, YffI, YftR, YftI, YttR, YttI,
                        YtfR, YtfI, frbound, tobound);
             }
-            update_bus(nw->baseMVA, nw->nbus, pg_start, qg_start, pij_start, qij_start,
-                       pji_start, qji_start, wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+            update_bus(nw->baseMVA, nw->nbus, generator_start, line_start,
                        fr_start, fr_idx, to_start, to_idx, gen_start, gen_idx,
                        pd, qd, u_curr, v_curr, l_curr, rho, YshR, YshI);
 
@@ -660,26 +646,23 @@ int main(int argc, char **argv)
             copy_data_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_v_prev, cu_v_curr);
             copy_data_kernel<<<(nvars-1)/64+1, 64>>>(nvars, cu_l_prev, cu_l_curr);
 
-            update_generator_kernel<<<n_tb_gen, 32>>>(nw->baseMVA, nw->active_ngen, pg_start, qg_start,
+            update_generator_kernel<<<n_tb_gen, 32>>>(nw->baseMVA, nw->active_ngen, generator_start,
                                                       cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                       cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0);
             if (use_polar) {
-                polar_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, pij_start, qij_start, pji_start, qji_start,
-                                                         wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+                polar_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, line_start,
                                                          cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                          cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
                                                          cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
             } else {
-                auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, pij_start, qij_start, pji_start, qji_start,
-                                                        wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start, mu_max,
-                                                        cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_wRIij,
-                                                        cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
-                                                        cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
+                auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, line_start, mu_max,
+                                                          cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_wRIij,
+                                                          cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
+                                                          cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
             }
             cudaDeviceSynchronize();
 
-            update_bus_kernel<<<n_tb_bus, 32>>>(nw->baseMVA, nw->nbus, pg_start, qg_start, pij_start, qij_start,
-                                                pji_start, qji_start, wi_i_ij_start, wi_j_ji_start, ti_i_ij_start, ti_j_ji_start,
+            update_bus_kernel<<<n_tb_bus, 32>>>(nw->baseMVA, nw->nbus, generator_start, line_start,
                                                 cu_frstart, cu_fridx, cu_tostart, cu_toidx, cu_genstart, cu_genidx,
                                                 cu_pd, cu_qd, cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_YshR, cu_YshI);
             cudaDeviceSynchronize();
@@ -723,8 +706,9 @@ int main(int argc, char **argv)
 
     double objval = 0;
     for (int i = 0; i < nw->active_ngen; i++) {
-        objval += c2[i]*((nw->baseMVA*u_curr[pg_start+i])*(nw->baseMVA*u_curr[pg_start+i])) +
-                  c1[i]*(nw->baseMVA*u_curr[pg_start+i]) + c0[i];
+        int pg_idx = generator_start+2*i;
+        objval += c2[i]*((nw->baseMVA*u_curr[pg_idx])*(nw->baseMVA*u_curr[pg_idx])) +
+                  c1[i]*(nw->baseMVA*u_curr[pg_idx]) + c0[i];
     }
 
     printf("%10s\t%12s\t%12s\t%12s\t%8s\n", "Iterations", "Objective", "PResidual", "DResidual", "CPU time");

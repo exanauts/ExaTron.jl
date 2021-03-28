@@ -435,11 +435,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
 
 __global__ void
 //__launch_bounds__(32, 16)
-polar_kernel(int nbranches, int n,
-             int pij_start, int qij_start,
-             int pji_start, int qji_start,
-             int wi_i_ij_start, int wi_j_ji_start,
-             int ti_i_ij_start, int ti_j_ji_start,
+polar_kernel(int nbranches, int n, int line_start,
              double *u_curr, double *v_curr, double *l_curr,
              double *rho, double *param,
              double *_YffR, double *_YffI,
@@ -461,6 +457,8 @@ polar_kernel(int nbranches, int n,
     xl = shmem + n;
     xu = shmem + 2*n;
 
+    int pij_idx = line_start + 8*I;
+
     if (tx == 0 && ty == 0) {
         xl[0] = sqrt(frBound[2*I]);
         xu[0] = sqrt(frBound[2*I+1]);
@@ -471,11 +469,10 @@ polar_kernel(int nbranches, int n,
         xl[3] = -2*M_PI;
         xu[3] = 2*M_PI;
 
-        x[0] = min(xu[0], max(xl[0], sqrt(u_curr[wi_i_ij_start+I])));
-        x[1] = min(xu[1], max(xl[1], sqrt(u_curr[wi_j_ji_start+I])));
-        x[2] = min(xu[2], max(xl[2], u_curr[ti_i_ij_start+I]));
-        x[3] = min(xu[3], max(xl[3], u_curr[ti_j_ji_start+I]));
-
+        x[0] = min(xu[0], max(xl[0], sqrt(u_curr[pij_idx+4])));
+        x[1] = min(xu[1], max(xl[1], sqrt(u_curr[pij_idx+5])));
+        x[2] = min(xu[2], max(xl[2], u_curr[pij_idx+6]));
+        x[3] = min(xu[3], max(xl[3], u_curr[pij_idx+7]));
     }
 
     YffR = _YffR[I]; YffI = _YffI[I];
@@ -485,30 +482,30 @@ polar_kernel(int nbranches, int n,
 
     int start = 31*I;
 
-    param[start] = l_curr[pij_start+I];
-    param[start + 1] = l_curr[qij_start+I];
-    param[start + 2] = l_curr[pji_start+I];
-    param[start + 3] = l_curr[qji_start+I];
-    param[start + 4] = l_curr[wi_i_ij_start+I];
-    param[start + 5] = l_curr[wi_j_ji_start+I];
-    param[start + 6] = l_curr[ti_i_ij_start+I];
-    param[start + 7] = l_curr[ti_j_ji_start+I];
-    param[start + 8] = rho[pij_start+I];
-    param[start + 9] = rho[qij_start+I];
-    param[start + 10] = rho[pji_start+I];
-    param[start + 11] = rho[qji_start+I];
-    param[start + 12] = rho[wi_i_ij_start+I];
-    param[start + 13] = rho[wi_j_ji_start+I];
-    param[start + 14] = rho[ti_i_ij_start+I];
-    param[start + 15] = rho[ti_j_ji_start+I];
-    param[start + 16] = v_curr[pij_start+I];
-    param[start + 17] = v_curr[qij_start+I];
-    param[start + 18] = v_curr[pji_start+I];
-    param[start + 19] = v_curr[qji_start+I];
-    param[start + 20] = v_curr[wi_i_ij_start+I];
-    param[start + 21] = v_curr[wi_j_ji_start+I];
-    param[start + 22] = v_curr[ti_i_ij_start+I];
-    param[start + 23] = v_curr[ti_j_ji_start+I];
+    param[start] = l_curr[pij_idx];
+    param[start + 1] = l_curr[pij_idx+1];
+    param[start + 2] = l_curr[pij_idx+2];
+    param[start + 3] = l_curr[pij_idx+3];
+    param[start + 4] = l_curr[pij_idx+4];
+    param[start + 5] = l_curr[pij_idx+5];
+    param[start + 6] = l_curr[pij_idx+6];
+    param[start + 7] = l_curr[pij_idx+7];
+    param[start + 8] = rho[pij_idx];
+    param[start + 9] = rho[pij_idx+1];
+    param[start + 10] = rho[pij_idx+2];
+    param[start + 11] = rho[pij_idx+3];
+    param[start + 12] = rho[pij_idx+4];
+    param[start + 13] = rho[pij_idx+5];
+    param[start + 14] = rho[pij_idx+6];
+    param[start + 15] = rho[pij_idx+7];
+    param[start + 16] = v_curr[pij_idx];
+    param[start + 17] = v_curr[pij_idx+1];
+    param[start + 18] = v_curr[pij_idx+2];
+    param[start + 19] = v_curr[pij_idx+3];
+    param[start + 20] = v_curr[pij_idx+4];
+    param[start + 21] = v_curr[pij_idx+5];
+    param[start + 22] = v_curr[pij_idx+6];
+    param[start + 23] = v_curr[pij_idx+7];
 
     __syncthreads();
 
@@ -522,14 +519,14 @@ polar_kernel(int nbranches, int n,
     double vi_vj_cos = x[0]*x[1]*cos(x[2] - x[3]);
     double vi_vj_sin = x[0]*x[1]*sin(x[2] - x[3]);
 
-    u_curr[pij_start+I] = YffR*(x[0]*x[0]) + YftR*vi_vj_cos + YftI*vi_vj_sin;
-    u_curr[qij_start+I] = -YffI*(x[0]*x[0]) - YftI*vi_vj_cos + YftR*vi_vj_sin;
-    u_curr[pji_start+I] = YttR*(x[1]*x[1]) + YtfR*vi_vj_cos - YtfI*vi_vj_sin;
-    u_curr[qji_start+I] = -YttI*(x[1]*x[1]) - YtfI*vi_vj_cos - YtfR*vi_vj_sin;
-    u_curr[wi_i_ij_start+I] = x[0]*x[0];
-    u_curr[wi_j_ji_start+I] = x[1]*x[1];
-    u_curr[ti_i_ij_start+I] = x[2];
-    u_curr[ti_j_ji_start+I] = x[3];
+    u_curr[pij_idx] = YffR*(x[0]*x[0]) + YftR*vi_vj_cos + YftI*vi_vj_sin;
+    u_curr[pij_idx+1] = -YffI*(x[0]*x[0]) - YftI*vi_vj_cos + YftR*vi_vj_sin;
+    u_curr[pij_idx+2] = YttR*(x[1]*x[1]) + YtfR*vi_vj_cos - YtfI*vi_vj_sin;
+    u_curr[pij_idx+3] = -YttI*(x[1]*x[1]) - YtfI*vi_vj_cos - YtfR*vi_vj_sin;
+    u_curr[pij_idx+4] = x[0]*x[0];
+    u_curr[pij_idx+5] = x[1]*x[1];
+    u_curr[pij_idx+6] = x[2];
+    u_curr[pij_idx+7] = x[3];
 
     return;
 }
@@ -946,11 +943,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     return;
 }
 
-void polar(int nbranches, int n,
-           int pij_start, int qij_start,
-           int pji_start, int qji_start,
-           int wi_i_ij_start, int wi_j_ji_start,
-           int ti_i_ij_start, int ti_j_ji_start,
+void polar(int nbranches, int n, int line_start,
            double *u_curr, double *v_curr, double *l_curr,
            double *rho, double *param,
            double *_YffR, double *_YffI,
@@ -967,6 +960,8 @@ void polar(int nbranches, int n,
     xu = (double *)calloc(n, sizeof(double));
 
     for (int I = 0; I < nbranches; I++) {
+        int pij_idx = line_start + 8*I;
+
         xl[0] = sqrt(frBound[2*I]);
         xu[0] = sqrt(frBound[2*I+1]);
         xl[1] = sqrt(toBound[2*I]);
@@ -976,10 +971,10 @@ void polar(int nbranches, int n,
         xl[3] = -2*M_PI;
         xu[3] = 2*M_PI;
 
-        x[0] = min(xu[0], max(xl[0], sqrt(u_curr[wi_i_ij_start+I])));
-        x[1] = min(xu[1], max(xl[1], sqrt(u_curr[wi_j_ji_start+I])));
-        x[2] = min(xu[2], max(xl[2], u_curr[ti_i_ij_start+I]));
-        x[3] = min(xu[3], max(xl[3], u_curr[ti_j_ji_start+I]));
+        x[0] = min(xu[0], max(xl[0], sqrt(u_curr[pij_idx+4])));
+        x[1] = min(xu[1], max(xl[1], sqrt(u_curr[pij_idx+5])));
+        x[2] = min(xu[2], max(xl[2], u_curr[pij_idx+6]));
+        x[3] = min(xu[3], max(xl[3], u_curr[pij_idx+7]));
 
         YffR = _YffR[I]; YffI = _YffI[I];
         YftR = _YftR[I]; YftI = _YftI[I];
@@ -988,31 +983,30 @@ void polar(int nbranches, int n,
 
         int start = 31*I;
 
-        param[start] = l_curr[pij_start+I];
-        param[start + 1] = l_curr[qij_start+I];
-        param[start + 2] = l_curr[pji_start+I];
-        param[start + 3] = l_curr[qji_start+I];
-        param[start + 4] = l_curr[wi_i_ij_start+I];
-        param[start + 5] = l_curr[wi_j_ji_start+I];
-        param[start + 6] = l_curr[ti_i_ij_start+I];
-        param[start + 7] = l_curr[ti_j_ji_start+I];
-        param[start + 8] = rho[pij_start+I];
-        param[start + 9] = rho[qij_start+I];
-        param[start + 10] = rho[pji_start+I];
-        param[start + 11] = rho[qji_start+I];
-        param[start + 12] = rho[wi_i_ij_start+I];
-        param[start + 13] = rho[wi_j_ji_start+I];
-        param[start + 14] = rho[ti_i_ij_start+I];
-        param[start + 15] = rho[ti_j_ji_start+I];
-        param[start + 16] = v_curr[pij_start+I];
-        param[start + 17] = v_curr[qij_start+I];
-        param[start + 18] = v_curr[pji_start+I];
-        param[start + 19] = v_curr[qji_start+I];
-        param[start + 20] = v_curr[wi_i_ij_start+I];
-        param[start + 21] = v_curr[wi_j_ji_start+I];
-        param[start + 22] = v_curr[ti_i_ij_start+I];
-        param[start + 23] = v_curr[ti_j_ji_start+I];
-
+        param[start] = l_curr[pij_idx];
+        param[start + 1] = l_curr[pij_idx+1];
+        param[start + 2] = l_curr[pij_idx+2];
+        param[start + 3] = l_curr[pij_idx+3];
+        param[start + 4] = l_curr[pij_idx+4];
+        param[start + 5] = l_curr[pij_idx+5];
+        param[start + 6] = l_curr[pij_idx+6];
+        param[start + 7] = l_curr[pij_idx+7];
+        param[start + 8] = rho[pij_idx];
+        param[start + 9] = rho[pij_idx+1];
+        param[start + 10] = rho[pij_idx+2];
+        param[start + 11] = rho[pij_idx+3];
+        param[start + 12] = rho[pij_idx+4];
+        param[start + 13] = rho[pij_idx+5];
+        param[start + 14] = rho[pij_idx+6];
+        param[start + 15] = rho[pij_idx+7];
+        param[start + 16] = v_curr[pij_idx];
+        param[start + 17] = v_curr[pij_idx+1];
+        param[start + 18] = v_curr[pij_idx+2];
+        param[start + 19] = v_curr[pij_idx+3];
+        param[start + 20] = v_curr[pij_idx+4];
+        param[start + 21] = v_curr[pij_idx+5];
+        param[start + 22] = v_curr[pij_idx+6];
+        param[start + 23] = v_curr[pij_idx+7];
 
         // Solve the branch problem.
         int status, minor_iter;
@@ -1024,14 +1018,14 @@ void polar(int nbranches, int n,
         double vi_vj_cos = x[0]*x[1]*cos(x[2] - x[3]);
         double vi_vj_sin = x[0]*x[1]*sin(x[2] - x[3]);
 
-        u_curr[pij_start+I] = YffR*(x[0]*x[0]) + YftR*vi_vj_cos + YftI*vi_vj_sin;
-        u_curr[qij_start+I] = -YffI*(x[0]*x[0]) - YftI*vi_vj_cos + YftR*vi_vj_sin;
-        u_curr[pji_start+I] = YttR*(x[1]*x[1]) + YtfR*vi_vj_cos - YtfI*vi_vj_sin;
-        u_curr[qji_start+I] = -YttI*(x[1]*x[1]) - YtfI*vi_vj_cos - YtfR*vi_vj_sin;
-        u_curr[wi_i_ij_start+I] = x[0]*x[0];
-        u_curr[wi_j_ji_start+I] = x[1]*x[1];
-        u_curr[ti_i_ij_start+I] = x[2];
-        u_curr[ti_j_ji_start+I] = x[3];
+        u_curr[pij_idx] = YffR*(x[0]*x[0]) + YftR*vi_vj_cos + YftI*vi_vj_sin;
+        u_curr[pij_idx+1] = -YffI*(x[0]*x[0]) - YftI*vi_vj_cos + YftR*vi_vj_sin;
+        u_curr[pij_idx+2] = YttR*(x[1]*x[1]) + YtfR*vi_vj_cos - YtfI*vi_vj_sin;
+        u_curr[pij_idx+3] = -YttI*(x[1]*x[1]) - YtfI*vi_vj_cos - YtfR*vi_vj_sin;
+        u_curr[pij_idx+4] = x[0]*x[0];
+        u_curr[pij_idx+5] = x[1]*x[1];
+        u_curr[pij_idx+6] = x[2];
+        u_curr[pij_idx+7] = x[3];
     }
 
     free(x);

@@ -228,12 +228,7 @@ void eval_h_kernel(int n, double *x, double *A, double *param,
 
 __global__ void
 //__launch_bounds__(32, 16)
-auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
-              int pij_start, int qij_start,
-              int pji_start, int qji_start,
-              int wi_i_ij_start, int wi_j_ji_start,
-              int ti_i_ij_start, int ti_j_ji_start,
-              double mu_max,
+auglag_kernel(int nbranches, int n, int major_iter, int max_auglag, int line_start, double mu_max,
               double *u_curr, double *v_curr, double *l_curr,
               double *rho, double *wRIij, double *param,
               double *_YffR, double *_YffI,
@@ -258,6 +253,8 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
     xl = shmem + n;
     xu = shmem + 2*n;
 
+    int pij_idx = line_start + 8*I;
+
     if (tx == 0 && ty == 0) {
         #pragma unroll
         for (int j = 0; j < n; j++) {
@@ -274,16 +271,16 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
         xl[9] = -2*M_PI;
         xu[9] = 2*M_PI;
 
-        x[0] = u_curr[pij_start+I];
-        x[1] = u_curr[qij_start+I];
-        x[2] = u_curr[pji_start+I];
-        x[3] = u_curr[qji_start+I];
-        x[4] = min(xu[4], max(xl[4], u_curr[wi_i_ij_start+I]));
-        x[5] = min(xu[5], max(xl[5], u_curr[wi_j_ji_start+I]));
+        x[0] = u_curr[pij_idx];
+        x[1] = u_curr[pij_idx+1];
+        x[2] = u_curr[pij_idx+2];
+        x[3] = u_curr[pij_idx+3];
+        x[4] = min(xu[4], max(xl[4], u_curr[pij_idx+4]));
+        x[5] = min(xu[5], max(xl[5], u_curr[pij_idx+5]));
         x[6] = wRIij[2*I];
         x[7] = wRIij[2*I+1];
-        x[8] = min(xu[8], max(xl[8], u_curr[ti_i_ij_start+I]));
-        x[9] = min(xu[9], max(xl[9], u_curr[ti_j_ji_start+I]));
+        x[8] = min(xu[8], max(xl[8], u_curr[pij_idx+6]));
+        x[9] = min(xu[9], max(xl[9], u_curr[pij_idx+7]));
     }
 
     YffR = _YffR[I]; YffI = _YffI[I];
@@ -293,31 +290,31 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
 
     int start = 31*I;
 
-    param[start] = l_curr[pij_start+I];
-    param[start + 1] = l_curr[qij_start+I];
-    param[start + 2] = l_curr[pji_start+I];
-    param[start + 3] = l_curr[qji_start+I];
-    param[start + 4] = l_curr[wi_i_ij_start+I];
-    param[start + 5] = l_curr[wi_j_ji_start+I];
-    param[start + 6] = rho[pij_start+I];
-    param[start + 7] = rho[qij_start+I];
-    param[start + 8] = rho[pji_start+I];
-    param[start + 9] = rho[qji_start+I];
-    param[start + 10] = rho[wi_i_ij_start+I];
-    param[start + 11] = rho[wi_j_ji_start+I];
-    param[start + 12] = v_curr[pij_start+I];
-    param[start + 13] = v_curr[qij_start+I];
-    param[start + 14] = v_curr[pji_start+I];
-    param[start + 15] = v_curr[qji_start+I];
-    param[start + 16] = v_curr[wi_i_ij_start+I];
-    param[start + 17] = v_curr[wi_j_ji_start+I];
+    param[start] = l_curr[pij_idx];
+    param[start + 1] = l_curr[pij_idx+1];
+    param[start + 2] = l_curr[pij_idx+2];
+    param[start + 3] = l_curr[pij_idx+3];
+    param[start + 4] = l_curr[pij_idx+4];
+    param[start + 5] = l_curr[pij_idx+5];
+    param[start + 6] = rho[pij_idx];
+    param[start + 7] = rho[pij_idx+1];
+    param[start + 8] = rho[pij_idx+2];
+    param[start + 9] = rho[pij_idx+3];
+    param[start + 10] = rho[pij_idx+4];
+    param[start + 11] = rho[pij_idx+5];
+    param[start + 12] = v_curr[pij_idx];
+    param[start + 13] = v_curr[pij_idx+1];
+    param[start + 14] = v_curr[pij_idx+2];
+    param[start + 15] = v_curr[pij_idx+3];
+    param[start + 16] = v_curr[pij_idx+4];
+    param[start + 17] = v_curr[pij_idx+5];
 
-    param[start + 24] = l_curr[ti_i_ij_start+I];
-    param[start + 25] = l_curr[ti_j_ji_start+I];
-    param[start + 26] = rho[ti_i_ij_start+I];
-    param[start + 27] = rho[ti_j_ji_start+I];
-    param[start + 28] = v_curr[ti_i_ij_start+I];
-    param[start + 29] = v_curr[ti_j_ji_start+I];
+    param[start + 24] = l_curr[pij_idx+6];
+    param[start + 25] = l_curr[pij_idx+7];
+    param[start + 26] = rho[pij_idx+6];
+    param[start + 27] = rho[pij_idx+7];
+    param[start + 28] = v_curr[pij_idx+6];
+    param[start + 29] = v_curr[pij_idx+7];
 
     if (major_iter == 1) {
         param[start + 23] = 10.0;
@@ -387,16 +384,16 @@ auglag_kernel(int nbranches, int n, int major_iter, int max_auglag,
         __syncthreads();
     }
 
-    u_curr[pij_start+I] = x[0];
-    u_curr[qij_start+I] = x[1];
-    u_curr[pji_start+I] = x[2];
-    u_curr[qji_start+I] = x[3];
-    u_curr[wi_i_ij_start+I] = x[4];
-    u_curr[wi_j_ji_start+I] = x[5];
+    u_curr[pij_idx] = x[0];
+    u_curr[pij_idx+1] = x[1];
+    u_curr[pij_idx+2] = x[2];
+    u_curr[pij_idx+3] = x[3];
+    u_curr[pij_idx+4] = x[4];
+    u_curr[pij_idx+5] = x[5];
+    u_curr[pij_idx+6] = x[8];
+    u_curr[pij_idx+7] = x[9];
     wRIij[2*I] = x[6];
     wRIij[2*I+1] = x[7];
-    u_curr[ti_i_ij_start+I] = x[8];
-    u_curr[ti_j_ji_start+I] = x[9];
     param[start + 23] = mu;
 
     __syncthreads();
@@ -603,11 +600,7 @@ void eval_h(int I, int n, double *x, double *A, double *param,
 }
 
 void auglag(int nbranches, int n, int major_iter, int max_auglag,
-            int pij_start, int qij_start,
-            int pji_start, int qji_start,
-            int wi_i_ij_start, int wi_j_ji_start,
-            int ti_i_ij_start, int ti_j_ji_start,
-            double mu_max,
+            int line_start, double mu_max,
             double *u_curr, double *v_curr, double *l_curr,
             double *rho, double *wRIij, double *param,
             double *_YffR, double *_YffI,
@@ -628,6 +621,8 @@ void auglag(int nbranches, int n, int major_iter, int max_auglag,
     xu = (double *)calloc(n, sizeof(double));
 
     for (int I = 0; I < nbranches; I++) {
+        int pij_idx = line_start + 8*I;
+
         for (int j = 0; j < n; j++) {
             xl[j] = -INF;
             xu[j] = INF;
@@ -642,16 +637,16 @@ void auglag(int nbranches, int n, int major_iter, int max_auglag,
         xl[9] = -2*M_PI;
         xu[9] = 2*M_PI;
 
-        x[0] = u_curr[pij_start+I];
-        x[1] = u_curr[qij_start+I];
-        x[2] = u_curr[pji_start+I];
-        x[3] = u_curr[qji_start+I];
-        x[4] = min(xu[4], max(xl[4], u_curr[wi_i_ij_start+I]));
-        x[5] = min(xu[5], max(xl[5], u_curr[wi_j_ji_start+I]));
+        x[0] = u_curr[pij_idx];
+        x[1] = u_curr[pij_idx+1];
+        x[2] = u_curr[pij_idx+2];
+        x[3] = u_curr[pij_idx+3];
+        x[4] = min(xu[4], max(xl[4], u_curr[pij_idx+4]));
+        x[5] = min(xu[5], max(xl[5], u_curr[pij_idx+5]));
         x[6] = wRIij[2*I];
         x[7] = wRIij[2*I+1];
-        x[8] = min(xu[8], max(xl[8], u_curr[ti_i_ij_start+I]));
-        x[9] = min(xu[9], max(xl[9], u_curr[ti_j_ji_start+I]));
+        x[8] = min(xu[8], max(xl[8], u_curr[pij_idx+6]));
+        x[9] = min(xu[9], max(xl[9], u_curr[pij_idx+7]));
 
         YffR = _YffR[I]; YffI = _YffI[I];
         YftR = _YftR[I]; YftI = _YftI[I];
@@ -659,31 +654,31 @@ void auglag(int nbranches, int n, int major_iter, int max_auglag,
         YtfR = _YtfR[I]; YtfI = _YtfI[I];
 
         int start = 31*I;
-        param[start] = l_curr[pij_start+I];
-        param[start + 1] = l_curr[qij_start+I];
-        param[start + 2] = l_curr[pji_start+I];
-        param[start + 3] = l_curr[qji_start+I];
-        param[start + 4] = l_curr[wi_i_ij_start+I];
-        param[start + 5] = l_curr[wi_j_ji_start+I];
-        param[start + 6] = rho[pij_start+I];
-        param[start + 7] = rho[qij_start+I];
-        param[start + 8] = rho[pji_start+I];
-        param[start + 9] = rho[qji_start+I];
-        param[start + 10] = rho[wi_i_ij_start+I];
-        param[start + 11] = rho[wi_j_ji_start+I];
-        param[start + 12] = v_curr[pij_start+I];
-        param[start + 13] = v_curr[qij_start+I];
-        param[start + 14] = v_curr[pji_start+I];
-        param[start + 15] = v_curr[qji_start+I];
-        param[start + 16] = v_curr[wi_i_ij_start+I];
-        param[start + 17] = v_curr[wi_j_ji_start+I];
+        param[start] = l_curr[pij_idx];
+        param[start + 1] = l_curr[pij_idx+1];
+        param[start + 2] = l_curr[pij_idx+2];
+        param[start + 3] = l_curr[pij_idx+3];
+        param[start + 4] = l_curr[pij_idx+4];
+        param[start + 5] = l_curr[pij_idx+5];
+        param[start + 6] = rho[pij_idx];
+        param[start + 7] = rho[pij_idx+1];
+        param[start + 8] = rho[pij_idx+2];
+        param[start + 9] = rho[pij_idx+3];
+        param[start + 10] = rho[pij_idx+4];
+        param[start + 11] = rho[pij_idx+5];
+        param[start + 12] = v_curr[pij_idx];
+        param[start + 13] = v_curr[pij_idx+1];
+        param[start + 14] = v_curr[pij_idx+2];
+        param[start + 15] = v_curr[pij_idx+3];
+        param[start + 16] = v_curr[pij_idx+4];
+        param[start + 17] = v_curr[pij_idx+5];
 
-        param[start + 24] = l_curr[ti_i_ij_start+I];
-        param[start + 25] = l_curr[ti_j_ji_start+I];
-        param[start + 26] = rho[ti_i_ij_start+I];
-        param[start + 27] = rho[ti_j_ji_start+I];
-        param[start + 28] = v_curr[ti_i_ij_start+I];
-        param[start + 29] = v_curr[ti_j_ji_start+I];
+        param[start + 24] = l_curr[pij_idx+6];
+        param[start + 25] = l_curr[pij_idx+7];
+        param[start + 26] = rho[pij_idx+6];
+        param[start + 27] = rho[pij_idx+7];
+        param[start + 28] = v_curr[pij_idx+6];
+        param[start + 29] = v_curr[pij_idx+7];
 
         if (major_iter == 1) {
             param[start + 23] = 10.0;
@@ -691,7 +686,6 @@ void auglag(int nbranches, int n, int major_iter, int max_auglag,
         } else {
             mu = param[start + 23];
         }
-
 
         eta = 1 / pow(mu, 0.1);
         omega = 1 / mu;
@@ -747,16 +741,16 @@ void auglag(int nbranches, int n, int major_iter, int max_auglag,
             }
         }
 
-        u_curr[pij_start+I] = x[0];
-        u_curr[qij_start+I] = x[1];
-        u_curr[pji_start+I] = x[2];
-        u_curr[qji_start+I] = x[3];
-        u_curr[wi_i_ij_start+I] = x[4];
-        u_curr[wi_j_ji_start+I] = x[5];
+        u_curr[pij_idx] = x[0];
+        u_curr[pij_idx+1] = x[1];
+        u_curr[pij_idx+2] = x[2];
+        u_curr[pij_idx+3] = x[3];
+        u_curr[pij_idx+4] = x[4];
+        u_curr[pij_idx+5] = x[5];
+        u_curr[pij_idx+6] = x[8];
+        u_curr[pij_idx+7] = x[9];
         wRIij[2*I] = x[6];
         wRIij[2*I+1] = x[7];
-        u_curr[ti_i_ij_start+I] = x[8];
-        u_curr[ti_j_ji_start+I] = x[9];
         param[start + 23] = mu;
     }
 
