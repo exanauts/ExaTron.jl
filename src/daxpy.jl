@@ -59,9 +59,9 @@ else
     daxpy(n,da,dx,incx,dy,incy) = tron_daxpy(n,da,dx,incx,dy,incy)
 end
 
-function daxpy(n::Int,da::Float64,
-               dx::CuDeviceArray{Float64,1},incx::Int,
-               dy::CuDeviceArray{Float64,1},incy::Int)
+@inline function daxpy(n::Int,da::Float64,
+                       dx::CuDeviceArray{Float64,1},incx::Int,
+                       dy::CuDeviceArray{Float64,1},incy::Int)
     tx = threadIdx().x
 
     if tx <= n && threadIdx().y == 1

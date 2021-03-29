@@ -38,8 +38,8 @@ function dtrqsol(n,x,p,delta)
     return sigma
 end
 
-function dtrqsol(n::Int,x::CuDeviceArray{Float64,1},
-                 p::CuDeviceArray{Float64,1},delta::Float64)
+@inline function dtrqsol(n::Int,x::CuDeviceArray{Float64,1},
+                         p::CuDeviceArray{Float64,1},delta::Float64)
     zero = 0.0
     sigma = zero
 

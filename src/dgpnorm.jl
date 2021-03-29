@@ -19,8 +19,8 @@ function dgpnorm(n::Int, x::Array{Float64}, xl::Array{Float64},
     return inf_norm
 end
 
-function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-                 xu::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
+@inline function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
+                         xu::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
     tx = threadIdx().x
 
     # Q: Would it be better to use a single thread?
@@ -32,14 +32,14 @@ function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,
         @inbounds begin
             if xl[tx] != xu[tx]
                 if x[tx] == xl[tx]
-                    v = (min(g[tx], 0.0))^2
+                    v = min(g[tx], 0.0)
                 elseif x[tx] == xu[tx]
-                    v = (max(g[tx], 0.0))^2
+                    v = max(g[tx], 0.0)
                 else
-                    v = g[tx]^2
+                    v = g[tx]
                 end
 
-                v = sqrt(v)
+                v = abs(v)
             end
         end
     end

@@ -62,8 +62,8 @@ else
     dcopy(n,dx,incx,dy,incy) = tron_dcopy(n,dx,incx,dy,incy)
 end
 
-function dcopy(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
-               dy::CuDeviceArray{Float64,1},incy::Int)
+@inline function dcopy(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
+                       dy::CuDeviceArray{Float64,1},incy::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 

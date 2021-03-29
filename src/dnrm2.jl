@@ -48,7 +48,7 @@ else
     dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
 end
 
-function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
+@inline function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
     tx = threadIdx().x
 
     # All threads compute the Euclidean norm, hence,

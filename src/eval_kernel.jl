@@ -1,4 +1,4 @@
-function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
+@inline function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
                        param::CuDeviceArray{Float64,2},
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
@@ -53,7 +53,7 @@ function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
     return f
 end
 
-function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
+@inline function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
                             param::CuDeviceArray{Float64,2},
                             YffR::Float64, YffI::Float64,
                             YftR::Float64, YftI::Float64,
@@ -125,7 +125,7 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
     return
 end
 
-function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
+@inline function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
                        param::CuDeviceArray{Float64,2},
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
@@ -519,7 +519,7 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
     return
 end
 
-function eval_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1},
+@inline function eval_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1},
                              param::CuDeviceArray{Float64,2},
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,
@@ -560,7 +560,7 @@ function eval_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1},
     return f
 end
 
-function eval_grad_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
+@inline function eval_grad_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
                                   param::CuDeviceArray{Float64,2},
                                   YffR::Float64, YffI::Float64,
                                   YftR::Float64, YftI::Float64,
@@ -658,7 +658,7 @@ function eval_grad_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDevi
     return
 end
 
-function eval_h_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
+@inline function eval_h_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
                              param::CuDeviceArray{Float64,2},
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,

@@ -1,7 +1,7 @@
 """
 Driver to run TRON on GPU. This should be called from a kernel.
 """
-function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, use_polar::Bool,
+@inline function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, use_polar::Bool,
                      x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
                      xu::CuDeviceArray{Float64,1},
                      param::CuDeviceArray{Float64,2},

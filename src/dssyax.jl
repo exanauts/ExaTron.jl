@@ -144,7 +144,7 @@ function Base.fill!(A::TronSparseMatrixCSC, val)
     fill!(A.tril_vals, val)
 end
 
-function Base.fill!(w::CuDeviceArray{Float64,1}, val::Float64)
+@inline function Base.fill!(w::CuDeviceArray{Float64,1}, val::Float64)
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -208,7 +208,7 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     end
 end
 
-function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int)
+@inline function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -292,9 +292,9 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
     return
 end
 
-function dssyax(n::Int, A::CuDeviceArray{Float64,2},
-                z::CuDeviceArray{Float64,1},
-                q::CuDeviceArray{Float64,1})
+@inline function dssyax(n::Int, A::CuDeviceArray{Float64,2},
+                        z::CuDeviceArray{Float64,1},
+                        q::CuDeviceArray{Float64,1})
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -329,9 +329,9 @@ function dssyax(n::Int, A::CuDeviceArray{Float64,2},
     return
 end
 
-function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64,2},
-                  A::CuDeviceArray{Float64,2}, indfree::CuDeviceArray{Int,1},
-                  iwa::CuDeviceArray{Int,1})
+@inline function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64,2},
+                          A::CuDeviceArray{Float64,2}, indfree::CuDeviceArray{Int,1},
+                          iwa::CuDeviceArray{Int,1})
     tx = threadIdx().x
     ty = threadIdx().y
 

@@ -128,10 +128,10 @@ function dicfs(n, nnz, A, L,
     return
 end
 
-function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64,2},
-               L::CuDeviceArray{Float64,2},
-               wa1::CuDeviceArray{Float64,1},
-               wa2::CuDeviceArray{Float64,1})
+@inline function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64,2},
+                       L::CuDeviceArray{Float64,2},
+                       wa1::CuDeviceArray{Float64,1},
+                       wa2::CuDeviceArray{Float64,1})
     tx = threadIdx().x
     ty = threadIdx().y
 

@@ -52,8 +52,8 @@ else
     ddot(n,dx,incx,dy,incy) = tron_ddot(n,dx,incx,dy,incy)
 end
 
-function ddot(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
-              dy::CuDeviceArray{Float64,1},incy::Int)
+@inline function ddot(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
+                      dy::CuDeviceArray{Float64,1},incy::Int)
     # Currently, all threads compute the same dot product,
     # hence, no sync_threads() is needed.
     # For very small n, we may want to gauge how much gains

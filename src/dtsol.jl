@@ -32,8 +32,8 @@ function dtsol(n, L::TronDenseMatrix, r)
     return
 end
 
-function dtsol(n::Int, L::CuDeviceArray{Float64,2},
-               r::CuDeviceArray{Float64,1})
+@inline function dtsol(n::Int, L::CuDeviceArray{Float64,2},
+                       r::CuDeviceArray{Float64,1})
     # Solve L'*x = r and store the result in r.
 
     tx = threadIdx().x

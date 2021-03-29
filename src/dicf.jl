@@ -239,7 +239,7 @@ end
 =#
 
 # Left-looking Cholesky
-function dicf(n::Int,L::CuDeviceArray{Float64,2})
+@inline function dicf(n::Int,L::CuDeviceArray{Float64,2})
     tx = threadIdx().x
     ty = threadIdx().y
 

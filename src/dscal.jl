@@ -56,7 +56,7 @@ else
     dscal(n,da,dx,incx) = tron_dscal(n, da, dx, incx)
 end
 
-function dscal(n::Int,da::Float64,dx::CuDeviceArray{Float64,1},incx::Int)
+@inline function dscal(n::Int,da::Float64,dx::CuDeviceArray{Float64,1},incx::Int)
     tx = threadIdx().x
     ty = threadIdx().y
 

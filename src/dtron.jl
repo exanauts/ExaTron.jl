@@ -204,15 +204,6 @@ function dtron(n,x,xl,xu,f,g,A,
 
     # Save local variables.
 
-    #=
-    println("[CPU] work    = ", work)
-    println("[CPU] iter    = ", iter)
-    println("[CPU] iterscg = ", iterscg)
-    println("[CPU] fc      = ", fc)
-    println("[CPU] alphac  = ", alphac)
-    println("[CPU] prered  = ", prered)
-    =#
-
     if work == "COMPUTE"
         isave[1] = 1
     elseif work == "EVALUATE"
@@ -230,7 +221,7 @@ function dtron(n,x,xl,xu,f,g,A,
     return delta
 end
 
-function dtron(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
+@inline function dtron(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
                xu::CuDeviceArray{Float64,1}, f::Float64, g::CuDeviceArray{Float64,1},
                A::CuDeviceArray{Float64,2}, frtol::Float64, fatol::Float64,
                fmin::Float64, cgtol::Float64, itermax::Int, delta::Float64, task::Int,
