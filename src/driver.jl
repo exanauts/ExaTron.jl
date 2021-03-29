@@ -311,6 +311,11 @@ function solveProblem(tron::ExaTronProblem)
             tron.status = :Solve_Succeeded
             search = false
         end
+
+        if unsafe_string(pointer(task), 4) == "WARN"
+            tron.status = :TooSmall
+            search = false
+        end
     end
 
     return tron.status
