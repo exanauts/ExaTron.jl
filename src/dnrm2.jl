@@ -50,21 +50,41 @@ end
 
 @inline function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
     tx = threadIdx().x
+    ty = threadIdx().y
+    smem_v = @cuStaticSharedMem(Float64, 1)
 
     v = 0.0
-    if tx <= n  # No check on ty so that each warp has v.
-        @inbounds v = x[tx]*x[tx]
+    if (tx + blockDim().x * (ty - 1)) <= 32
+        if tx <= n && ty == 1
+            @inbounds v = x[tx]*x[tx]
+        end
+
+        if blockDim().x > 16
+            offset = 16
+        elseif blockDim().x > 8
+            offset = 8
+        elseif blockDim().x > 4
+            offset = 4
+        elseif blockDim().x > 2
+            offset = 2
+        else
+            offset = 1
+        end
+
+        while offset > 0
+            v += CUDA.shfl_down_sync(0xffffffff, v, offset)
+            offset >>= 1
+        end
+
+        if tx == 1 && ty == 1
+            v = sqrt(v)
+            smem_v[1] = v
+        end
     end
 
-    # shfl_down_sync() will automatically sync threads in a warp.
-
-    offset = 16
-    while offset > 0
-        v += CUDA.shfl_down_sync(0xffffffff, v, offset)
-        offset >>= 1
-    end
-    v = sqrt(v)
-    v = CUDA.shfl_sync(0xffffffff, v, 1)
+    CUDA.sync_threads()
+    v = smem_v[1]
+    CUDA.sync_threads()
 
     return v
 end

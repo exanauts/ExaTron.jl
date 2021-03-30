@@ -22,32 +22,52 @@ end
 @inline function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
                          xu::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
     tx = threadIdx().x
+    ty = threadIdx().y
+    smem_v = @cuStaticSharedMem(Float64, 1)
 
     v = 0.0
-    if tx <= n
-        @inbounds begin
-            if xl[tx] != xu[tx]
-                if x[tx] == xl[tx]
-                    v = min(g[tx], 0.0)
-                elseif x[tx] == xu[tx]
-                    v = max(g[tx], 0.0)
-                else
-                    v = g[tx]
-                end
+    if (tx + blockDim().x * (ty - 1)) <= 32
+        if tx <= n && ty == 1
+            @inbounds begin
+                if xl[tx] != xu[tx]
+                    if x[tx] == xl[tx]
+                        v = min(g[tx], 0.0)
+                    elseif x[tx] == xu[tx]
+                        v = max(g[tx], 0.0)
+                    else
+                        v = g[tx]
+                    end
 
-                v = abs(v)
+                    v = abs(v)
+                end
             end
+        end
+
+        if blockDim().x > 16
+            offset = 16
+        elseif blockDim().x > 8
+            offset = 8
+        elseif blockDim().x > 4
+            offset = 4
+        elseif blockDim().x > 2
+            offset = 2
+        else
+            offset = 1
+        end
+
+        while offset > 0
+            v = max(v, CUDA.shfl_down_sync(0xffffffff, v, offset))
+            offset >>= 1
+        end
+
+        if tx == 1 && ty == 1
+            smem_v[1] = v
         end
     end
 
-    # shfl_down_sync() will automatically sync threads in a warp.
-
-    offset = 16
-    while offset > 0
-        v = max(v, CUDA.shfl_down_sync(0xffffffff, v, offset))
-        offset >>= 1
-    end
-    v = CUDA.shfl_sync(0xffffffff, v, 1)
+    CUDA.sync_threads()
+    v = smem_v[1]
+    CUDA.sync_threads()
 
     return v
 end

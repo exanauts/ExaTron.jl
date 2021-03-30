@@ -246,8 +246,12 @@ end
                     iwa[j] = 0
                 end
             end
+            @inbounds iwa[n+1] = nfree
         end
-        nfree = CUDA.shfl_sync(0xffffffff, nfree, 1)
+        CUDA.sync_threads()
+        @inbounds nfree = iwa[n+1]
+        CUDA.sync_threads()
+        #nfree = CUDA.shfl_sync(0xffffffff, nfree, 1)
 
         # Exit if there are no free constraints.
 
