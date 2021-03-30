@@ -166,7 +166,8 @@ end
     if tx <= n  # No check on ty so that each warp has alpha.
         @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
     end
-    CUDA.sync_warp()
+
+    # shfl_down_sync will automatically sync threads in a warp.
 
     # Find the maximum alpha in a warp and put it in the first thread.
     #offset = div(blockDim().x, 2)

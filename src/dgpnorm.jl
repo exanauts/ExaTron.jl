@@ -23,10 +23,6 @@ end
                          xu::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
     tx = threadIdx().x
 
-    # Q: Would it be better to use a single thread?
-    # A: It is tricky to share values between threads.
-    # Q: Would it be better to go througbh in ty direction?
-    # A: No, the runtime was similar.
     v = 0.0
     if tx <= n
         @inbounds begin
@@ -43,14 +39,15 @@ end
             end
         end
     end
-    CUDA.sync_threads() # Maybe redundant since we will call shfl_sync() at the end.
+
+    # shfl_down_sync() will automatically sync threads in a warp.
 
     offset = 16
     while offset > 0
         v = max(v, CUDA.shfl_down_sync(0xffffffff, v, offset))
         offset >>= 1
     end
-
     v = CUDA.shfl_sync(0xffffffff, v, 1)
+
     return v
 end

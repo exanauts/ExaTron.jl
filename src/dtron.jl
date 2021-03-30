@@ -233,8 +233,6 @@ end
                wa1::CuDeviceArray{Float64,1}, wa2::CuDeviceArray{Float64,1},
                wa3::CuDeviceArray{Float64,1}, wa4::CuDeviceArray{Float64,1},
                wa5::CuDeviceArray{Float64,1})
-    tx = threadIdx().x
-
     zero = 0.0
     p5 = 0.5
     one = 1.0
