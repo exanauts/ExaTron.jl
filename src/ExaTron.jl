@@ -5,6 +5,8 @@ using LinearAlgebra
 using CUDA
 using CUDA.CUBLAS
 
+using MPI
+
 using Printf
 using DelimitedFiles
 
