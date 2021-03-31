@@ -362,7 +362,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*norm(l_curr)
 
             @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n",
-                    it, primres, dualres, eps_pri, eps_dual, auglag_it, tron_it)
+                    it, norm(u_curr), norm(v_curr), norm(l_curr), eps_dual, auglag_it, tron_it)
         else
             @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_u_prev, cu_u_curr)
             @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_v_prev, cu_v_curr)
@@ -441,6 +441,16 @@ function admm_rect_gpu_mpi(
     nbus = length(data.buses)
     nvar = 2*ngen + 8*nline
 
+    # MPI settings
+    root = 0
+    is_master = MPI.Comm_rank(comm) == root
+    n_processes = MPI.Comm_size(comm)
+    nlines_local = div(nline, n_processes, RoundUp)
+    nlines_padded = n_processes * nlines_local
+
+    nvar_padded = 2*ngen + 8 * nlines_padded
+
+
     baseMVA = data.baseMVA
     n = (use_polar == true) ? 4 : 10
     mu_max = 1e8
@@ -472,44 +482,37 @@ function admm_rect_gpu_mpi(
     gen_start = 1
     line_start = 2*ngen + 1
 
-    u_curr = zeros(nvar)
-    v_curr = zeros(nvar)
-    l_curr = zeros(nvar)
-    u_prev = zeros(nvar)
-    v_prev = zeros(nvar)
-    l_prev = zeros(nvar)
-    rho = zeros(nvar)
-    rd = zeros(nvar)
-    rp = zeros(nvar)
-    rp_old = zeros(nvar)
-    rp_k0 = zeros(nvar)
+    u_curr = zeros(nvar_padded)
+    v_curr = zeros(nvar_padded)
+    l_curr = zeros(nvar_padded)
+    u_prev = zeros(nvar_padded)
+    v_prev = zeros(nvar_padded)
+    l_prev = zeros(nvar_padded)
+    rho = zeros(nvar_padded)
+    rd = zeros(nvar_padded)
+    rp = zeros(nvar_padded)
+    rp_old = zeros(nvar_padded)
+    rp_k0 = zeros(nvar_padded)
     param = zeros(31, nline)
     wRIij = zeros(2*nline)
 
-    # MPI settings
-    root = 0
-    is_master = MPI.Comm_rank(comm) == root
-    n_processes = MPI.Comm_size(comm)
-    nlines_local = div(nline, n_processes, RoundUp)
-
     # global sync
-    u_lines_root = zeros(8 * nlines_local * n_processes)
-    l_lines_root = zeros(8 * nlines_local * n_processes)
-    v_lines_root = zeros(8 * nlines_local * n_processes)
+    u_lines_root = @view u_curr[line_start:end]
+    l_lines_root = @view l_curr[line_start:end]
+    v_lines_root = @view v_curr[line_start:end]
+    rho_lines_root = @view rho[line_start:end]
 
     # We need only to transfer info about lines
-    l_local = zeros(8 * nlines_local)
-    v_local = zeros(8 * nlines_local)
     u_local = zeros(8 * nlines_local)
+    v_local = zeros(8 * nlines_local)
+    l_local = zeros(8 * nlines_local)
+    rho_local = zeros(8 * nlines_local)
 
     init_values(data, ybus, gen_start, line_start,
                 rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
 
-    shift = line_start #+ MPI.Comm_rank(comm) * 8 * nlines_local
-    for i in 1:8*nlines_local
-        u_local[i] = u_curr[shift+i]
-    end
 
+    MPI.Scatter!(u_lines_root, u_local, root, comm)
 
     if use_gpu
         cu_u_curr = CuArray{Float64}(undef, nvar)
@@ -552,6 +555,7 @@ function admm_rect_gpu_mpi(
 
     # GPU settings
     shmem_size = sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)
+    MPI.Scatter!(rho_lines_root, rho_local, root, comm)
 
     while it < iterlim
         it += 1
@@ -572,23 +576,18 @@ function admm_rect_gpu_mpi(
             #  - Collect cu_u_curr.
             #  - div(nblk_br / number of GPUs, RoundUp)
             # scatter / gather
-            MPI.Bcast!(v_curr, root, comm)
-            MPI.Bcast!(l_curr, root, comm)
-
-            copyto!(view(v_lines_root, 1:nline*8), @view v_curr[line_start:end])
-            copyto!(view(l_lines_root, 1:nline*8), @view l_curr[line_start:end])
 
             MPI.Scatter!(v_lines_root, v_local, root, comm)
             MPI.Scatter!(l_lines_root, l_local, root, comm)
 
-            tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, line_start,
-                                                                u_curr, v_curr, l_curr, rho,
+            tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nlines_local, 1,
+                                                                u_local, v_local, l_local, rho_local,
                                                                 param, YffR, YffI, YftR, YftI,
                                                                 YttR, YttI, YtfR, YtfI, FrBound, ToBound)
 
             time_br += tcpu.time
             MPI.Gather!(u_local, u_lines_root, root, comm)
-            # copyto!(view(u_curr, line_start:length(u_curr)), @view u_lines_root[1:nline*8])
+
 
             if is_master
                 tcpu = @timed bus_kernel_cpu(baseMVA, nbus, gen_start, line_start,

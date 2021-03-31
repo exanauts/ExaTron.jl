@@ -85,8 +85,8 @@ function polar_kernel(n::Int, line_start::Int,
 end
 
 function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
-                          u_curr::Array{Float64}, v_curr::Array{Float64},
-                          l_curr::Array{Float64}, rho::Array{Float64},
+                          u_curr::AbstractVector{Float64}, v_curr::AbstractVector{Float64},
+                          l_curr::AbstractVector{Float64}, rho::AbstractVector{Float64},
                           param::Array{Float64},
                           YffR::Array{Float64}, YffI::Array{Float64},
                           YftR::Array{Float64}, YftI::Array{Float64},
