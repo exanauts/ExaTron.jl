@@ -343,12 +343,13 @@ end
             for i=jfree+1:n
                 if iwa[i] > 0
                     B[iwa[i],j] = A[i,jfree]
-                    B[j,iwa[i]] = B[iwa[i],j]
+                    B[j,iwa[i]] = A[i,jfree]
                 end
             end
         end
     end
     =#
+
     if tx <= nfree && ty == 1
         @inbounds begin
             jfree = indfree[tx]
@@ -356,7 +357,7 @@ end
             for i=jfree+1:n
                 if iwa[i] > 0
                     B[iwa[i],tx] = A[i,jfree]
-                    B[tx,iwa[i]] = B[iwa[i],tx]
+                    B[tx,iwa[i]] = A[i,jfree]
                 end
             end
         end

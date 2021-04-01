@@ -8,6 +8,9 @@ using CUDA.CUBLAS
 using Printf
 using DelimitedFiles
 
+using Test
+using Random
+
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
 const BLAS_LIBRARY = :Tron
@@ -42,6 +45,11 @@ include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
 
+include("hs045_eval.jl")
+include("launch.jl")
+include("tron2_kernel.jl")
+
+#=
 include("opfdata.jl")
 include("bus_kernel.jl")
 include("generator_kernel.jl")
@@ -50,5 +58,6 @@ include("tron_kernel.jl")
 include("eval_kernel.jl")
 include("auglag_kernel.jl")
 include("acopf_admm_gpu.jl")
+=#
 
 end # module
