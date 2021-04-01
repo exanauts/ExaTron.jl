@@ -6,7 +6,7 @@
 # The optimal solution is x[i] = i for i=1..n.
 # We extended it to take n in [1,32].
 
-function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1})
+@inline function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1})
     v = 1.0
     @inbounds for i=1:n
         v *= x[i]
@@ -16,7 +16,7 @@ function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1})
     return f
 end
 
-function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
+@inline function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -35,7 +35,7 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
     return
 end
 
-function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2})
+@inline function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2})
     tx = threadIdx().x
     ty = threadIdx().y
 
