@@ -6,17 +6,17 @@
 # The optimal solution is x[i] = i for i=1..n.
 # We extended it to take n in [1,32].
 
-function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1})
+function eval_f_kernel(n, x)
     v = 1.0
     @inbounds for i=1:n
         v *= x[i]
     end
     f = 2.0 - v/120
-    CUDA.sync_warp()
+    CUDA.sync_threads()
     return f
 end
 
-function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
+function eval_grad_f_kernel(n, x, g)
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -31,11 +31,11 @@ function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArra
             g[j] = -v/120
         end
     end
-    CUDA.sync_warp()
+    CUDA.sync_threads()
     return
 end
 
-function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2})
+function eval_h_kernel(n, x, A)
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -53,7 +53,7 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Flo
         end
     end
 
-    CUDA.sync_warp()
+    CUDA.sync_threads()
     if tx <= n && ty == 1
         @inbounds for j=1:n
             if tx > j
@@ -61,7 +61,7 @@ function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Flo
             end
         end
     end
-    CUDA.sync_warp()
+    CUDA.sync_threads()
 
     return
 end

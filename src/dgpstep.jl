@@ -7,26 +7,7 @@ This subroutine computes the gradient projection step
 
 where P is the projection on the n-dimensional interval [xl,xu].
 """
-function dgpstep(n,x,xl,xu,alpha,w,s)
-    # TODO
-    # This computation of the gradient projection step avoids
-    # rouding errors for the components that are feasible.
-
-    @inbounds for i=1:n
-        if x[i] + alpha*w[i] < xl[i]
-            s[i] = xl[i] - x[i]
-        elseif x[i] + alpha*w[i] > xu[i]
-            s[i] = xu[i] - x[i]
-        else
-            s[i] = alpha*w[i]
-        end
-    end
-    return
-end
-
-@inline function dgpstep(n::Int,x::CuDeviceArray{Float64,1},xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1},alpha,w::CuDeviceArray{Float64,1},
-                         s::CuDeviceArray{Float64,1})
+@inline function dgpstep(n, x, xl, xu, alpha, w, s)
     tx = threadIdx().x
     ty = threadIdx().y
 

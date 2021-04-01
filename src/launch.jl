@@ -63,15 +63,59 @@ function launch_kernel(n::Int, nblk::Int; thread_conf = :one)
     return tgpu.time
 end
 
+function launch_kernel_noshared(n::Int, nblk::Int; thread_conf = :one)
+    memVecFloat = zeros(14*n, nblk)
+    memVecInt = zeros(Int, (4*n, nblk))
+    memMatA = zeros(n, n, nblk)
+    memMatB = zeros(n, n, nblk)
+    memMatL = zeros(n, n, nblk)
+
+    for j=1:nblk
+        for i=1:n
+            memVecFloat[i,j] = 1.0
+            memVecFloat[n+i,j] = -Inf
+            memVecFloat[2*n+i,j] = i
+        end
+    end
+
+    cu_memVecFloat = CuArray{Float64}(undef, (14*n, nblk))
+    cu_memVecInt = CuArray{Int}(undef, (4*n, nblk))
+    cu_memMatA = CuArray{Float64}(undef, (n, n, nblk))
+    cu_memMatB = CuArray{Float64}(undef, (n, n, nblk))
+    cu_memMatL = CuArray{Float64}(undef, (n, n, nblk))
+
+    copyto!(cu_memVecFloat, memVecFloat)
+    copyto!(cu_memVecInt, memVecInt)
+    copyto!(cu_memMatA, memMatA)
+    copyto!(cu_memMatB, memMatB)
+    copyto!(cu_memMatL, memMatL)
+
+    if thread_conf == :one
+        tgpu = CUDA.@timed @cuda threads=32 blocks=nblk tron2_kernel(n, 200, 500, 1e-6, cu_memVecFloat, cu_memVecInt, cu_memMatA, cu_memMatB, cu_memMatL)
+    else
+        tgpu = CUDA.@timed @cuda threads=(n,n) blocks=nblk tron2_kernel(n, 200, 500, 1e-6, cu_memVecFloat, cu_memVecInt, cu_memMatA, cu_memMatB, cu_memMatL)
+    end
+
+    copyto!(memVecFloat, cu_memVecFloat)
+    @inbounds for j=1:nblk
+        for i=1:n
+            @assert abs(memVecFloat[i,j] - i) <= 1e-10
+        end
+    end
+
+    return tgpu.time
+end
+
 function batch_run_kernel(n::Int, nblk::Int; thread_conf = :one)
     # Warm-up
-    launch_kernel(1, 1)
+    launch_kernel_noshared(1, 1)
 
-    for j=1:n
+    #for j=1:n
+    for j=3:n
         println("n = ", j, " nblk = ", nblk)
         t = 0
         for k=1:50
-            t += ExaTron.launch_kernel(j, nblk; thread_conf=thread_conf)
+            t += ExaTron.launch_kernel_noshared(j, nblk; thread_conf=thread_conf)
         end
         t /= 50
         @printf("  average time = %.5f\n", t)
