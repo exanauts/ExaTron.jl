@@ -319,6 +319,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
     h_param = zeros(31, nline)
     h_wRIij = zeros(2*nline)
 
+    shift_lines = 0
     shmem_size = sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)
 
     while it < iterlim
@@ -336,7 +337,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             if use_polar
                 tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, line_start,
                                                                     u_curr, v_curr, l_curr, rho,
-                                                                    param, YffR, YffI, YftR, YftI,
+                                                                    shift_lines, param, YffR, YffI, YftR, YftI,
                                                                     YttR, YttI, YtfR, YtfI, FrBound, ToBound)
             else
                 tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, line_start, mu_max,
@@ -345,6 +346,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
                                                                      YttR, YttI, YtfR, YtfI, FrBound, ToBound)
             end
             time_br += tcpu.time
+
             tcpu = @timed bus_kernel_cpu(baseMVA, nbus, gen_start, line_start,
                                          FrStart, FrIdx, ToStart, ToIdx, GenStart,
                                          GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
@@ -381,7 +383,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
             if use_polar
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, line_start,
                                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                                 cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
+                                                                                                 shift_lines, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                                                                                                  cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
             else
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, line_start, mu_max,
@@ -453,7 +455,6 @@ function admm_rect_gpu_mpi(
 
     nvar_padded = 2*ngen + 8 * nlines_padded
 
-
     baseMVA = data.baseMVA
     n = (use_polar == true) ? 4 : 10
     mu_max = 1e8
@@ -497,7 +498,7 @@ function admm_rect_gpu_mpi(
     rp = zeros(nvar_padded)
     rp_old = zeros(nvar_padded)
     rp_k0 = zeros(nvar_padded)
-    param = zeros(31, nline)
+    param = zeros(31, nlines_padded)
     wRIij = zeros(2*nline)
 
     init_values(data, ybus, gen_start, line_start,
@@ -516,7 +517,7 @@ function admm_rect_gpu_mpi(
         cu_rp = CuArray{Float64}(undef, nvar_padded)
         cu_rp_old = CuArray{Float64}(undef, nvar_padded)
         cu_rp_k0 = CuArray{Float64}(undef, nvar_padded)
-        cuParam = CuArray{Float64}(undef, (31, nline))
+        cuParam = CuArray{Float64}(undef, (31, nlines_padded))
         cuWRIij = CuArray{Float64}(undef, 2*nline)
 
         copyto!(cu_u_curr, u_curr)
@@ -573,6 +574,7 @@ function admm_rect_gpu_mpi(
     h_param = zeros(31, nline)
     h_wRIij = zeros(2*nline)
 
+    shift_lines = MPI.Comm_rank(comm) * nlines_local
     # GPU settings
     shmem_size = sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)
 
@@ -602,7 +604,7 @@ function admm_rect_gpu_mpi(
 
             tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nlines_local, 1,
                                                                 u_local, v_local, l_local, rho_local,
-                                                                param, YffR, YffI, YftR, YftI,
+                                                                shift_lines, param, YffR, YffI, YftR, YftI,
                                                                 YttR, YttI, YtfR, YtfI, FrBound, ToBound)
 
             time_br += tcpu.time
@@ -649,9 +651,9 @@ function admm_rect_gpu_mpi(
             MPI.Scatter!(l_lines_root, l_local, root, comm)
 
             #  - div(nblk_br / number of GPUs, RoundUp)
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br_local shmem=shmem_size polar_kernel(n, 1,
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br_local shmem=shmem_size polar_kernel(n, nline, 1,
                 u_local, v_local, l_local, rho_local,
-                cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
+                shift_lines, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                 cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound
             )
             time_br += tgpu.time
