@@ -1,4 +1,4 @@
-function polar_kernel(n::Int, line_start::Int,
+function polar_kernel(n::Int, line_start::Int, scale::Float64,
                      u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
                      l_curr::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
                      param::CuDeviceArray{Float64,2},
@@ -65,7 +65,7 @@ function polar_kernel(n::Int, line_start::Int,
 
         CUDA.sync_threads()
 
-        status, minor_iter = tron_kernel(n, 500, 200, 1e-6, true, x, xl, xu,
+        status, minor_iter = tron_kernel(n, 500, 200, 1e-6, scale, true, x, xl, xu,
                                          param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
 
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])

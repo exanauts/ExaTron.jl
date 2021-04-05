@@ -161,10 +161,6 @@ function init_values(data, ybus, gen_start, line_start,
     end
 
     l_curr .= 0
-
-#    rho[1:2*ngen+4*nline] .= rho_pq
-#    rho[2*ngen+4*nline+1:end] .= rho_va
-
     return
 end
 
@@ -214,7 +210,8 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=false, use_polar=true, gpu_no=1)
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-5,
+                       use_gpu=false, use_polar=true, gpu_no=1)
     data = opf_loaddata(case)
 
     ngen = length(data.generators)
@@ -252,16 +249,6 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
 
     gen_start = 1
     line_start = 2*ngen + 1
-    #=
-    pij_start = 2*ngen
-    qij_start = 2*ngen + nline
-    pji_start = 2*ngen + 2*nline
-    qji_start = 2*ngen + 3*nline
-    wi_i_ij_start = 2*ngen + 4*nline
-    wi_j_ji_start = 2*ngen + 5*nline
-    ti_i_ij_start = 2*ngen + 6*nline
-    ti_j_ji_start = 2*ngen + 7*nline
-    =#
 
     u_curr = zeros(nvar)
     v_curr = zeros(nvar)
@@ -377,12 +364,12 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, use_gpu=
 
             time_gen += tgpu.time
             if use_polar
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, line_start,
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, line_start, scale,
                                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                                  cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                                                                                                  cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
             else
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, line_start, mu_max,
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, line_start, scale, mu_max,
                                                                                                   cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                                   cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                                                                                                   cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)

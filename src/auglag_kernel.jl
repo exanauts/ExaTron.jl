@@ -1,5 +1,5 @@
 function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
-                       line_start::Int,
+                       line_start::Int, scale::Float64,
                        mu_max::Float64,
                        u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
                        l_curr::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
@@ -104,7 +104,7 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
         it += 1
 
         # Solve the branch problem.
-        status, minor_iter = tron_kernel(n, max_feval, max_minor, gtol, false, x, xl, xu,
+        status, minor_iter = tron_kernel(n, max_feval, max_minor, gtol, scale, false, x, xl, xu,
                                          param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
 
         @inbounds begin

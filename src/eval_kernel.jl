@@ -1,4 +1,4 @@
-@inline function eval_f_kernel(n::Int, x::CuDeviceArray{Float64,1},
+@inline function eval_f_kernel(n::Int, scale::Float64, x::CuDeviceArray{Float64,1},
                        param::CuDeviceArray{Float64,2},
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
@@ -49,11 +49,13 @@
         f += 0.5*raug*c6^2
     end
 
+    f *= scale
     CUDA.sync_threads()
     return f
 end
 
-@inline function eval_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
+@inline function eval_grad_f_kernel(n::Int, scale::Float64,
+                            x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
                             param::CuDeviceArray{Float64,2},
                             YffR::Float64, YffI::Float64,
                             YftR::Float64, YftI::Float64,
@@ -108,16 +110,16 @@ end
         g10 += (-(param[31,I] + raug*c6))
 
         if tx == 1 && ty == 1
-            g[1] = g1
-            g[2] = g2
-            g[3] = g3
-            g[4] = g4
-            g[5] = g5
-            g[6] = g6
-            g[7] = g7
-            g[8] = g8
-            g[9] = g9
-            g[10] = g10
+            g[1] = scale*g1
+            g[2] = scale*g2
+            g[3] = scale*g3
+            g[4] = scale*g4
+            g[5] = scale*g5
+            g[6] = scale*g6
+            g[7] = scale*g7
+            g[8] = scale*g8
+            g[9] = scale*g9
+            g[10] = scale*g10
         end
     end
 
@@ -125,7 +127,8 @@ end
     return
 end
 
-@inline function eval_h_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
+@inline function eval_h_kernel(n::Int, scale::Float64,
+                       x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
                        param::CuDeviceArray{Float64,2},
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
@@ -146,66 +149,66 @@ end
 
         if tx == 1 && ty == 1
             # 1st column
-            A[1,1] = param[7,I] + raug
-            A[5,1] = raug*(-YffR)
-            A[7,1] = raug*(-YftR)
-            A[8,1] = raug*(-YftI)
+            A[1,1] = scale*(param[7,I] + raug)
+            A[5,1] = scale*(raug*(-YffR))
+            A[7,1] = scale*(raug*(-YftR))
+            A[8,1] = scale*(raug*(-YftI))
 
             # 2nd columns
-            A[2,2] = param[8,I] + raug
-            A[5,2] = raug*(YffI)
-            A[7,2] = raug*(YftI)
-            A[8,2] = raug*(-YftR)
+            A[2,2] = scale*(param[8,I] + raug)
+            A[5,2] = scale*(raug*(YffI))
+            A[7,2] = scale*(raug*(YftI))
+            A[8,2] = scale*(raug*(-YftR))
 
             # 3rd column
-            A[3,3] = param[9,I] + raug
-            A[6,3] = raug*(-YttR)
-            A[7,3] = raug*(-YtfR)
-            A[8,3] = raug*(YtfI)
+            A[3,3] = scale*(param[9,I] + raug)
+            A[6,3] = scale*(raug*(-YttR))
+            A[7,3] = scale*(raug*(-YtfR))
+            A[8,3] = scale*(raug*(YtfI))
 
             # 4th column
-            A[4,4] = param[10,I] + raug
-            A[6,4] = raug*(YttI)
-            A[7,4] = raug*(YtfI)
-            A[8,4] = raug*(YtfR)
+            A[4,4] = scale*(param[10,I] + raug)
+            A[6,4] = scale*(raug*(YttI))
+            A[7,4] = scale*(raug*(YtfI))
+            A[8,4] = scale*(raug*(YtfR))
 
             # 5th column
-            A[5,5] = param[11,I] + raug*(YffR^2) + raug*(YffI^2) + raug*(x[6]^2)
-            A[6,5] = -(alrect + raug*c5) + raug*(x[5]*x[6])
-            A[7,5] = raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[6])*(2*x[7]))
-            A[8,5] = raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[6])*(2*x[8]))
+            A[5,5] = scale*(param[11,I] + raug*(YffR^2) + raug*(YffI^2) + raug*(x[6]^2))
+            A[6,5] = scale*(-(alrect + raug*c5) + raug*(x[5]*x[6]))
+            A[7,5] = scale*(raug*(YffR*YftR) + raug*(YffI*YftI) + raug*((-x[6])*(2*x[7])))
+            A[8,5] = scale*(raug*(YffR*YftI) + raug*(YffI*(-YftR)) + raug*((-x[6])*(2*x[8])))
 
             # 6th column
-            A[6,6] = param[12,I] + raug*(YttR^2) + raug*(YttI^2) + raug*(x[5]^2)
-            A[7,6] = raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[5])*(2*x[7]))
-            A[8,6] = raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[5])*(2*x[8]))
+            A[6,6] = scale*(param[12,I] + raug*(YttR^2) + raug*(YttI^2) + raug*(x[5]^2))
+            A[7,6] = scale*(raug*(YttR*YtfR) + raug*(YttI*YtfI) + raug*((-x[5])*(2*x[7])))
+            A[8,6] = scale*(raug*((-YttR)*YtfI) + raug*(YttI*YtfR) + raug*((-x[5])*(2*x[8])))
 
             # 7th column
-            A[7,7] = (alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
+            A[7,7] = scale*((alrect + raug*c5)*2 + raug*(YftR^2) + raug*(YftI^2) +
                 raug*(YtfR^2) + raug*(YtfI^2) + raug*((2*x[7])*(2*x[7])) +
                 (altheta + raug*c6)*((-2*x[7]*x[8]) / (x[7]^2 + x[8]^2)^2) +
-                raug*(x[8] / (x[7]^2 + x[8]^2))^2
-            A[8,7] = raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
+                raug*(x[8] / (x[7]^2 + x[8]^2))^2)
+            A[8,7] = scale*(raug*(YftR*YftI) + raug*(YftI*(-YftR)) + raug*((-YtfR)*YtfI) +
                 raug*(YtfI*YtfR) + raug*((2*x[7])*(2*x[8])) +
                 (altheta + raug*c6)*((x[7]^2 - x[8]^2)/(x[7]^2 + x[8]^2)^2) +
-                raug*((x[8]/(x[7]^2 + x[8]^2))*(-x[7]/(x[7]^2 + x[8]^2)))
-            A[9,7] = raug*(x[8]/(x[7]^2 + x[8]^2))
-            A[10,7] = -raug*(x[8]/(x[7]^2 + x[8]^2))
+                raug*((x[8]/(x[7]^2 + x[8]^2))*(-x[7]/(x[7]^2 + x[8]^2))))
+            A[9,7] = scale*(raug*(x[8]/(x[7]^2 + x[8]^2)))
+            A[10,7] = scale*(-raug*(x[8]/(x[7]^2 + x[8]^2)))
 
             # 8th column
-            A[8,8] = (alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
+            A[8,8] = scale*((alrect + raug*c5)*2 + raug*(YftI^2) + raug*(YftR^2) +
                 raug*(YtfI^2) + raug*(YtfR^2) + raug*((2*x[8])*(2*x[8])) +
                 (altheta + raug*c6)*((2*x[7]*x[8]) / (x[7]^2 + x[8]^2)^2) +
-                raug*(-x[7]/(x[7]^2 + x[8]^2))^2
-            A[9,8] = raug*(-x[7]/(x[7]^2 + x[8]^2))
-            A[10,8] = -raug*(-x[7]/(x[7]^2 + x[8]^2))
+                raug*(-x[7]/(x[7]^2 + x[8]^2))^2)
+            A[9,8] = scale*(raug*(-x[7]/(x[7]^2 + x[8]^2)))
+            A[10,8] = scale*(-raug*(-x[7]/(x[7]^2 + x[8]^2)))
 
             # 9th column
-            A[9,9] = param[27,I] + raug
-            A[10,9] = -raug
+            A[9,9] = scale*(param[27,I] + raug)
+            A[10,9] = scale*(-raug)
 
             # 10th column
-            A[10,10] = param[28,I] + raug
+            A[10,10] = scale*(param[28,I] + raug)
         end
     end
 
@@ -519,7 +522,7 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
     return
 end
 
-@inline function eval_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1},
+@inline function eval_f_polar_kernel(n::Int, scale::Float64, x::CuDeviceArray{Float64,1},
                              param::CuDeviceArray{Float64,2},
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,
@@ -555,12 +558,13 @@ end
         f += 0.5*(param[16,I]*(x[4] - param[24,I])^2)
     end
 
+    f *= scale
     CUDA.sync_threads()
 
     return f
 end
 
-@inline function eval_grad_f_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
+@inline function eval_grad_f_polar_kernel(n::Int, scale::Float64, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
                                   param::CuDeviceArray{Float64,2},
                                   YffR::Float64, YffI::Float64,
                                   YftR::Float64, YftI::Float64,
@@ -646,10 +650,10 @@ end
         g4 += param[16,I]*(x[4] - param[24,I])
 
         if tx == 1 && ty == 1
-            g[1] = g1
-            g[2] = g2
-            g[3] = g3
-            g[4] = g4
+            g[1] = scale*g1
+            g[2] = scale*g2
+            g[3] = scale*g3
+            g[4] = scale*g4
         end
     end
 
@@ -658,7 +662,7 @@ end
     return
 end
 
-@inline function eval_h_polar_kernel(n::Int, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
+@inline function eval_h_polar_kernel(n::Int, scale::Float64, x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
                              param::CuDeviceArray{Float64,2},
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,
@@ -705,7 +709,7 @@ end
             v += param[12,I]*(dqji_dvi)^2
             # (2*rho_vi*vi)*(2*vi) + rho_vi*(vi^2 - tilde_vi)*2
             v += 4*param[13,I]*x[1]^2 + param[13,I]*(x[1]^2 - param[21,I])*2
-            A[1,1] = v
+            A[1,1] = scale*v
 
             # d2f_dvidvj
 
@@ -735,8 +739,8 @@ end
             v += param[11,I]*(dpji_dvj)*dpji_dvi + param[11,I]*(pji - param[19,I])*(d2pji_dvidvj)
             # rho_qji*(dqji_dvj)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidvj)
             v += param[12,I]*(dqji_dvj)*dqji_dvi + param[12,I]*(qji - param[20,I])*(d2qji_dvidvj)
-            A[2,1] = v
-            A[1,2] = v
+            A[2,1] = scale*v
+            A[1,2] = scale*v
 
             # d2f_dvidti
 
@@ -766,8 +770,8 @@ end
             v += param[11,I]*(dpji_dti)*dpji_dvi + param[11,I]*(pji - param[19,I])*(d2pji_dvidti)
             # rho_qji*(dqji_dti)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidti)
             v += param[12,I]*(dqji_dti)*dqji_dvi + param[12,I]*(qji - param[20,I])*(d2qji_dvidti)
-            A[3,1] = v
-            A[1,3] = v
+            A[3,1] = scale*v
+            A[1,3] = scale*v
 
             # d2f_dvidtj
 
@@ -787,8 +791,8 @@ end
             v += param[11,I]*(-dpji_dti)*dpji_dvi + param[11,I]*(pji - param[19,I])*(-d2pji_dvidti)
             # rho_qji*(dqji_dtj)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidtj)
             v += param[12,I]*(-dqji_dti)*dqji_dvi + param[12,I]*(qji - param[20,I])*(-d2qji_dvidti)
-            A[4,1] = v
-            A[1,4] = v
+            A[4,1] = scale*v
+            A[1,4] = scale*v
 
             # d2f_dvjdvj
 
@@ -809,7 +813,7 @@ end
             v += param[12,I]*(dqji_dvj)^2 + param[12,I]*(qji - param[20,I])*(-2*YttI)
             # (2*rho_vj*vj)*(2*vj) + rho_vj*(vj^2 - tilde_vj)*2
             v += 4*param[14,I]*x[2]^2 + param[14,I]*(x[2]^2 - param[22,I])*2
-            A[2,2] = v
+            A[2,2] = scale*v
 
             # d2f_dvjdti
 
@@ -834,8 +838,8 @@ end
             v += param[11,I]*(dpji_dti)*dpji_dvj + param[11,I]*(pji - param[19,I])*d2pji_dvjdti
             # rho_qji*(dqji_dti)*dqji_dvj + rho_qji*(qji - tilde_qji)*(d2qji_dvjdti)
             v += param[12,I]*(dqji_dti)*dqji_dvj + param[12,I]*(qji - param[20,I])*d2qji_dvjdti
-            A[3,2] = v
-            A[2,3] = v
+            A[3,2] = scale*v
+            A[2,3] = scale*v
 
             # d2f_dvjdtj
 
@@ -855,8 +859,8 @@ end
             v += param[11,I]*(-dpji_dti)*dpji_dvj + param[11,I]*(pji - param[19,I])*(-d2pji_dvjdti)
             # rho_qji*(dqji_dtj)*dqji_dvj + rho_qji*(qji - tilde_qji)*(d2qji_dvjdtj)
             v += param[12,I]*(-dqji_dti)*dqji_dvj + param[12,I]*(qji - param[20,I])*(-d2qji_dvjdti)
-            A[4,2] = v
-            A[2,4] = v
+            A[4,2] = scale*v
+            A[2,4] = scale*v
 
             # d2f_dtidti
 
@@ -883,7 +887,7 @@ end
             v += param[12,I]*(dqji_dti)^2 + param[12,I]*(qji - param[20,I])*(d2qji_dtidti)
             # rho_ti
             v += param[15,I]
-            A[3,3] = v
+            A[3,3] = scale*v
 
             # d2f_dtidtj
 
@@ -903,8 +907,8 @@ end
             v += param[11,I]*(-dpji_dti^2) + param[11,I]*(pji - param[19,I])*(-d2pji_dtidti)
             # rho_qji*(dqji_dtj)*dqji_dti + rho_qji*(qji - tilde_qji)*(d2qji_dtidtj)
             v += param[12,I]*(-dqji_dti^2) + param[12,I]*(qji - param[20,I])*(-d2qji_dtidti)
-            A[4,3] = v
-            A[3,4] = v
+            A[4,3] = scale*v
+            A[3,4] = scale*v
 
             # d2f_dtjdtj
             # l_pij * d2pij_dtjdtj
@@ -925,7 +929,7 @@ end
             v += param[12,I]*(dqji_dti^2) + param[12,I]*(qji - param[20,I])*(d2qji_dtidti)
             # rho_tj
             v += param[16,I]
-            A[4,4] = v
+            A[4,4] = scale*v
         end
     end
 

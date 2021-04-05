@@ -1,7 +1,8 @@
 """
 Driver to run TRON on GPU. This should be called from a kernel.
 """
-@inline function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, use_polar::Bool,
+@inline function tron_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64,
+                     scale::Float64, use_polar::Bool,
                      x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
                      xu::CuDeviceArray{Float64,1},
                      param::CuDeviceArray{Float64,2},
@@ -62,9 +63,9 @@ Driver to run TRON on GPU. This should be called from a kernel.
 
         if task == 0 || task == 1
             if use_polar
-                f = eval_f_polar_kernel(n, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                f = eval_f_polar_kernel(n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             else
-                f = eval_f_kernel(n, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                f = eval_f_kernel(n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             end
             nfev += 1
             if nfev >= max_feval
@@ -77,11 +78,11 @@ Driver to run TRON on GPU. This should be called from a kernel.
 
         if task == 0 || task == 2
             if use_polar
-                eval_grad_f_polar_kernel(n, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-                eval_h_polar_kernel(n, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_grad_f_polar_kernel(n, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_h_polar_kernel(n, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             else
-                eval_grad_f_kernel(n, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-                eval_h_kernel(n, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_grad_f_kernel(n, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_h_kernel(n, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             end
             ngev += 1
             nhev += 1
