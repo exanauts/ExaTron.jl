@@ -226,7 +226,7 @@ end
     return
 end
 
-function eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+function eval_f_kernel_cpu(I, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
     f = 0.0
 
     @inbounds begin
@@ -258,10 +258,11 @@ function eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR
         f += 0.5*raug*c6^2
     end
 
+    f *= scale
     return f
 end
 
-function eval_grad_f_kernel_cpu(I, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+function eval_grad_f_kernel_cpu(I, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
     g .= 0.0
 
     @inbounds begin
@@ -272,7 +273,7 @@ function eval_grad_f_kernel_cpu(I, x, g, param, YffR, YffI, YftR, YftI, YttR, Yt
         c5 = (x[7]^2 + x[8]^2 - x[5]*x[6])
         c6 = (x[9] - x[10] - atan(x[8], x[7]))
 
-        @inbounds for i=1:6
+        for i=1:6
             g[i] += param[i,I] + param[6+i,I]*(x[i] - param[12+i,I])
         end
 
@@ -301,6 +302,10 @@ function eval_grad_f_kernel_cpu(I, x, g, param, YffR, YffI, YftR, YftI, YttR, Yt
         g[8] += (-((param[31,I] + raug*c6)*(x[7] / (x[7]^2 + x[8]^2))))
         g[9] += param[31,I] + raug*c6
         g[10] += (-(param[31,I] + raug*c6))
+
+        for i=1:10
+            g[i] *= scale
+        end
     end
 
     return
@@ -516,6 +521,10 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
             # (10,10)
             values[nz] = param[28,I] + raug
             nz += 1
+
+            for i=1:nz-1
+                values[nz] *= scale
+            end
         end
     end
 
@@ -940,7 +949,7 @@ end
     return
 end
 
-function eval_f_polar_kernel_cpu(I, x, param, _YffR, _YffI, _YftR, _YftI, _YttR, _YttI, _YtfR, _YtfI)
+function eval_f_polar_kernel_cpu(I, scale, x, param, _YffR, _YffI, _YftR, _YftI, _YttR, _YttI, _YtfR, _YtfI)
     f = 0.0
 
     @inbounds begin
@@ -975,10 +984,11 @@ function eval_f_polar_kernel_cpu(I, x, param, _YffR, _YffI, _YftR, _YftI, _YttR,
         f += 0.5*(param[16,I]*(x[4] - param[24,I])^2)
     end
 
+    f *= scale
     return f
 end
 
-function eval_grad_f_polar_kernel_cpu(I, x, g, param, _YffR, _YffI, _YftR, _YftI, _YttR, _YttI, _YtfR, _YtfI)
+function eval_grad_f_polar_kernel_cpu(I, scale, x, g, param, _YffR, _YffI, _YftR, _YftI, _YttR, _YttI, _YtfR, _YtfI)
     g .= 0.0
 
     @inbounds begin
@@ -1059,6 +1069,10 @@ function eval_grad_f_polar_kernel_cpu(I, x, g, param, _YffR, _YffI, _YftR, _YftI
         g[4] += param[11,I]*(pji - param[19,I])*(-dpji_dx)
         g[4] += param[12,I]*(qji - param[20,I])*(-dqji_dx)
         g[4] += param[16,I]*(x[4] - param[24,I])
+
+        for i=1:4
+            g[i] *= scale
+        end
     end
 end
 
@@ -1339,6 +1353,11 @@ function eval_h_polar_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
             values[nz] += param[12,I]*(dqji_dti^2) + param[12,I]*(qji - param[20,I])*(d2qji_dtidti)
             # rho_tj
             values[nz] += param[16,I]
+            nz += 1
+
+            for i=1:nz-1
+                values[i] *= scale
+            end
         end
     end
 end

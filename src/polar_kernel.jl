@@ -85,7 +85,7 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
     return
 end
 
-function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
+function polar_kernel_cpu(n::Int, nline::Int, line_start::Int, scale::Float64,
                           u_curr::AbstractVector{Float64}, v_curr::AbstractVector{Float64},
                           l_curr::AbstractVector{Float64}, rho::AbstractVector{Float64},
                           shift::Int,
@@ -146,16 +146,16 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
         param[24,id_line] = v_curr[pij_idx+7]
 
         function eval_f_cb(x)
-            f = eval_f_polar_kernel_cpu(id_line, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            f = eval_f_polar_kernel_cpu(id_line, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             return f
         end
 
         function eval_g_cb(x, g)
-            eval_grad_f_polar_kernel_cpu(id_line, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+            eval_grad_f_polar_kernel_cpu(id_line, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             return
         end
 
-        function eval_h_cb(x, mode, rows, cols, scale, lambda, values)
+        function eval_h_cb(x, mode, rows, cols, _scale, lambda, values)
             eval_h_polar_kernel_cpu(id_line, x, mode, scale, rows, cols, lambda, values,
                                     param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
             return

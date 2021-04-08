@@ -129,8 +129,10 @@ function init_values(data, ybus, gen_start, line_start,
 
     for g=1:ngen
         pg_idx = gen_start + 2*(g-1)
-        u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
-        u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        #u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
+        #u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        v_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
+        v_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
     end
 
     rho .= rho_pq
@@ -145,10 +147,12 @@ function init_values(data, ybus, gen_start, line_start,
         u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
         u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
         u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        #=
         u_curr[pij_idx+4] = wij0
         u_curr[pij_idx+5] = wji0
         u_curr[pij_idx+6] = 0.0
         u_curr[pij_idx+7] = 0.0
+        =#
         wRIij[2*(l-1)+1] = wR0
         wRIij[2*l] = 0.0
 
@@ -210,7 +214,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-5,
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
                        use_gpu=false, use_polar=true, gpu_no=1)
     data = opf_loaddata(case)
 
@@ -323,7 +327,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
             time_gen += tcpu.time
 
             if use_polar
-                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, line_start,
+                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, line_start, scale,
                                                                     u_curr, v_curr, l_curr, rho,
                                                                     shift_lines, param, YffR, YffI, YftR, YftI,
                                                                     YttR, YttI, YtfR, YtfI, FrBound, ToBound)
@@ -343,7 +347,7 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
             l_curr .+= rho .* (u_curr .- v_curr)
             rd .= -rho .* (v_curr .- v_prev)
             rp .= u_curr .- v_curr
-            rp_old .= u_prev .- v_prev
+            #rp_old .= u_prev .- v_prev
 
             primres = norm(rp)
             dualres = norm(rd)
@@ -353,6 +357,10 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
 
             @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n",
                     it, primres, dualres, eps_pri, eps_dual, auglag_it, tron_it)
+
+            if primres <= eps_pri && dualres <= eps_dual
+                break
+            end
         else
             @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_u_prev, cu_u_curr)
             @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_v_prev, cu_v_curr)
@@ -398,6 +406,10 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
             gpu_eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*CUDA.norm(cu_l_curr)
 
             @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
+
+            if gpu_primres <= gpu_eps_pri && gpu_dualres <= gpu_eps_dual
+                break
+            end
         end
     end
     end
@@ -558,6 +570,7 @@ function admm_rect_gpu_mpi(
 
     it = 0
     time_gen = time_br = time_bus = 0
+    time_br_scatter = time_br_gather = 0
 
     h_u_curr = zeros(nvar)
     h_param = zeros(31, nline)
@@ -588,17 +601,21 @@ function admm_rect_gpu_mpi(
             #  - div(nblk_br / number of GPUs, RoundUp)
             # scatter / gather
 
-            MPI.Scatter!(v_lines_root, v_local, root, comm)
-            MPI.Scatter!(l_lines_root, l_local, root, comm)
+            tcpu_mpi = @timed begin
+                MPI.Scatter!(v_lines_root, v_local, root, comm)
+                MPI.Scatter!(l_lines_root, l_local, root, comm)
+            end
+            time_br_scatter += tcpu_mpi.time
 
-            tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nlines_local, 1,
+            nlines_actual = min(nlines_local, nline - shift_lines)
+            tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nlines_actual, 1, scale,
                                                                 u_local, v_local, l_local, rho_local,
                                                                 shift_lines, param, YffR, YffI, YftR, YftI,
                                                                 YttR, YttI, YtfR, YtfI, FrBound, ToBound)
 
             time_br += tcpu.time
-            MPI.Gather!(u_local, u_lines_root, root, comm)
-
+            tcpu_mpi = @timed MPI.Gather!(u_local, u_lines_root, root, comm)
+            time_br_gather += tcpu_mpi.time
 
             if is_master
                 tcpu = @timed bus_kernel_cpu(baseMVA, nbus, gen_start, line_start,
@@ -609,7 +626,7 @@ function admm_rect_gpu_mpi(
                 l_curr .+= rho .* (u_curr .- v_curr)
                 rd .= -rho .* (v_curr .- v_prev)
                 rp .= u_curr .- v_curr
-                rp_old .= u_prev .- v_prev
+                #rp_old .= u_prev .- v_prev
 
                 primres = norm(rp)
                 dualres = norm(rd)
@@ -636,11 +653,15 @@ function admm_rect_gpu_mpi(
             end
 
             #  - Broadcast cu_v_curr and cu_l_curr to GPUs.
-            MPI.Scatter!(v_lines_root, v_local, root, comm)
-            MPI.Scatter!(l_lines_root, l_local, root, comm)
+            tgpu_mpi = @timed begin
+                MPI.Scatter!(v_lines_root, v_local, root, comm)
+                MPI.Scatter!(l_lines_root, l_local, root, comm)
+            end
+            time_br_scatter += tgpu_mpi.time
 
             #  - div(nblk_br / number of GPUs, RoundUp)
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br_local shmem=shmem_size polar_kernel(n, nline, 1, scale,
+            nblk_br_actual = min(nblk_br_local, nline - shift_lines)
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br_actual shmem=shmem_size polar_kernel(n, nline, 1, scale,
                 u_local, v_local, l_local, rho_local,
                 shift_lines, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                 cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound
@@ -648,7 +669,8 @@ function admm_rect_gpu_mpi(
             time_br += tgpu.time
 
             #  - Collect cu_u_curr.
-            MPI.Gather!(u_local, u_lines_root, root, comm)
+            tgpu_mpi = @timed MPI.Gather!(u_local, u_lines_root, root, comm)
+            time_br_gather += tgpu_mpi.time
 
             if is_master
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(baseMVA, nbus, gen_start, line_start,
@@ -675,13 +697,18 @@ function admm_rect_gpu_mpi(
     if use_gpu
         copyto!(u_curr, cu_u_curr)
     end
-    if is_master
-        @printf(" ** Time\n")
-        @printf("Generator = %.2f\n", time_gen)
-        @printf("Branch    = %.2f\n", time_br)
-        @printf("Bus       = %.2f\n", time_bus)
-        @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
 
+    rank = MPI.Comm_rank(comm)
+    @printf(" ** Time\n")
+    @printf("[%d] Generator = %.2f\n", rank, time_gen)
+    @printf("[%d] Branch    = %.2f\n", rank, time_br)
+    @printf("[%d] Bus       = %.2f\n", rank, time_bus)
+    @printf("[%d] G+Br+Bus  = %.2f\n", rank, time_gen + time_br + time_bus)
+    @printf("[%d] Scatter   = %.2f\n", rank, time_br_scatter)
+    @printf("[%d] Gather    = %.2f\n", rank, time_br_gather)
+    @printf("[%d] MPI(S+G)  = %.2f\n", rank, time_br_scatter + time_br_gather)
+
+    if is_master
         objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(baseMVA*u_curr[gen_start+2*(g-1)])^2 +
                     data.generators[g].coeff[data.generators[g].n-1]*(baseMVA*u_curr[gen_start+2*(g-1)]) +
                     data.generators[g].coeff[data.generators[g].n]
