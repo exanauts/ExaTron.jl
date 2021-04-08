@@ -222,7 +222,7 @@ end
     # Exit if there is negative curvature or if the
     # iterates exit the trust region.
 
-    if (ptq <= zero) || (alpha >= sigma)
+    if (ptq <= zero(T)) || (alpha >= sigma)
       daxpy(n,sigma,p,1,w,1)
       if ptq <= zero(T)
         info = 3

@@ -127,6 +127,6 @@ Driver to run TRON on GPU. This should be called from a kernel.
     end
 
     CUDA.sync_threads()
+    return
 
-    return status, minor_iter
 end

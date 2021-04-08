@@ -25,17 +25,17 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::T,
 
         pij_idx = line_start + 8*(I-1)
 
-        xl[1] = sqrt(frBound[2*(id_line-1)+1])
-        xu[1] = sqrt(frBound[2*id_line])
-        xl[2] = sqrt(toBound[2*(id_line-1)+1])
-        xu[2] = sqrt(toBound[2*id_line])
-        xl[3] = -2*pi
-        xu[3] = 2*pi
-        xl[4] = -2*pi
-        xu[4] = 2*pi
+        xl[1] = CUDA.sqrt(frBound[2*(id_line-1)+1])
+        xu[1] = CUDA.sqrt(frBound[2*id_line])
+        xl[2] = CUDA.sqrt(toBound[2*(id_line-1)+1])
+        xu[2] = CUDA.sqrt(toBound[2*id_line])
+        xl[3] = -T(2*pi)
+        xu[3] = T(2*pi)
+        xl[4] = -T(2*pi)
+        xu[4] = T(2*pi)
 
-        x[1] = min(xu[1], max(xl[1], sqrt(u_curr[pij_idx+4])))
-        x[2] = min(xu[2], max(xl[2], sqrt(u_curr[pij_idx+5])))
+        x[1] = min(xu[1], max(xl[1], CUDA.sqrt(u_curr[pij_idx+4])))
+        x[2] = min(xu[2], max(xl[2], CUDA.sqrt(u_curr[pij_idx+5])))
         x[3] = min(xu[3], max(xl[3], u_curr[pij_idx+6]))
         x[4] = min(xu[4], max(xl[4], u_curr[pij_idx+7]))
 
@@ -66,12 +66,12 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::T,
 
         CUDA.sync_threads()
 
-        gtol = sqrt(eps(T))
-        status, minor_iter = tron_kernel(n, shift_lines, 500, 200, gtol, scale, true, x, xl, xu,
+        gtol = CUDA.sqrt(eps(T))::T
+        tron_kernel(n, shift_lines, 500, 200, gtol, scale, true, x, xl, xu,
                                          param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
 
-        vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
-        vi_vj_sin = x[1]*x[2]*sin(x[3] - x[4])
+        vi_vj_cos = x[1]*x[2]*CUDA.cos(x[3] - x[4])
+        vi_vj_sin = x[1]*x[2]*CUDA.sin(x[3] - x[4])
 
         u_curr[pij_idx] = YffR*x[1]^2 + YftR*vi_vj_cos + YftI*vi_vj_sin
         u_curr[pij_idx+1] = -YffI*x[1]^2 - YftI*vi_vj_cos + YftR*vi_vj_sin
@@ -83,7 +83,7 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::T,
         u_curr[pij_idx+7] = x[4]
     end
 
-    return
+    return nothing
 end
 
 function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
@@ -174,7 +174,7 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
         tron.x .= x
         status = ExaTron.solveProblem(tron)
         x .= tron.x
-        avg_minor_it += tron.minor_iter
+        avg_minor_it += tron.minor_iter::Int
 
         cos_ij = cos(x[3] - x[4])
         sin_ij = sin(x[3] - x[4])

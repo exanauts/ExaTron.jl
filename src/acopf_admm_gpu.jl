@@ -369,7 +369,8 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
 
             time_gen += tgpu.time
             if use_polar
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, nline, line_start, scale,
+                scale_t = T(scale)
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, nline, line_start, scale_t,
                                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                                  shift_lines, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
                                                                                                  cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)

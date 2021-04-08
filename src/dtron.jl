@@ -325,7 +325,7 @@ end
 
             snorm = dnrm2(n,s,1)
             if iter == 1
-                delta = min(delta,snorm)
+                delta = CUDA.min(delta,snorm)::T
             end
 
             # Update the trust region bound.
@@ -334,20 +334,20 @@ end
             if f-fc-g0 <= zero(T)
                 alpha = sigma3
             else
-                alpha = max(sigma1,-p5*(g0/(f-fc-g0)))
+                alpha = CUDA.max(sigma1,-p5*(g0/(f-fc-g0)))
             end
 
             # Update the trust region bound according to the ratio
             # of actual to predicted reduction.
 
             if actred < eta0*prered
-                delta = min(max(alpha,sigma1)*snorm,sigma2*delta)
+                delta = CUDA.min(CUDA.max(alpha,sigma1)*snorm,sigma2*delta)::T
             elseif actred < eta1*prered
-                delta = max(sigma1*delta,min(alpha*snorm,sigma2*delta))
+                delta = CUDA.max(sigma1*delta,CUDA.min(alpha*snorm,sigma2*delta))::T
             elseif actred < eta2*prered
-                delta = max(sigma1*delta,min(alpha*snorm,sigma3*delta))
+                delta = CUDA.max(sigma1*delta,CUDA.min(alpha*snorm,sigma3*delta))::T
             else
-                delta = max(delta,min(alpha*snorm,sigma3*delta))
+                delta = CUDA.max(delta,CUDA.min(alpha*snorm,sigma3*delta))::T
             end
 
             # Update the iterate.
