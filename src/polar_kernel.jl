@@ -164,9 +164,11 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
         end
 
         nele_hess = 10
+        atol = sqrt(eps(T))
+        frtol = eps(T)^T(2/3)
         tron = ExaTron.createProblem(4, xl, xu, nele_hess, eval_f_cb, eval_g_cb, eval_h_cb;
-                                     :tol => 1e-6, :matrix_type => :Dense, :max_minor => 200,
-                                     :frtol => 1e-12)
+                                     :tol => atol, :matrix_type => :Dense, :max_minor => 200,
+                                     :frtol => frtol)
 
         tron.x .= x
         status = ExaTron.solveProblem(tron)
