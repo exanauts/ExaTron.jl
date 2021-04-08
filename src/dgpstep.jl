@@ -24,9 +24,9 @@ function dgpstep(n,x,xl,xu,alpha,w,s)
     return
 end
 
-@inline function dgpstep(n::Int,x::CuDeviceArray{Float64,1},xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1},alpha,w::CuDeviceArray{Float64,1},
-                         s::CuDeviceArray{Float64,1})
+@inline function dgpstep(n::Int,x::CuDeviceArray{T,1},xl::CuDeviceArray{T,1},
+                         xu::CuDeviceArray{T,1},alpha,w::CuDeviceArray{T,1},
+                         s::CuDeviceArray{T,1}) where T
     tx = threadIdx().x
     ty = threadIdx().y
 

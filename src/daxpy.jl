@@ -6,10 +6,11 @@ It uses unrolled loops for increments equal to one.
 Jack Dongarra, LINPACK, 3/11/78.
 """
 function tron_daxpy(n,da,dx,incx,dy,incy)
+    T = eltype(dx)
     if n <= 0
         return
     end
-    if da == 0.0
+    if da == zero(T)
         return
     end
     if incx != 1 || incy != 1
@@ -60,8 +61,8 @@ else
 end
 
 @inline function daxpy(n::Int,da::Float64,
-                       dx::CuDeviceArray{Float64,1},incx::Int,
-                       dy::CuDeviceArray{Float64,1},incy::Int)
+                       dx::CuDeviceArray{T,1},incx::Int,
+                       dy::CuDeviceArray{T,1},incy::Int) where T
     tx = threadIdx().x
     ty = threadIdx().y
 

@@ -27,22 +27,22 @@ Chih-Jen Lin and Jorge J. More'.
 """
 function dcauchy(n,x,xl,xu,A,
                          g,delta,alpha,s,wa)
-    p5 = 0.5
-    one = 1.0
+    T = eltype(x)
+    p5 = T(0.5)
 
     # Constant that defines sufficient decrease.
 
-    mu0 = 0.01
+    mu0 = T(0.01)
 
     # Interpolation and extrapolation factors.
 
-    interpf = 0.1
-    extrapf = 10.0
+    interpf = T(0.1)
+    extrapf = T(10.0)
 
     # Find the minimal and maximal break-point on x - alpha*g.
 
     dcopy(n,g,1,wa,1)
-    dscal(n,-one,wa,1)
+    dscal(n,-one(T),wa,1)
     nbrpt,brptmin,brptmax = dbreakpt(n,x,xl,xu,wa)
 
     # Evaluate the initial alpha and decide if the algorithm
@@ -115,27 +115,26 @@ function dcauchy(n,x,xl,xu,A,
     return alpha
 end
 
-@inline function dcauchy(n::Int, x::CuDeviceArray{Float64,1},
-                         xl::CuDeviceArray{Float64}, xu::CuDeviceArray{Float64,1},
-                         A::CuDeviceArray{Float64,2}, g::CuDeviceArray{Float64,1},
-                         delta::Float64, alpha::Float64, s::CuDeviceArray{Float64,1},
-                         wa::CuDeviceArray{Float64,1})
-    p5 = 0.5
-    one = 1.0
+@inline function dcauchy(n::Int, x::CuDeviceArray{T,1},
+                         xl::CuDeviceArray{T}, xu::CuDeviceArray{T,1},
+                         A::CuDeviceArray{T,2}, g::CuDeviceArray{T,1},
+                         delta::T, alpha::T, s::CuDeviceArray{T,1},
+                         wa::CuDeviceArray{T,1}) where T
+    p5 = T(0.5)
 
     # Constant that defines sufficient decrease.
 
-    mu0 = 0.01
+    mu0 = T(0.01)
 
     # Interpolation and extrapolation factors.
 
-    interpf = 0.1
-    extrapf = 10.0
+    interpf = T(0.1)
+    extrapf = T(10.0)
 
     # Find the minimal and maximal break-point on x - alpha*g.
 
     dcopy(n,g,1,wa,1)
-    dscal(n,-one,wa,1)
+    dscal(n,-one(T),wa,1)
     nbrpt,brptmin,brptmax = dbreakpt(n,x,xl,xu,wa)
 
     # Evaluate the initial alpha and decide if the algorithm

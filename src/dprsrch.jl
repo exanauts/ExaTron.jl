@@ -28,20 +28,20 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
-    one = 1.0
-    p5 = 0.5
+    T = eltype(x)
+    p5 = T(0.5)
 
     # Constant that defines sufficient decrease.
-    mu0 = 0.01
+    mu0 = T(0.01)
 
     # Interpolation factor.
 
-    interpf = 0.5
+    interpf = T(0.5)
 
     # Set the initial alpha = 1 because the quadratic function is
     # decreasing in the ray x + alpha*w for 0 <= alpha <= 1.
 
-    alpha = one
+    alpha = one(T)
     nsteps = 0
 
     # Find the smallest break-point on the ray x + alpha*w.
@@ -74,7 +74,7 @@ function dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
     # There is sufficient decrease because the quadratic function
     # is decreasing in the ray x + alpha*w for 0 <= alpha <= 1.
 
-    if (alpha < one && alpha < brptmin)
+    if (alpha < one(T) && alpha < brptmin)
         alpha = brptmin
     end
 
@@ -88,28 +88,27 @@ function dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
     return
 end
 
-@inline function dprsrch(n::Int, x::CuDeviceArray{Float64,1},
-                         xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1},
-                         A::CuDeviceArray{Float64,2},
-                         g::CuDeviceArray{Float64,1},
-                         w::CuDeviceArray{Float64,1},
-                         wa1::CuDeviceArray{Float64,1},
-                         wa2::CuDeviceArray{Float64,1})
-    one = 1.0
-    p5 = 0.5
+@inline function dprsrch(n::Int, x::CuDeviceArray{T,1},
+                         xl::CuDeviceArray{T,1},
+                         xu::CuDeviceArray{T,1},
+                         A::CuDeviceArray{T,2},
+                         g::CuDeviceArray{T,1},
+                         w::CuDeviceArray{T,1},
+                         wa1::CuDeviceArray{T,1},
+                         wa2::CuDeviceArray{T,1}) where T
+    p5 = T(0.5)
 
     # Constant that defines sufficient decrease.
-    mu0 = 0.01
+    mu0 = T(0.01)
 
     # Interpolation factor.
 
-    interpf = 0.5
+    interpf = T(0.5)
 
     # Set the initial alpha = 1 because the quadratic function is
     # decreasing in the ray x + alpha*w for 0 <= alpha <= 1.
 
-    alpha = one
+    alpha = one(T)
     nsteps = 0
 
     # Find the smallest break-point on the ray x + alpha*w.
@@ -142,7 +141,7 @@ end
     # There is sufficient decrease because the quadratic function
     # is decreasing in the ray x + alpha*w for 0 <= alpha <= 1.
 
-    if (alpha < one && alpha < brptmin)
+    if (alpha < one(T) && alpha < brptmin)
         alpha = brptmin
     end
 

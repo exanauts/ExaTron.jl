@@ -15,8 +15,8 @@ function dmid(n,x,xl,xu)
     return
 end
 
-@inline function dmid(n::Int, x::CuDeviceArray{Float64,1},
-                      xl::CuDeviceArray{Float64,1}, xu::CuDeviceArray{Float64,1})
+@inline function dmid(n::Int, x::CuDeviceArray{T,1},
+                      xl::CuDeviceArray{T,1}, xu::CuDeviceArray{T,1}) where T
     tx = threadIdx().x
     ty = threadIdx().y
 

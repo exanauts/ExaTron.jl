@@ -1,21 +1,21 @@
-function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
-                     u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
-                     l_curr::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
-                     shift_lines::Int, param::CuDeviceArray{Float64,2},
-                     _YffR::CuDeviceArray{Float64,1}, _YffI::CuDeviceArray{Float64,1},
-                     _YftR::CuDeviceArray{Float64,1}, _YftI::CuDeviceArray{Float64,1},
-                     _YttR::CuDeviceArray{Float64,1}, _YttI::CuDeviceArray{Float64,1},
-                     _YtfR::CuDeviceArray{Float64,1}, _YtfI::CuDeviceArray{Float64,1},
-                     frBound::CuDeviceArray{Float64,1}, toBound::CuDeviceArray{Float64,1})
+function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::T,
+                     u_curr::CuDeviceArray{T,1}, v_curr::CuDeviceArray{T,1},
+                     l_curr::CuDeviceArray{T,1}, rho::CuDeviceArray{T,1},
+                     shift_lines::Int, param::CuDeviceArray{T,2},
+                     _YffR::CuDeviceArray{T,1}, _YffI::CuDeviceArray{T,1},
+                     _YftR::CuDeviceArray{T,1}, _YftI::CuDeviceArray{T,1},
+                     _YttR::CuDeviceArray{T,1}, _YttI::CuDeviceArray{T,1},
+                     _YtfR::CuDeviceArray{T,1}, _YtfI::CuDeviceArray{T,1},
+                     frBound::CuDeviceArray{T,1}, toBound::CuDeviceArray{T,1}) where T
 
     tx = threadIdx().x
     ty = threadIdx().y
     I = blockIdx().x
     id_line = I + shift_lines
 
-    x = @cuDynamicSharedMem(Float64, n)
-    xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-    xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+    x = @cuDynamicSharedMem(T, n)
+    xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+    xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
 
     @inbounds begin
         YffR = _YffR[id_line]; YffI = _YffI[id_line]
@@ -86,25 +86,27 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
 end
 
 function polar_kernel_cpu(n::Int, nline::Int, line_start::Int,
-                          u_curr::AbstractVector{Float64}, v_curr::AbstractVector{Float64},
-                          l_curr::AbstractVector{Float64}, rho::AbstractVector{Float64},
+                          u_curr::AbstractVector{T}, v_curr::AbstractVector{T},
+                          l_curr::AbstractVector{T}, rho::AbstractVector{T},
                           shift::Int,
-                          param::Array{Float64},
-                          YffR::Array{Float64}, YffI::Array{Float64},
-                          YftR::Array{Float64}, YftI::Array{Float64},
-                          YttR::Array{Float64}, YttI::Array{Float64},
-                          YtfR::Array{Float64}, YtfI::Array{Float64},
-                          frBound::Array{Float64}, toBound::Array{Float64})
+                          param::Array{T, 2},
+                          YffR::Array{T, 1}, YffI::Array{T, 1},
+                          YftR::Array{T, 1}, YftI::Array{T, 1},
+                          YttR::Array{T, 1}, YttI::Array{T, 1},
+                          YtfR::Array{T, 1}, YtfI::Array{T, 1},
+                          frBound::Array{T, 1}, toBound::Array{T, 1}) where T
     avg_minor_it = 0
 
-    x = zeros(n)
-    xl = zeros(n)
-    xu = zeros(n)
+    x = zeros(T, n)
+    xl = zeros(T, n)
+    xu = zeros(T, n)
 
-    xl[3] = -2*pi
-    xu[3] = 2*pi
-    xl[4] = -2*pi
-    xu[4] = 2*pi
+    TWOPI = T(2 * pi)
+
+    xl[3] = -TWOPI
+    xu[3] = TWOPI
+    xl[4] = -TWOPI
+    xu[4] = TWOPI
 
     @inbounds for I=1:nline
         pij_idx = line_start + 8*(I-1)

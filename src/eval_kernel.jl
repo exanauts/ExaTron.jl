@@ -227,7 +227,8 @@ end
 end
 
 function eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-    f = 0.0
+    T = eltype(x)
+    f = zero(T)
 
     @inbounds begin
         f += sum(param[i,I]*x[i] for i=1:6)
@@ -262,7 +263,8 @@ function eval_f_kernel_cpu(I, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR
 end
 
 function eval_grad_f_kernel_cpu(I, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-    g .= 0.0
+    T = eltype(x)
+    g .= zero(T)
 
     @inbounds begin
         c1 = (x[1] - (YffR[I]*x[5] + YftR[I]*x[7] + YftI[I]*x[8]))

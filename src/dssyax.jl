@@ -31,11 +31,12 @@ end
 function TronDenseMatrix(I::VI, J::VI, V::VD, n) where {VI, VD}
     @assert n >= 1
     @assert length(I) == length(J) == length(V)
+    T = eltype(V)
 
     if isa(V, Array)
-        A = TronDenseMatrix{Array{Float64, 2}}(n, n, tron_zeros(Array{eltype(V)}, (n, n)))
+        A = TronDenseMatrix{Array{T, 2}}(n, n, tron_zeros(Array{T}, (n, n)))
     else
-        A = TronDenseMatrix{CuArray{Float64, 2}}(n, n, tron_zeros(CuArray{eltype(V)}, (n, n)))
+        A = TronDenseMatrix{CuArray{T, 2}}(n, n, tron_zeros(CuArray{T}, (n, n)))
     end
     for i=1:length(I)
         @assert 1 <= I[i] <= n && 1 <= J[i] <= n && I[i] >= J[i]
@@ -144,7 +145,7 @@ function Base.fill!(A::TronSparseMatrixCSC, val)
     fill!(A.tril_vals, val)
 end
 
-@inline function Base.fill!(w::CuDeviceArray{Float64,1}, val::Float64)
+@inline function Base.fill!(w::CuDeviceArray{T,1}, val::T) where T
     tx = threadIdx().x
     ty = threadIdx().y
 
@@ -208,11 +209,11 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     end
 end
 
-@inline function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int)
+@inline function nrm2!(wa, A::CuDeviceArray{T,2}, n::Int) where T
     tx = threadIdx().x
     ty = threadIdx().y
 
-    v = 0.0
+    v = zero(T)
     if tx <= n && ty == 1
         @inbounds for j=1:n
             v += A[j,tx]^2
@@ -292,13 +293,13 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
     return
 end
 
-@inline function dssyax(n::Int, A::CuDeviceArray{Float64,2},
-                        z::CuDeviceArray{Float64,1},
-                        q::CuDeviceArray{Float64,1})
+@inline function dssyax(n::Int, A::CuDeviceArray{T,2},
+                        z::CuDeviceArray{T,1},
+                        q::CuDeviceArray{T,1}) where T
     tx = threadIdx().x
     ty = threadIdx().y
 
-    v = 0.0
+    v = zero(T)
     if tx <= n && ty == 1
         @inbounds for j=1:n
             v += A[tx,j]*z[j]
@@ -329,9 +330,9 @@ end
     return
 end
 
-@inline function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64,2},
-                          A::CuDeviceArray{Float64,2}, indfree::CuDeviceArray{Int,1},
-                          iwa::CuDeviceArray{Int,1})
+@inline function reorder!(n::Int, nfree::Int, B::CuDeviceArray{T,2},
+                          A::CuDeviceArray{T,2}, indfree::CuDeviceArray{Int,1},
+                          iwa::CuDeviceArray{Int,1}) where T
     tx = threadIdx().x
     ty = threadIdx().y
 

@@ -55,16 +55,15 @@ function dspcg(n,x,xl,xu,A,g,delta,
                rtol,s,nv,itermax,
                B, L,
                indfree,gfree,w,wa,iwa)
-    zero = 0.0
-    one = 1.0
 
+    T = eltype(x)
     # Compute A*(x[1] - x[0]) and store in w.
 
     dssyax(n, A, s, w)
 
     # Compute the Cauchy point.
 
-    daxpy(n,one,s,1,x,1)
+    daxpy(n,one(T),s,1,x,1)
     dmid(n,x,xl,xu)
 
     # Start the main iteration loop.
@@ -105,7 +104,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         nnz = reorder!(B, A, indfree, nfree, iwa)
 
         # Compute the incomplete Cholesky factorization.
-        alpha = zero
+        alpha = zero(T)
         # TODO
         dicfs(nfree, nnz, B, L,
               nv, alpha,
@@ -127,7 +126,7 @@ function dspcg(n,x,xl,xu,A,g,delta,
         # to generate a direction p[k]. Store p[k] in the array w.
 
         tol = rtol*gfnorm
-        stol = zero
+        stol = zero(T)
 
         infotr,itertr = dtrpcg(nfree,B,gfree,delta, L,
                                tol,stol,itermax,w,
@@ -193,22 +192,19 @@ function dspcg(n,x,xl,xu,A,g,delta,
     return info, iters
 end
 
-@inline function dspcg(n::Int, delta::Float64, rtol::Float64, itermax::Int,
-               x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-               xu::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
-               g::CuDeviceArray{Float64,1}, s::CuDeviceArray{Float64,1},
-               B::CuDeviceArray{Float64,2}, L::CuDeviceArray{Float64,2},
-               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{Float64,1},
-               w::CuDeviceArray{Float64,1}, iwa::CuDeviceArray{Int,1},
-               wa1::CuDeviceArray{Float64,1}, wa2::CuDeviceArray{Float64,1},
-               wa3::CuDeviceArray{Float64,1}, wa4::CuDeviceArray{Float64,1},
-               wa5::CuDeviceArray{Float64,1})
+@inline function dspcg(n::Int, delta::T, rtol::T, itermax::Int,
+               x::CuDeviceArray{T,1}, xl::CuDeviceArray{T,1},
+               xu::CuDeviceArray{T,1}, A::CuDeviceArray{T,2},
+               g::CuDeviceArray{T,1}, s::CuDeviceArray{T,1},
+               B::CuDeviceArray{T,2}, L::CuDeviceArray{T,2},
+               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{T,1},
+               w::CuDeviceArray{T,1}, iwa::CuDeviceArray{Int,1},
+               wa1::CuDeviceArray{T,1}, wa2::CuDeviceArray{T,1},
+               wa3::CuDeviceArray{T,1}, wa4::CuDeviceArray{T,1},
+               wa5::CuDeviceArray{T,1}) where T
 
     tx = threadIdx().x
     ty = threadIdx().y
-
-    zero = 0.0
-    one = 1.0
 
     # Compute A*(x[1] - x[0]) and store in w.
 
@@ -216,7 +212,7 @@ end
 
     # Compute the Cauchy point.
 
-    daxpy(n,one,s,1,x,1)
+    daxpy(n,one(T),s,1,x,1)
     dmid(n,x,xl,xu)
 
     # Start the main iteration loop.
@@ -261,7 +257,7 @@ end
         reorder!(n, nfree, B, A, indfree, iwa)
 
         # Compute the incomplete Cholesky factorization.
-        alpha = zero
+        alpha = zero(T)
         dicfs(nfree, alpha, B, L, wa1, wa2)
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
@@ -282,7 +278,7 @@ end
         # to generate a direction p[k]. Store p[k] in the array w.
 
         tol = rtol*gfnorm
-        stol = zero
+        stol = zero(T)
 
         infotr,itertr = dtrpcg(nfree,B,gfree,delta,L,
                                tol,stol,itermax,w,

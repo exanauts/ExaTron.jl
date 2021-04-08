@@ -14,21 +14,20 @@ function dtron(n,x,xl,xu,f,g,A,
                B, L,
                xc,s,indfree,
                isave,dsave,wa,iwa)
-    zero = 0.0
-    p5 = 0.5
-    one = 1.0
+    T = eltype(x)
+    p5 = T(0.5)
 
     # Parameters for updating the iterates.
 
-    eta0 = 1.0e-4
-    eta1 = 0.25
-    eta2 = 0.75
+    eta0 = T(1.0e-4)
+    eta1 = T(0.25)
+    eta2 = T(0.75)
 
     # Parameters for updating the trust region size delta.
 
-    sigma1 = 0.25
-    sigma2 = 0.5
-    sigma3 = 4.0
+    sigma1 = T(0.25)
+    sigma2 = T(0.5)
+    sigma3 = T(4.0)
 
     work = ""
 
@@ -40,7 +39,7 @@ function dtron(n,x,xl,xu,f,g,A,
 
         iter = 1
         iterscg = 0
-        alphac = one
+        alphac = one(T)
         work = "COMPUTE"
 
     else
@@ -117,7 +116,7 @@ function dtron(n,x,xl,xu,f,g,A,
             # Update the trust region bound.
 
             g0 = ddot(n,g,1,s,1)
-            if f-fc-g0 <= zero
+            if f-fc-g0 <= zero(T)
                 alpha = sigma3
             else
                 alpha = max(sigma1,-p5*(g0/(f-fc-g0)))
@@ -221,33 +220,31 @@ function dtron(n,x,xl,xu,f,g,A,
     return delta
 end
 
-@inline function dtron(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-               xu::CuDeviceArray{Float64,1}, f::Float64, g::CuDeviceArray{Float64,1},
-               A::CuDeviceArray{Float64,2}, frtol::Float64, fatol::Float64,
-               fmin::Float64, cgtol::Float64, itermax::Int, delta::Float64, task::Int,
-               B::CuDeviceArray{Float64,2}, L::CuDeviceArray{Float64,2},
-               xc::CuDeviceArray{Float64,1}, s::CuDeviceArray{Float64,1},
-               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{Float64,1},
-               isave::CuDeviceArray{Int,1}, dsave::CuDeviceArray{Float64,1},
-               wa::CuDeviceArray{Float64,1}, iwa::CuDeviceArray{Int,1},
-               wa1::CuDeviceArray{Float64,1}, wa2::CuDeviceArray{Float64,1},
-               wa3::CuDeviceArray{Float64,1}, wa4::CuDeviceArray{Float64,1},
-               wa5::CuDeviceArray{Float64,1})
-    zero = 0.0
-    p5 = 0.5
-    one = 1.0
+@inline function dtron(n::Int, x::CuDeviceArray{T,1}, xl::CuDeviceArray{T,1},
+               xu::CuDeviceArray{T,1}, f::T, g::CuDeviceArray{T,1},
+               A::CuDeviceArray{T,2}, frtol::T, fatol::T,
+               fmin::T, cgtol::T, itermax::Int, delta::T, task::Int,
+               B::CuDeviceArray{T,2}, L::CuDeviceArray{T,2},
+               xc::CuDeviceArray{T,1}, s::CuDeviceArray{T,1},
+               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{T,1},
+               isave::CuDeviceArray{Int,1}, dsave::CuDeviceArray{T,1},
+               wa::CuDeviceArray{T,1}, iwa::CuDeviceArray{Int,1},
+               wa1::CuDeviceArray{T,1}, wa2::CuDeviceArray{T,1},
+               wa3::CuDeviceArray{T,1}, wa4::CuDeviceArray{T,1},
+               wa5::CuDeviceArray{T,1}) where T
+    p5 = T(0.5)
 
     # Parameters for updating the iterates.
 
-    eta0 = 1.0e-4
-    eta1 = 0.25
-    eta2 = 0.75
+    eta0 = T(1.0e-4)
+    eta1 = T(0.25)
+    eta2 = T(0.75)
 
     # Parameters for updating the trust region size delta.
 
-    sigma1 = 0.25
-    sigma2 = 0.5
-    sigma3 = 4.0
+    sigma1 = T(0.25)
+    sigma2 = T(0.5)
+    sigma3 = T(4.0)
 
     work = 0
 
@@ -259,7 +256,7 @@ end
 
         iter = 1
         iterscg = 0
-        alphac = one
+        alphac = one(T)
         work = 1  # "COMPUTE"
 
     else
@@ -334,7 +331,7 @@ end
             # Update the trust region bound.
 
             g0 = ddot(n,g,1,s,1)
-            if f-fc-g0 <= zero
+            if f-fc-g0 <= zero(T)
                 alpha = sigma3
             else
                 alpha = max(sigma1,-p5*(g0/(f-fc-g0)))

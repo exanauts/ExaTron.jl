@@ -9,26 +9,25 @@ name, so that
    Sven Hammarling, Nag Ltd.
 """
 function tron_dnrm2(n,x,incx)
-    one = 1.0
-    zero = 0.0
+    T = eltype(x)
 
     if n < 1 || incx < 1
-        xnorm = zero
+        xnorm = zero(T)
     elseif n == 1
         xnorm = abs(x[1])
     else
-        scale = zero
-        ssq = one
+        scale = zero(T)
+        ssq = one(T)
 
         # The following loop is equivalent to this call to the LAPACK
         # auxiliary routine:
         # CALL DLASSQ( N, X, INCX, SCALE, SSQ )
 
         for ix=1:incx:1+(n-1)*incx
-            if x[ix] != zero
+            if x[ix] != zero(T)
                 absxi = abs(x[ix])
                 if scale < absxi
-                    ssq = one + ssq*(scale/absxi)^2
+                    ssq = one(T) + ssq*(scale/absxi)^2
                     scale = absxi
                 else
                     ssq = ssq + (absxi/scale)^2
@@ -48,10 +47,10 @@ else
     dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
 end
 
-@inline function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
+@inline function dnrm2(n::Int,x::CuDeviceArray{T,1},incx::Int) where T
     tx = threadIdx().x
 
-    v = 0.0
+    v = zero(T)
     if tx <= n  # No check on ty so that each warp has v.
         @inbounds v = x[tx]*x[tx]
     end

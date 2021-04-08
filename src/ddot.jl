@@ -6,7 +6,8 @@ It uses unrolled loops for increments equal to one.
 Jack Dongarra, LINPACK, 3/11/78.
 """
 function tron_ddot(n,dx,incx,dy,incy)
-    dtemp = 0.0
+    T = eltype(dx)
+    dtemp = zero(T)
 
     if n <= 0
         return
@@ -52,14 +53,14 @@ else
     ddot(n,dx,incx,dy,incy) = tron_ddot(n,dx,incx,dy,incy)
 end
 
-@inline function ddot(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
-                      dy::CuDeviceArray{Float64,1},incy::Int)
+@inline function ddot(n::Int,dx::CuDeviceArray{T,1},incx::Int,
+                      dy::CuDeviceArray{T,1},incy::Int) where T
     # Currently, all threads compute the same dot product,
     # hence, no sync_threads() is needed.
     # For very small n, we may want to gauge how much gains
     # we could get by run it in parallel.
 
-    v = 0
+    v = zero(T)
     @inbounds for i=1:n
         v += dx[i]*dy[i]
     end

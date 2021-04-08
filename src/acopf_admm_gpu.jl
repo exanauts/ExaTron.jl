@@ -1,22 +1,22 @@
-function get_generator_data(data; use_gpu=false)
+function get_generator_data(data, T; use_gpu=false)
     ngen = length(data.generators)
 
     if use_gpu
-        pgmin = CuArray{Float64}(undef, ngen)
-        pgmax = CuArray{Float64}(undef, ngen)
-        qgmin = CuArray{Float64}(undef, ngen)
-        qgmax = CuArray{Float64}(undef, ngen)
-        c2 = CuArray{Float64}(undef, ngen)
-        c1 = CuArray{Float64}(undef, ngen)
-        c0 = CuArray{Float64}(undef, ngen)
+        pgmin = CuArray{T}(undef, ngen)
+        pgmax = CuArray{T}(undef, ngen)
+        qgmin = CuArray{T}(undef, ngen)
+        qgmax = CuArray{T}(undef, ngen)
+        c2 = CuArray{T}(undef, ngen)
+        c1 = CuArray{T}(undef, ngen)
+        c0 = CuArray{T}(undef, ngen)
     else
-        pgmin = Array{Float64}(undef, ngen)
-        pgmax = Array{Float64}(undef, ngen)
-        qgmin = Array{Float64}(undef, ngen)
-        qgmax = Array{Float64}(undef, ngen)
-        c2 = Array{Float64}(undef, ngen)
-        c1 = Array{Float64}(undef, ngen)
-        c0 = Array{Float64}(undef, ngen)
+        pgmin = Array{T}(undef, ngen)
+        pgmax = Array{T}(undef, ngen)
+        qgmin = Array{T}(undef, ngen)
+        qgmax = Array{T}(undef, ngen)
+        c2 = Array{T}(undef, ngen)
+        c1 = Array{T}(undef, ngen)
+        c0 = Array{T}(undef, ngen)
     end
 
     copyto!(pgmin, data.genvec.Pmin)
@@ -30,7 +30,7 @@ function get_generator_data(data; use_gpu=false)
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
 
-function get_bus_data(data; use_gpu=false)
+function get_bus_data(data, T; use_gpu=false)
     ngen = length(data.generators)
     nbus = length(data.buses)
     nline = length(data.lines)
@@ -52,8 +52,8 @@ function get_bus_data(data; use_gpu=false)
         cuFrStart = CuArray{Int}(undef, length(FrStart))
         cuToStart = CuArray{Int}(undef, length(ToStart))
         cuGenStart = CuArray{Int}(undef, length(GenStart))
-        cuPd = CuArray{Float64}(undef, nbus)
-        cuQd = CuArray{Float64}(undef, nbus)
+        cuPd = CuArray{T}(undef, nbus)
+        cuQd = CuArray{T}(undef, nbus)
 
         copyto!(cuFrIdx, FrIdx)
         copyto!(cuToIdx, ToIdx)
@@ -70,28 +70,28 @@ function get_bus_data(data; use_gpu=false)
     end
 end
 
-function get_branch_data(data; use_gpu=false)
+function get_branch_data(data, T; use_gpu=false)
     buses = data.buses
     lines = data.lines
     BusIdx = data.BusIdx
     nline = length(data.lines)
-    ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
-    frBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
-    toBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
+    ybus = Ybus{Array{T}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{T})...)
+    frBound = T[ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
+    toBound = T[ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
 
     if use_gpu
-        cuYshR = CuArray{Float64}(undef, length(ybus.YshR))
-        cuYshI = CuArray{Float64}(undef, length(ybus.YshI))
-        cuYffR = CuArray{Float64}(undef, nline)
-        cuYffI = CuArray{Float64}(undef, nline)
-        cuYftR = CuArray{Float64}(undef, nline)
-        cuYftI = CuArray{Float64}(undef, nline)
-        cuYttR = CuArray{Float64}(undef, nline)
-        cuYttI = CuArray{Float64}(undef, nline)
-        cuYtfR = CuArray{Float64}(undef, nline)
-        cuYtfI = CuArray{Float64}(undef, nline)
-        cuFrBound = CuArray{Float64}(undef, 2*nline)
-        cuToBound = CuArray{Float64}(undef, 2*nline)
+        cuYshR = CuArray{T}(undef, length(ybus.YshR))
+        cuYshI = CuArray{T}(undef, length(ybus.YshI))
+        cuYffR = CuArray{T}(undef, nline)
+        cuYffI = CuArray{T}(undef, nline)
+        cuYftR = CuArray{T}(undef, nline)
+        cuYftI = CuArray{T}(undef, nline)
+        cuYttR = CuArray{T}(undef, nline)
+        cuYttI = CuArray{T}(undef, nline)
+        cuYtfR = CuArray{T}(undef, nline)
+        cuYtfI = CuArray{T}(undef, nline)
+        cuFrBound = CuArray{T}(undef, 2*nline)
+        cuToBound = CuArray{T}(undef, 2*nline)
         copyto!(cuYshR, ybus.YshR)
         copyto!(cuYshI, ybus.YshI)
         copyto!(cuYffR, ybus.YffR)
@@ -164,7 +164,7 @@ function init_values(data, ybus, gen_start, line_start,
     return
 end
 
-function copy_data_kernel(n::Int, dest::CuDeviceArray{Float64,1}, src::CuDeviceArray{Float64,1})
+function copy_data_kernel(n::Int, dest::CuDeviceArray{T,1}, src::CuDeviceArray{T,1}) where T
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -173,10 +173,10 @@ function copy_data_kernel(n::Int, dest::CuDeviceArray{Float64,1}, src::CuDeviceA
     return
 end
 
-function update_multiplier_kernel(n::Int, l_curr::CuDeviceArray{Float64,1},
-                                  u_curr::CuDeviceArray{Float64,1},
-                                  v_curr::CuDeviceArray{Float64,1},
-                                  rho::CuDeviceArray{Float64,1})
+function update_multiplier_kernel(n::Int, l_curr::CuDeviceArray{T,1},
+                                  u_curr::CuDeviceArray{T,1},
+                                  v_curr::CuDeviceArray{T,1},
+                                  rho::CuDeviceArray{T,1}) where T
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -185,9 +185,9 @@ function update_multiplier_kernel(n::Int, l_curr::CuDeviceArray{Float64,1},
     return
 end
 
-function primal_residual_kernel(n::Int, rp::CuDeviceArray{Float64,1},
-                                u_curr::CuDeviceArray{Float64,1},
-                                v_curr::CuDeviceArray{Float64,1})
+function primal_residual_kernel(n::Int, rp::CuDeviceArray{T,1},
+                                u_curr::CuDeviceArray{T,1},
+                                v_curr::CuDeviceArray{T,1}) where T
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -197,10 +197,10 @@ function primal_residual_kernel(n::Int, rp::CuDeviceArray{Float64,1},
     return
 end
 
-function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
-                              v_prev::CuDeviceArray{Float64,1},
-                              v_curr::CuDeviceArray{Float64,1},
-                              rho::CuDeviceArray{Float64,1})
+function dual_residual_kernel(n::Int, rd::CuDeviceArray{T,1},
+                              v_prev::CuDeviceArray{T,1},
+                              v_curr::CuDeviceArray{T,1},
+                              rho::CuDeviceArray{T,1}) where T
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -210,7 +210,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-5,
+function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-5,
                        use_gpu=false, use_polar=true, gpu_no=1)
     data = opf_loaddata(case)
 
@@ -237,50 +237,50 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
         CUDA.device!(gpu_no)
     end
 
-    ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
+    ybus = Ybus{Array{T}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
-    pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data)
-    YshR, YshI, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, FrBound, ToBound = get_branch_data(data)
-    FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx, Pd, Qd = get_bus_data(data)
+    pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data, T)
+    YshR, YshI, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, FrBound, ToBound = get_branch_data(data, T)
+    FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx, Pd, Qd = get_bus_data(data, T)
 
-    cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0 = get_generator_data(data; use_gpu=use_gpu)
-    cuYshR, cuYshI, cuYffR, cuYffI, cuYftR, cuYftI, cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound = get_branch_data(data; use_gpu=use_gpu)
-    cu_FrStart, cu_FrIdx, cu_ToStart, cu_ToIdx, cu_GenStart, cu_GenIdx, cu_Pd, cu_Qd = get_bus_data(data; use_gpu=use_gpu)
+    cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0 = get_generator_data(data, T; use_gpu=use_gpu)
+    cuYshR, cuYshI, cuYffR, cuYffI, cuYftR, cuYftI, cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound = get_branch_data(data, T; use_gpu=use_gpu)
+    cu_FrStart, cu_FrIdx, cu_ToStart, cu_ToIdx, cu_GenStart, cu_GenIdx, cu_Pd, cu_Qd = get_bus_data(data, T; use_gpu=use_gpu)
 
     gen_start = 1
     line_start = 2*ngen + 1
 
-    u_curr = zeros(nvar)
-    v_curr = zeros(nvar)
-    l_curr = zeros(nvar)
-    u_prev = zeros(nvar)
-    v_prev = zeros(nvar)
-    l_prev = zeros(nvar)
-    rho = zeros(nvar)
-    rd = zeros(nvar)
-    rp = zeros(nvar)
-    rp_old = zeros(nvar)
-    rp_k0 = zeros(nvar)
-    param = zeros(31, nline)
-    wRIij = zeros(2*nline)
+    u_curr = zeros(T, nvar)
+    v_curr = zeros(T, nvar)
+    l_curr = zeros(T, nvar)
+    u_prev = zeros(T, nvar)
+    v_prev = zeros(T, nvar)
+    l_prev = zeros(T, nvar)
+    rho = zeros(T, nvar)
+    rd = zeros(T, nvar)
+    rp = zeros(T, nvar)
+    rp_old = zeros(T, nvar)
+    rp_k0 = zeros(T, nvar)
+    param = zeros(T, 31, nline)
+    wRIij = zeros(T, 2*nline)
 
     init_values(data, ybus, gen_start, line_start,
                 rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
 
     if use_gpu
-        cu_u_curr = CuArray{Float64}(undef, nvar)
-        cu_v_curr = CuArray{Float64}(undef, nvar)
-        cu_l_curr = CuArray{Float64}(undef, nvar)
-        cu_u_prev = CuArray{Float64}(undef, nvar)
-        cu_v_prev = CuArray{Float64}(undef, nvar)
-        cu_l_prev = CuArray{Float64}(undef, nvar)
-        cu_rho = CuArray{Float64}(undef, nvar)
-        cu_rd = CuArray{Float64}(undef, nvar)
-        cu_rp = CuArray{Float64}(undef, nvar)
-        cu_rp_old = CuArray{Float64}(undef, nvar)
-        cu_rp_k0 = CuArray{Float64}(undef, nvar)
-        cuParam = CuArray{Float64}(undef, (31, nline))
-        cuWRIij = CuArray{Float64}(undef, 2*nline)
+        cu_u_curr = CuArray{T}(undef, nvar)
+        cu_v_curr = CuArray{T}(undef, nvar)
+        cu_l_curr = CuArray{T}(undef, nvar)
+        cu_u_prev = CuArray{T}(undef, nvar)
+        cu_v_prev = CuArray{T}(undef, nvar)
+        cu_l_prev = CuArray{T}(undef, nvar)
+        cu_rho = CuArray{T}(undef, nvar)
+        cu_rd = CuArray{T}(undef, nvar)
+        cu_rp = CuArray{T}(undef, nvar)
+        cu_rp_old = CuArray{T}(undef, nvar)
+        cu_rp_k0 = CuArray{T}(undef, nvar)
+        cuParam = CuArray{T}(undef, (31, nline))
+        cuWRIij = CuArray{T}(undef, 2*nline)
 
         copyto!(cu_u_curr, u_curr)
         copyto!(cu_v_curr, v_curr)
@@ -302,12 +302,12 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
     it = 0
     time_gen = time_br = time_bus = 0
 
-    h_u_curr = zeros(nvar)
-    h_param = zeros(31, nline)
-    h_wRIij = zeros(2*nline)
+    h_u_curr = zeros(T, nvar)
+    h_param = zeros(T, 31, nline)
+    h_wRIij = zeros(T, 2*nline)
 
     shift_lines = 0
-    shmem_size = sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)
+    shmem_size = sizeof(T)*(14*n+3*n^2) + sizeof(Int)*(4*n)
 
     @time begin
     while it < iterlim

@@ -1,12 +1,12 @@
-function dgpnorm(n::Int, x::Array{Float64}, xl::Array{Float64},
-                 xu::Array{Float64}, g::Array{Float64})
-    inf_norm = 0.0
+function dgpnorm(n::Int, x::Array{T}, xl::Array{T},
+                 xu::Array{T}, g::Array{T}) where T
+    inf_norm = zero(T)
     for i=1:n
         if xl[i] != xu[i]
             if x[i] == xl[i]
-                v = (min(g[i], 0.0))^2
+                v = (min(g[i], zero(T)))^2
             elseif x[i] == xu[i]
-                v = (max(g[i], 0.0))^2
+                v = (max(g[i], zero(T)))^2
             else
                 v = g[i]^2
             end
@@ -19,18 +19,18 @@ function dgpnorm(n::Int, x::Array{Float64}, xl::Array{Float64},
     return inf_norm
 end
 
-@inline function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
+@inline function dgpnorm(n::Int, x::CuDeviceArray{T,1}, xl::CuDeviceArray{T,1},
+                         xu::CuDeviceArray{T,1}, g::CuDeviceArray{T,1}) where T
     tx = threadIdx().x
 
-    v = 0.0
+    v = zero(T)
     if tx <= n
         @inbounds begin
             if xl[tx] != xu[tx]
                 if x[tx] == xl[tx]
-                    v = min(g[tx], 0.0)
+                    v = min(g[tx], zero(T))
                 elseif x[tx] == xu[tx]
-                    v = max(g[tx], 0.0)
+                    v = max(g[tx], zero(T))
                 else
                     v = g[tx]
                 end

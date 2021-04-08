@@ -40,15 +40,16 @@ mutable struct ExaTronProblem{VI, VD, TM <: AbstractTronMatrix}
 end
 
 function gpnorm(n, x, x_l, x_u, g)
-    two_norm = 0.0
-    inf_norm = 0.0
+    T = eltype(x)
+    two_norm = zero(T)
+    inf_norm = zero(T)
 
     for i=1:n
         if x_l[i] != x_u[i]
             if x[i] == x_l[i]
-                val = (min(g[i], 0.0))^2
+                val = (min(g[i], zero(T)))^2
             elseif x[i] == x_u[i]
-                val = (max(g[i], 0.0))^2
+                val = (max(g[i], zero(T)))^2
             else
                 val = g[i]^2
             end
@@ -137,8 +138,8 @@ function instantiate_memory!(tron::ExaTronProblem{VI,VD}, n, nele_hess) where {V
     tron.values = tron_zeros(VD, nele_hess)
 end
 
-function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVector{Float64},
-                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb; options...)
+function createProblem(n::Integer, x_l::AbstractVector{T}, x_u::AbstractVector{T},
+                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb; options...) where T
     @assert n == length(x_l) == length(x_u)
     @assert typeof(x_l) == typeof(x_u)
 
@@ -155,7 +156,7 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     if options_dict["matrix_type"] == :Sparse
         TM = TronSparseMatrixCSC{VI, VD}
     else
-        AT = isa(x_l, Array) ? Array{Float64, 2} : CuArray{Float64, 2}
+        AT = isa(x_l, Array) ? Array{T, 2} : CuArray{T, 2}
         TM = TronDenseMatrix{AT}
     end
 
@@ -181,11 +182,11 @@ function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVe
     else
         tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
         if isa(x_l, Array)
-            tron.B = TronDenseMatrix{Array{Float64, 2}}(n)
-            tron.L = TronDenseMatrix{Array{Float64, 2}}(n)
+            tron.B = TronDenseMatrix{Array{T, 2}}(n)
+            tron.L = TronDenseMatrix{Array{T, 2}}(n)
         else
-            tron.B = TronDenseMatrix{CuArray{Float64, 2}}(n)
-            tron.L = TronDenseMatrix{CuArray{Float64, 2}}(n)
+            tron.B = TronDenseMatrix{CuArray{T, 2}}(n)
+            tron.L = TronDenseMatrix{CuArray{T, 2}}(n)
         end
         tron.nnz_a = n*n
     end
@@ -202,14 +203,15 @@ function solveProblem(tron::ExaTronProblem)
 
     VI = Vector{Cint}
     VD = typeof(tron.x)
+    T = eltype(tron.x)
 
     isave = VI(undef, 3)
     dsave = tron_zeros(VD, 3)
-    fatol = tron.options["fatol"]::Float64
-    frtol = tron.options["frtol"]::Float64
-    fmin = tron.options["fmin"]::Float64
-    cgtol = tron.options["cgtol"]::Float64
-    gtol = tron.options["tol"]::Float64
+    fatol = T(tron.options["fatol"])
+    frtol = T(tron.options["frtol"])
+    fmin = T(tron.options["fmin"])
+    cgtol = T(tron.options["cgtol"])
+    gtol = T(tron.options["tol"])
     max_feval = tron.options["max_feval"]::Int
     tcode = tron.options["tron_code"]::Symbol
     max_minor = tron.options["max_minor"]::Int
@@ -240,13 +242,13 @@ function solveProblem(tron::ExaTronProblem)
 
         if (Char(task[1]) == 'G' && Char(task[2]) == 'H') || unsafe_string(pointer(task), 5) == "START"
             tron.eval_grad_f(tron.x, tron.g)
-            tron.eval_h(tron.x, :Values, Int[], Int[], 1.0, Float64[], tron.values)
+            tron.eval_h(tron.x, :Values, Int[], Int[], T(1.0), T[], tron.values)
             tron.ngev += 1
             tron.nhev += 1
             tron.minor_iter += 1
 
             # Copy values in the CSC matrix.
-            fill!(tron.A, 0.0)
+            fill!(tron.A, T(0.0))
             transfer!(tron.A, tron.rows, tron.cols, tron.values, tron.nnz)
         end
 

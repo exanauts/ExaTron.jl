@@ -25,7 +25,7 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function dicf(n, nnz, L::TronSparseMatrixCSC, p, indr, indf, list, w)
-    zero = 0.0
+    T = eltype(w)
     insortf = 20
 
     info = 0
@@ -66,7 +66,7 @@ function dicf(n, nnz, L::TronSparseMatrixCSC, p, indr, indf, list, w)
         end
 
         # Exit if the current pivot is not positive.
-        if L.diag_vals[j] <= zero
+        if L.diag_vals[j] <= zero(T)
             info = -j
             return info
         end
@@ -239,7 +239,7 @@ end
 =#
 
 # Left-looking Cholesky
-@inline function dicf(n::Int,L::CuDeviceArray{Float64,2})
+@inline function dicf(n::Int,L::CuDeviceArray{T,2}) where T
     tx = threadIdx().x
     ty = threadIdx().y
 

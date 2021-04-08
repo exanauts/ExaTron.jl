@@ -15,8 +15,8 @@ Argonne National Laboratory.
 Chih-Jen Lin and Jorge J. More'.
 """
 function dtrqsol(n,x,p,delta)
-    zero = 0.0
-    sigma = zero
+    T = eltype(x)
+    sigma = zero(T)
 
     ptx = ddot(n,p,1,x,1)
     ptp = ddot(n,p,1,p,1)
@@ -25,23 +25,22 @@ function dtrqsol(n,x,p,delta)
 
     # Guard against abnormal cases.
     rad = ptx^2 + ptp*(dsq - xtx)
-    rad = sqrt(max(rad,zero))
+    rad = sqrt(max(rad,zero(T)))
 
-    if ptx > zero
+    if ptx > zero(T)
         sigma = (dsq - xtx)/(ptx + rad)
-    elseif rad > zero
+    elseif rad > zero(T)
         sigma = (rad - ptx)/ptp
     else
-        sigma = zero
+        sigma = zero(T)
     end
 
     return sigma
 end
 
-@inline function dtrqsol(n::Int,x::CuDeviceArray{Float64,1},
-                         p::CuDeviceArray{Float64,1},delta::Float64)
-    zero = 0.0
-    sigma = zero
+@inline function dtrqsol(n::Int,x::CuDeviceArray{T,1},
+                         p::CuDeviceArray{T,1},delta::T) where T
+    sigma = zero(T)
 
     ptx = ddot(n, p, 1, x, 1)
     ptp = ddot(n, p, 1, p, 1)
@@ -50,14 +49,14 @@ end
 
     # Guard against abnormal cases.
     rad = ptx^2 + ptp*(dsq - xtx)
-    rad = sqrt(max(rad, zero))
+    rad = sqrt(max(rad, zero(T)))
 
-    if ptx > zero
+    if ptx > zero(T)
         sigma = (dsq - xtx)/(ptx + rad)
-    elseif rad > zero
+    elseif rad > zero(T)
         sigma = (rad - ptx)/ptp
     else
-        sigma = zero
+        sigma = zero(T)
     end
     CUDA.sync_threads()
 

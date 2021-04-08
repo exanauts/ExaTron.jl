@@ -4,21 +4,22 @@ function bus_kernel(
     Pd, Qd, u, v, l, rho, YshR, YshI
 )
     I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    T = eltype(l)
     if I <= nbus
-        common_wi = 0.0
-        common_ti = 0.0
-        inv_rhosum_pij_ji = 0.0
-        inv_rhosum_qij_ji = 0.0
-        rhosum_wi_ij_ji = 0.0
-        rhosum_ti_ij_ji = 0.0
+        common_wi = zero(T)
+        common_ti = zero(T)
+        inv_rhosum_pij_ji = zero(T)
+        inv_rhosum_qij_ji = zero(T)
+        rhosum_wi_ij_ji = zero(T)
+        rhosum_ti_ij_ji = zero(T)
 
         @inbounds begin
             for k=FrStart[I]:FrStart[I+1]-1
                 pij_idx = line_start + 8*(FrIdx[k]-1)
                 common_wi += l[pij_idx+4] + rho[pij_idx+4]*u[pij_idx+4]
                 common_ti += l[pij_idx+6] + rho[pij_idx+6]*u[pij_idx+6]
-                inv_rhosum_pij_ji += 1.0 / rho[pij_idx]
-                inv_rhosum_qij_ji += 1.0 / rho[pij_idx+1]
+                inv_rhosum_pij_ji += one(T) / rho[pij_idx]
+                inv_rhosum_qij_ji += one(T) / rho[pij_idx+1]
                 rhosum_wi_ij_ji += rho[pij_idx+4]
                 rhosum_ti_ij_ji += rho[pij_idx+6]
             end
@@ -26,8 +27,8 @@ function bus_kernel(
                 pij_idx = line_start + 8*(ToIdx[k]-1)
                 common_wi += l[pij_idx+5] + rho[pij_idx+5]*u[pij_idx+5]
                 common_ti += l[pij_idx+7] + rho[pij_idx+7]*u[pij_idx+7]
-                inv_rhosum_pij_ji += 1.0 / rho[pij_idx+2]
-                inv_rhosum_qij_ji += 1.0 / rho[pij_idx+3]
+                inv_rhosum_pij_ji += one(T) / rho[pij_idx+2]
+                inv_rhosum_qij_ji += one(T) / rho[pij_idx+3]
                 rhosum_wi_ij_ji += rho[pij_idx+5]
                 rhosum_ti_ij_ji += rho[pij_idx+7]
             end
@@ -35,18 +36,18 @@ function bus_kernel(
 
         common_wi /= rhosum_wi_ij_ji
 
-        rhs1 = 0.0
-        rhs2 = 0.0
-        inv_rhosum_pg = 0.0
-        inv_rhosum_qg = 0.0
+        rhs1 = zero(T)
+        rhs2 = zero(T)
+        inv_rhosum_pg = zero(T)
+        inv_rhosum_qg = zero(T)
 
         @inbounds begin
             for g=GenStart[I]:GenStart[I+1]-1
                 pg_idx = gen_start + 2*(GenIdx[g]-1)
                 rhs1 += u[pg_idx] + (l[pg_idx]/rho[pg_idx])
                 rhs2 += u[pg_idx+1] + (l[pg_idx+1]/rho[pg_idx+1])
-                inv_rhosum_pg += 1.0 / rho[pg_idx]
-                inv_rhosum_qg += 1.0 / rho[pg_idx+1]
+                inv_rhosum_pg += zero(T) / rho[pg_idx]
+                inv_rhosum_qg += zero(T) / rho[pg_idx+1]
             end
 
             rhs1 -= (Pd[I] / baseMVA)
@@ -105,13 +106,14 @@ function bus_kernel_cpu(
     FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx,
     Pd, Qd, u, v, l, rho, YshR, YshI
 )
+    T = eltype(l)
     Threads.@threads for I=1:nbus
-        common_wi = 0.0
-        common_ti = 0.0
-        inv_rhosum_pij_ji = 0.0
-        inv_rhosum_qij_ji = 0.0
-        rhosum_wi_ij_ji = 0.0
-        rhosum_ti_ij_ji = 0.0
+        common_wi = T(0.0)
+        common_ti = T(0.0)
+        inv_rhosum_pij_ji = T(0.0)
+        inv_rhosum_qij_ji = T(0.0)
+        rhosum_wi_ij_ji = T(0.0)
+        rhosum_ti_ij_ji = T(0.0)
 
         @inbounds begin
             if FrStart[I] < FrStart[I+1]
@@ -119,8 +121,8 @@ function bus_kernel_cpu(
                     pij_idx = line_start + 8*(FrIdx[k]-1)
                     common_wi += l[pij_idx+4] + rho[pij_idx+4]*u[pij_idx+4]
                     common_ti += l[pij_idx+6] + rho[pij_idx+6]*u[pij_idx+6]
-                    inv_rhosum_pij_ji += 1.0 / rho[pij_idx]
-                    inv_rhosum_qij_ji += 1.0 / rho[pij_idx+1]
+                    inv_rhosum_pij_ji += one(T) / rho[pij_idx]
+                    inv_rhosum_qij_ji += one(T) / rho[pij_idx+1]
                     rhosum_wi_ij_ji += rho[pij_idx+4]
                     rhosum_ti_ij_ji += rho[pij_idx+6]
                 end
@@ -131,8 +133,8 @@ function bus_kernel_cpu(
                     pij_idx = line_start + 8*(ToIdx[k]-1)
                     common_wi += l[pij_idx+5] + rho[pij_idx+5]*u[pij_idx+5]
                     common_ti += l[pij_idx+7] + rho[pij_idx+7]*u[pij_idx+7]
-                    inv_rhosum_pij_ji += 1.0 / rho[pij_idx+2]
-                    inv_rhosum_qij_ji += 1.0 / rho[pij_idx+3]
+                    inv_rhosum_pij_ji += one(T) / rho[pij_idx+2]
+                    inv_rhosum_qij_ji += one(T) / rho[pij_idx+3]
                     rhosum_wi_ij_ji += rho[pij_idx+5]
                     rhosum_ti_ij_ji += rho[pij_idx+7]
                 end
@@ -141,10 +143,10 @@ function bus_kernel_cpu(
 
         common_wi /= rhosum_wi_ij_ji
 
-        rhs1 = 0.0
-        rhs2 = 0.0
-        inv_rhosum_pg = 0.0
-        inv_rhosum_qg = 0.0
+        rhs1 = zero(T)
+        rhs2 = zero(T)
+        inv_rhosum_pg = zero(T)
+        inv_rhosum_qg = zero(T)
 
         @inbounds begin
             if GenStart[I] < GenStart[I+1]
@@ -152,8 +154,8 @@ function bus_kernel_cpu(
                     pg_idx = gen_start + 2*(GenIdx[g]-1)
                     rhs1 += u[pg_idx] + (l[pg_idx]/rho[pg_idx])
                     rhs2 += u[pg_idx+1] + (l[pg_idx+1]/rho[pg_idx+1])
-                    inv_rhosum_pg += 1.0 / rho[pg_idx]
-                    inv_rhosum_qg += 1.0 / rho[pg_idx+1]
+                    inv_rhosum_pg += one(T) / rho[pg_idx]
+                    inv_rhosum_qg += one(T) / rho[pg_idx+1]
                 end
             end
 

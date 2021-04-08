@@ -12,29 +12,28 @@ Chih-Jen Lin and Jorge J. More'.
 """
 function dicfs(n, nnz, A, L,
                p, alpha, iwa, wa1, wa2)
+    T = typeof(alpha)
     nbmax = 3
-    alpham = 1.0e-3
+    alpham = T(1.0e-3)
     nbfactor = 512
 
-    zero = 0.0
-    one = 1.0
-    two = 2.0
+    two = T(2.0)
 
     # Compute the l2 norms of the columns of A.
     nrm2!(wa1, A, n)
 
     # Compute the scaling matrix D.
     @inbounds for i=1:n
-        if wa1[i] > zero
-            wa2[i] = one/sqrt(wa1[i])
+        if wa1[i] > zero(T)
+            wa2[i] = one(T)/sqrt(wa1[i])
         else
-            wa2[i] = one
+            wa2[i] = one(T)
         end
     end
 
     # Determine a lower bound for the step.
 
-    if alpha <= zero
+    if alpha <= zero(T)
         alphas = alpham
     else
         alphas = alpha
@@ -42,16 +41,16 @@ function dicfs(n, nnz, A, L,
 
     # Compute the initial shift.
 
-    alpha = zero
+    alpha = zero(T)
     @inbounds for i=1:n
-        if getdiagvalue(A,i) == zero
+        if getdiagvalue(A,i) == zero(T)
             alpha = alphas
         else
             alpha = max(alpha,-getdiagvalue(A,i)*(wa2[i]^2))
         end
     end
 
-    if alpha > 0
+    if alpha > zero(T)
         alpha = max(alpha,alphas)
     end
 
@@ -128,33 +127,31 @@ function dicfs(n, nnz, A, L,
     return
 end
 
-@inline function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64,2},
-                       L::CuDeviceArray{Float64,2},
-                       wa1::CuDeviceArray{Float64,1},
-                       wa2::CuDeviceArray{Float64,1})
+@inline function dicfs(n::Int, alpha::T, A::CuDeviceArray{T,2},
+                       L::CuDeviceArray{T,2},
+                       wa1::CuDeviceArray{T,1},
+                       wa2::CuDeviceArray{T,1}) where T
     tx = threadIdx().x
     ty = threadIdx().y
 
     nbmax = 3
-    alpham = 1.0e-3
+    alpham = T(1.0e-3)
     nbfactor = 512
 
-    zero = 0.0
-    one = 1.0
-    two = 2.0
+    two = T(2.0)
 
     # Compute the l2 norms of the columns of A.
     nrm2!(wa1, A, n)
 
     # Compute the scaling matrix D.
     if tx <= n && ty == 1
-        @inbounds wa2[tx] = (wa1[tx] > zero) ? one/sqrt(wa1[tx]) : one
+        @inbounds wa2[tx] = (wa1[tx] > zero(T)) ? one(T)/sqrt(wa1[tx]) : one(T)
     end
     CUDA.sync_threads()
 
     # Determine a lower bound for the step.
 
-    if alpha <= zero
+    if alpha <= zero(T)
         alphas = alpham
     else
         alphas = alpha
@@ -162,9 +159,9 @@ end
 
     # Compute the initial shift.
 
-    alpha = zero
+    alpha = zero(T)
     if tx <= n  # No check on ty so that each warp has alpha.
-        @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
+        @inbounds alpha = (A[tx,tx] == zero(T)) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
     end
 
     # shfl_down_sync will automatically sync threads in a warp.
@@ -179,7 +176,7 @@ end
     # Broadcast it to the entire threads in a warp.
     alpha = CUDA.shfl_sync(0xffffffff, alpha, 1)
 
-    if alpha > 0
+    if alpha > zero(T)
         alpha = max(alpha,alphas)
     end
 
@@ -196,7 +193,7 @@ end
             @inbounds for j=1:n
                 L[j,tx] = A[j,tx] * wa2[j] * wa2[tx]
             end
-            if alpha != zero
+            if alpha != zero(T)
                 @inbounds L[tx,tx] += alpha
             end
         end
