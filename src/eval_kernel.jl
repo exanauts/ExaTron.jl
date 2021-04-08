@@ -1,9 +1,9 @@
-@inline function eval_f_kernel(n::Int, scale::Float64, x::CuDeviceArray{Float64,1},
-                       param::CuDeviceArray{Float64,2},
-                       YffR::Float64, YffI::Float64,
-                       YftR::Float64, YftI::Float64,
-                       YttR::Float64, YttI::Float64,
-                       YtfR::Float64, YtfI::Float64)
+@inline function eval_f_kernel(n::Int, scale::T, x::CuDeviceArray{T,1},
+                       param::CuDeviceArray{T,2},
+                       YffR::T, YffI::T,
+                       YftR::T, YftI::T,
+                       YttR::T, YttI::T,
+                       YtfR::T, YtfI::T) where T
                        #=
                        YffR::CuDeviceArray{Float64}, YffI::CuDeviceArray{Float64},
                        YftR::CuDeviceArray{Float64}, YftI::CuDeviceArray{Float64},
@@ -14,16 +14,16 @@
     # All threads execute the same code.
 
     I = blockIdx().x
-    f = 0.0
+    f = zero(T)
 
     @inbounds for i=1:6
         f += param[i,I]*x[i]
     end
     @inbounds f += param[25,I]*x[9] + param[26,I]*x[10]
     @inbounds for i=1:6
-        f += 0.5*(param[6+i,I]*(x[i] - param[12+i,I])^2)
+        f += T(0.5)*(param[6+i,I]*(x[i] - param[12+i,I])^2)
     end
-    @inbounds f += 0.5*(param[27,I]*(x[9] - param[29,I])^2 + param[28,I]*(x[10] - param[30,I])^2)
+    @inbounds f += T(0.5)*(param[27,I]*(x[9] - param[29,I])^2 + param[28,I]*(x[10] - param[30,I])^2)
 
     @inbounds begin
         c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
@@ -41,12 +41,12 @@
         f += param[31,I]*c6
 
         raug = param[24,I]
-        f += 0.5*raug*c1^2
-        f += 0.5*raug*c2^2
-        f += 0.5*raug*c3^2
-        f += 0.5*raug*c4^2
-        f += 0.5*raug*c5^2
-        f += 0.5*raug*c6^2
+        f += T(0.5)*raug*c1^2
+        f += T(0.5)*raug*c2^2
+        f += T(0.5)*raug*c3^2
+        f += T(0.5)*raug*c4^2
+        f += T(0.5)*raug*c5^2
+        f += T(0.5)*raug*c6^2
     end
 
     f *= scale
@@ -54,13 +54,13 @@
     return f
 end
 
-@inline function eval_grad_f_kernel(n::Int, scale::Float64,
-                            x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
-                            param::CuDeviceArray{Float64,2},
-                            YffR::Float64, YffI::Float64,
-                            YftR::Float64, YftI::Float64,
-                            YttR::Float64, YttI::Float64,
-                            YtfR::Float64, YtfI::Float64)
+@inline function eval_grad_f_kernel(n::Int, scale::T,
+                            x::CuDeviceArray{T,1}, g::CuDeviceArray{T,1},
+                            param::CuDeviceArray{T,2},
+                            YffR::T, YffI::T,
+                            YftR::T, YftI::T,
+                            YttR::T, YttI::T,
+                            YtfR::T, YtfI::T) where T
 
     # All threads execute the same code.
     tx = threadIdx().x
@@ -127,13 +127,13 @@ end
     return
 end
 
-@inline function eval_h_kernel(n::Int, scale::Float64,
-                       x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
-                       param::CuDeviceArray{Float64,2},
-                       YffR::Float64, YffI::Float64,
-                       YftR::Float64, YftI::Float64,
-                       YttR::Float64, YttI::Float64,
-                       YtfR::Float64, YtfI::Float64)
+@inline function eval_h_kernel(n::Int, scale::T,
+                       x::CuDeviceArray{T,1}, A::CuDeviceArray{T,2},
+                       param::CuDeviceArray{T,2},
+                       YffR::T, YffI::T,
+                       YftR::T, YftI::T,
+                       YttR::T, YttI::T,
+                       YtfR::T, YtfI::T) where T
 
     # All threads execute the same code.
     tx = threadIdx().x
@@ -524,14 +524,14 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
     return
 end
 
-@inline function eval_f_polar_kernel(n::Int, shift::Int, scale::Float64, x::CuDeviceArray{Float64,1},
-                             param::CuDeviceArray{Float64,2},
-                             YffR::Float64, YffI::Float64,
-                             YftR::Float64, YftI::Float64,
-                             YttR::Float64, YttI::Float64,
-                             YtfR::Float64, YtfI::Float64)
+@inline function eval_f_polar_kernel(n::Int, shift::Int, scale::T, x::CuDeviceArray{T,1},
+                             param::CuDeviceArray{T,2},
+                             YffR::T, YffI::T,
+                             YftR::T, YftI::T,
+                             YttR::T, YttI::T,
+                             YtfR::T, YtfI::T) where T
     I = blockIdx().x + shift
-    f = 0.0
+    f = zero(T)
 
     @inbounds begin
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
@@ -566,13 +566,13 @@ end
     return f
 end
 
-@inline function eval_grad_f_polar_kernel(n::Int, shift::Int, scale::Float64,
-                                  x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
-                                  param::CuDeviceArray{Float64,2},
-                                  YffR::Float64, YffI::Float64,
-                                  YftR::Float64, YftI::Float64,
-                                  YttR::Float64, YttI::Float64,
-                                  YtfR::Float64, YtfI::Float64)
+@inline function eval_grad_f_polar_kernel(n::Int, shift::Int, scale::T,
+                                  x::CuDeviceArray{T,1}, g::CuDeviceArray{T,1},
+                                  param::CuDeviceArray{T,2},
+                                  YffR::T, YffI::T,
+                                  YftR::T, YftI::T,
+                                  YttR::T, YttI::T,
+                                  YtfR::T, YtfI::T) where T
 
     tx = threadIdx().x
     ty = threadIdx().y
@@ -665,13 +665,13 @@ end
     return
 end
 
-@inline function eval_h_polar_kernel(n::Int, shift::Int, scale::Float64,
-                             x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
-                             param::CuDeviceArray{Float64,2},
-                             YffR::Float64, YffI::Float64,
-                             YftR::Float64, YftI::Float64,
-                             YttR::Float64, YttI::Float64,
-                             YtfR::Float64, YtfI::Float64)
+@inline function eval_h_polar_kernel(n::Int, shift::Int, scale::T,
+                             x::CuDeviceArray{T,1}, A::CuDeviceArray{T,2},
+                             param::CuDeviceArray{T,2},
+                             YffR::T, YffI::T,
+                             YftR::T, YftI::T,
+                             YttR::T, YttI::T,
+                             YtfR::T, YtfI::T) where T
 
     tx = threadIdx().x
     ty = threadIdx().y

@@ -1,40 +1,40 @@
 """
 Driver to run TRON on GPU. This should be called from a kernel.
 """
-@inline function tron_kernel(n::Int, shift::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64, use_polar::Bool,
-                     x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-                     xu::CuDeviceArray{Float64,1},
-                     param::CuDeviceArray{Float64,2},
-                     YffR::Float64, YffI::Float64,
-                     YftR::Float64, YftI::Float64,
-                     YttR::Float64, YttI::Float64,
-                     YtfR::Float64, YtfI::Float64)
+@inline function tron_kernel(n::Int, shift::Int, max_feval::Int, max_minor::Int, gtol::T, scale::T, use_polar::Bool,
+                     x::CuDeviceArray{T,1}, xl::CuDeviceArray{T,1},
+                     xu::CuDeviceArray{T,1},
+                     param::CuDeviceArray{T,2},
+                     YffR::T, YffI::T,
+                     YftR::T, YftI::T,
+                     YttR::T, YttI::T,
+                     YtfR::T, YtfI::T) where T
     tx = threadIdx().x
 
-    g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-    xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-    s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-    wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-    wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-    wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-    wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-    wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-    wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-    gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-    dsave = @cuDynamicSharedMem(Float64, n, (13*n)*sizeof(Float64))
-    indfree = @cuDynamicSharedMem(Int, n, (14*n)*sizeof(Float64))
-    iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(Float64))
-    isave = @cuDynamicSharedMem(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(Float64))
+    g = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+    xc = @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
+    s = @cuDynamicSharedMem(T, n, (5*n)*sizeof(T))
+    wa = @cuDynamicSharedMem(T, n, (6*n)*sizeof(T))
+    wa1 = @cuDynamicSharedMem(T, n, (7*n)*sizeof(T))
+    wa2 = @cuDynamicSharedMem(T, n, (8*n)*sizeof(T))
+    wa3 = @cuDynamicSharedMem(T, n, (9*n)*sizeof(T))
+    wa4 = @cuDynamicSharedMem(T, n, (10*n)*sizeof(T))
+    wa5 = @cuDynamicSharedMem(T, n, (11*n)*sizeof(T))
+    gfree = @cuDynamicSharedMem(T, n, (12*n)*sizeof(T))
+    dsave = @cuDynamicSharedMem(T, n, (13*n)*sizeof(T))
+    indfree = @cuDynamicSharedMem(Int, n, (14*n)*sizeof(T))
+    iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(T))
+    isave = @cuDynamicSharedMem(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(T))
 
-    A = @cuDynamicSharedMem(Float64, (n,n), (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
-    B = @cuDynamicSharedMem(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
-    L = @cuDynamicSharedMem(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+    A = @cuDynamicSharedMem(T, (n,n), (14*n)*sizeof(T)+(4*n)*sizeof(Int))
+    B = @cuDynamicSharedMem(T, (n,n), (14*n+n^2)*sizeof(T)+(4*n)*sizeof(Int))
+    L = @cuDynamicSharedMem(T, (n,n), (14*n+2*n^2)*sizeof(T)+(4*n)*sizeof(Int))
 
     if tx <= n
         @inbounds for j=1:n
-            A[tx,j] = 0.0
-            B[tx,j] = 0.0
-            L[tx,j] = 0.0
+            A[tx,j] = zero(T)
+            B[tx,j] = zero(T)
+            L[tx,j] = zero(T)
         end
     end
     CUDA.sync_threads()
@@ -42,14 +42,14 @@ Driver to run TRON on GPU. This should be called from a kernel.
     task = 0
     status = 0
 
-    delta = 0.0
-    fatol = 0.0
-    frtol = 1e-12
-    fmin = -1e32
-    cgtol = 0.1
+    delta = zero(T)
+    fatol = zero(T)
+    frtol = eps(T)^T(2/3)
+    fmin = T(-1e32)
+    cgtol = T(0.1)
     cg_itermax = n
 
-    f = 0.0
+    f = zero(T)
     nfev = 0
     ngev = 0
     nhev = 0
