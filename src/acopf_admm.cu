@@ -42,14 +42,15 @@
 
 static void usage(const char *progname)
 {
-    printf("Usage: %s file iterlim rho_pq rho_va form use_gpu [gpu no]\n", progname);
+    printf("Usage: %s file iterlim rho_pq rho_va form use_gpu gpu_no [scale]\n", progname);
     printf("  file   : MATPOWER power network file\n");
     printf("  iterlim: iteration limit of ADMM\n");
     printf("  rho_pq : initial rho for power flows\n");
     printf("  rho_va : initial rho for voltages\n");
     printf("  form   : 0 for rectangular 1 for polar\n");
     printf("  use_gpu: 0 for CPU and 1 for GPU\n");
-    printf("  gpu no : GPU device number to use, default 0\n");
+    printf("  gpu no : GPU device number to use\n");
+    printf("  scale  : scaling to apply, default 1e-4\n");
 }
 
 void get_generator_data(Network *nw, double **_pgmin, double **_pgmax,
@@ -454,19 +455,14 @@ void dual_residual_kernel(int n, double *rd, double *v_prev, double *v_curr, dou
 
 int main(int argc, char **argv)
 {
-    int device = 0;
-
-    if (argc < 7) {
+    if (argc < 8) {
         usage(argv[0]);
         exit(-1);
     }
 
-    if (argc == 8) {
-        device = atoi(argv[7]);
-        if (device != 0 && device != 1) {
-            usage(argv[0]);
-            exit(-1);
-        }
+    double scale = 1e-4;
+    if (argc == 9) {
+        scale = atof(argv[8]);
     }
 
     int iterlim = atoi(argv[2]);
@@ -474,6 +470,11 @@ int main(int argc, char **argv)
     double rho_va = atof(argv[4]);
     bool use_polar = (atoi(argv[5]) == 1) ? true : false;
     bool use_gpu = (atoi(argv[6]) == 1) ? true : false;
+    int device = atoi(argv[7]);
+    if (device != 0 && device != 1) {
+        usage(argv[0]);
+        exit(-1);
+    }
 
     if (use_gpu) {
         printf("Set GPU device to use to %d.\n", device);
@@ -617,12 +618,12 @@ int main(int argc, char **argv)
                              u_curr, v_curr, l_curr, rho,
                              pgmin, pgmax, qgmin, qgmax, c2, c1, c0);
             if (use_polar) {
-                polar(nw->active_nbranch, n, line_start,
+                polar(nw->active_nbranch, n, line_start, scale,
                       u_curr, v_curr, l_curr, rho,
                       param, YffR, YffI, YftR, YftI, YttR, YttI,
                       YtfR, YtfI, frbound, tobound);
             } else {
-                auglag(nw->active_nbranch, n, it, max_auglag, line_start, mu_max,
+                auglag(nw->active_nbranch, n, it, max_auglag, line_start, scale, mu_max,
                        u_curr, v_curr, l_curr, rho, wRIij,
                        param, YffR, YffI, YftR, YftI, YttR, YttI,
                        YtfR, YtfI, frbound, tobound);
@@ -650,12 +651,12 @@ int main(int argc, char **argv)
                                                       cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                       cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0);
             if (use_polar) {
-                polar_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, line_start,
+                polar_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, line_start, scale,
                                                          cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                          cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
                                                          cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);
             } else {
-                auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, line_start, mu_max,
+                auglag_kernel<<<n_tb_branch, 32, shmem>>>(nw->active_nbranch, n, it, max_auglag, line_start, scale, mu_max,
                                                           cu_u_curr, cu_v_curr, cu_l_curr, cu_rho, cu_wRIij,
                                                           cu_param, cu_YffR, cu_YffI, cu_YftR, cu_YftI, cu_YttR, cu_YttI,
                                                           cu_YtfR, cu_YtfI, cu_frbound, cu_tobound);

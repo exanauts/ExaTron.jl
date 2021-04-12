@@ -1,5 +1,5 @@
 __device__
-double eval_f_polar_kernel(int n, double *x, double *param,
+double eval_f_polar_kernel(int n, double scale, double *x, double *param,
                            double YffR, double YffI,
                            double YftR, double YftI,
                            double YttR, double YttI,
@@ -34,13 +34,14 @@ double eval_f_polar_kernel(int n, double *x, double *param,
     f += 0.5*(param[start + 14]*((x[2] - param[start + 22])*(x[2] - param[start + 22])));
     f += 0.5*(param[start + 15]*((x[3] - param[start + 23])*(x[3] - param[start + 23])));
 
+    f *= scale;
     __syncthreads();
 
     return f;
 }
 
 __device__
-void eval_grad_f_polar_kernel(int n, double *x, double *g, double *param,
+void eval_grad_f_polar_kernel(int n, double scale, double *x, double *g, double *param,
                               double YffR, double YffI,
                               double YftR, double YftI,
                               double YttR, double YttI,
@@ -130,10 +131,10 @@ void eval_grad_f_polar_kernel(int n, double *x, double *g, double *param,
     g4 += param[start + 15]*(x[3] - param[start + 23]);
 
     if (tx == 0 && ty == 0) {
-        g[0] = g1;
-        g[1] = g2;
-        g[2] = g3;
-        g[3] = g4;
+        g[0] = scale*g1;
+        g[1] = scale*g2;
+        g[2] = scale*g3;
+        g[3] = scale*g4;
     }
 
     __syncthreads();
@@ -142,7 +143,7 @@ void eval_grad_f_polar_kernel(int n, double *x, double *g, double *param,
 }
 
 __device__
-void eval_h_polar_kernel(int n, double *x, double *A, double *param,
+void eval_h_polar_kernel(int n, double scale, double *x, double *A, double *param,
                          double YffR, double YffI,
                          double YftR, double YftI,
                          double YttR, double YttI,
@@ -192,7 +193,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 11]*(dqji_dvi*dqji_dvi);
         // (2*rho_vi*vi)*(2*vi) + rho_vi*(vi^2 - tilde_vi)*2
         v += 4*param[start + 12]*(x[0]*x[0]) + param[start + 12]*(x[0]*x[0] - param[start + 20])*2;
-        A[0] = v;
+        A[0] = scale*v;
 
         // d2f_dvidvj
 
@@ -225,7 +226,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 10]*(dpji_dvj)*dpji_dvi + param[start + 10]*(pji - param[start + 18])*(d2pji_dvidvj);
         // rho_qji*(dqji_dvj)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidvj)
         v += param[start + 11]*(dqji_dvj)*dqji_dvi + param[start + 11]*(qji - param[start + 19])*(d2qji_dvidvj);
-        A[1] = v;
+        A[1] = scale*v;
 
         // d2f_dvidti
         double dpij_dti, dqij_dti, dpji_dti, dqji_dti;
@@ -257,7 +258,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 10]*(dpji_dti)*dpji_dvi + param[start + 10]*(pji - param[start + 18])*(d2pji_dvidti);
         // rho_qji*(dqji_dti)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidti)
         v += param[start + 11]*(dqji_dti)*dqji_dvi + param[start + 11]*(qji - param[start + 19])*(d2qji_dvidti);
-        A[2] = v;
+        A[2] = scale*v;
 
         // d2f_dvidtj
 
@@ -277,7 +278,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 10]*(-dpji_dti)*dpji_dvi + param[start + 10]*(pji - param[start + 18])*(-d2pji_dvidti);
         // rho_qji*(dqji_dtj)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidtj)
         v += param[start + 11]*(-dqji_dti)*dqji_dvi + param[start + 11]*(qji - param[start + 19])*(-d2qji_dvidti);
-        A[3] = v;
+        A[3] = scale*v;
 
         // d2f_dvjdvj
 
@@ -298,7 +299,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 11]*(dqji_dvj*dqji_dvj) + param[start + 11]*(qji - param[start + 19])*(-2*YttI);
         // (2*rho_vj*vj)*(2*vj) + rho_vj*(vj^2 - tilde_vj)*2
         v += 4*param[start + 13]*(x[1]*x[1]) + param[start + 13]*(x[1]*x[1] - param[start + 21])*2;
-        A[n + 1] = v;
+        A[n + 1] = scale*v;
 
         // d2f_dvjdti
         double d2pij_dvjdti, d2qij_dvjdti, d2pji_dvjdti, d2qji_dvjdti;
@@ -324,7 +325,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 10]*(dpji_dti)*dpji_dvj + param[start + 10]*(pji - param[start + 18])*d2pji_dvjdti;
         // rho_qji*(dqji_dti)*dqji_dvj + rho_qji*(qji - tilde_qji)*(d2qji_dvjdti)
         v += param[start + 11]*(dqji_dti)*dqji_dvj + param[start + 11]*(qji - param[start + 19])*d2qji_dvjdti;
-        A[n + 2] = v;
+        A[n + 2] = scale*v;
 
         // d2f_dvjdtj
 
@@ -344,7 +345,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 10]*(-dpji_dti)*dpji_dvj + param[start + 10]*(pji - param[start + 18])*(-d2pji_dvjdti);
         // rho_qji*(dqji_dtj)*dqji_dvj + rho_qji*(qji - tilde_qji)*(d2qji_dvjdtj)
         v += param[start + 11]*(-dqji_dti)*dqji_dvj + param[start + 11]*(qji - param[start + 19])*(-d2qji_dvjdti);
-        A[n + 3] = v;
+        A[n + 3] = scale*v;
 
         // d2f_dtidti
         double d2pij_dtidti, d2qij_dtidti, d2pji_dtidti, d2qji_dtidti;
@@ -372,7 +373,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 11]*(dqji_dti*dqji_dti) + param[start + 11]*(qji - param[start + 19])*(d2qji_dtidti);
         // rho_ti
         v += param[start + 14];
-        A[n*2 + 2] = v;
+        A[n*2 + 2] = scale*v;
 
         // d2f_dtidtj
 
@@ -392,7 +393,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 10]*(-(dpji_dti*dpji_dti)) + param[start + 10]*(pji - param[start + 18])*(-d2pji_dtidti);
         // rho_qji*(dqji_dtj)*dqji_dti + rho_qji*(qji - tilde_qji)*(d2qji_dtidtj)
         v += param[start + 11]*(-(dqji_dti*dqji_dti)) + param[start + 11]*(qji - param[start + 19])*(-d2qji_dtidti);
-        A[n*2 + 3] = v;
+        A[n*2 + 3] = scale*v;
 
         // d2f_dtjdtj
 
@@ -414,7 +415,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
         v += param[start + 11]*(dqji_dti*dqji_dti) + param[start + 11]*(qji - param[start + 19])*(d2qji_dtidti);
         // rho_tj
         v += param[start + 15];
-        A[n*3 + 3] = v;
+        A[n*3 + 3] = scale*v;
     }
 
     __syncthreads();
@@ -435,7 +436,7 @@ void eval_h_polar_kernel(int n, double *x, double *A, double *param,
 
 __global__ void
 //__launch_bounds__(32, 16)
-polar_kernel(int nbranches, int n, int line_start,
+polar_kernel(int nbranches, int n, int line_start, double scale,
              double *u_curr, double *v_curr, double *l_curr,
              double *rho, double *param,
              double *_YffR, double *_YffI,
@@ -512,7 +513,7 @@ polar_kernel(int nbranches, int n, int line_start,
     // Solve the branch problem.
     int status, minor_iter;
 
-    cdriver_auglag(n, 500, 200, &status, &minor_iter,
+    cdriver_auglag(n, 500, 200, &status, &minor_iter, scale,
                     x, xl, xu, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
                     &eval_f_polar_kernel, &eval_grad_f_polar_kernel, &eval_h_polar_kernel);
 
@@ -531,7 +532,7 @@ polar_kernel(int nbranches, int n, int line_start,
     return;
 }
 
-double eval_f_polar(int I, int n, double *x, double *param,
+double eval_f_polar(int I, int n, double scale, double *x, double *param,
                     double YffR, double YffI,
                     double YftR, double YftI,
                     double YttR, double YttI,
@@ -565,10 +566,12 @@ double eval_f_polar(int I, int n, double *x, double *param,
     f += 0.5*(param[start + 14]*((x[2] - param[start + 22])*(x[2] - param[start + 22])));
     f += 0.5*(param[start + 15]*((x[3] - param[start + 23])*(x[3] - param[start + 23])));
 
+    f *= scale;
+
     return f;
 }
 
-void eval_grad_f_polar(int I, int n, double *x, double *g, double *param,
+void eval_grad_f_polar(int I, int n, double scale, double *x, double *g, double *param,
                        double YffR, double YffI,
                        double YftR, double YftI,
                        double YttR, double YttI,
@@ -654,15 +657,15 @@ void eval_grad_f_polar(int I, int n, double *x, double *g, double *param,
     g4 += param[start + 11]*(qji - param[start + 19])*(-dqji_dx);
     g4 += param[start + 15]*(x[3] - param[start + 23]);
 
-    g[0] = g1;
-    g[1] = g2;
-    g[2] = g3;
-    g[3] = g4;
+    g[0] = scale*g1;
+    g[1] = scale*g2;
+    g[2] = scale*g3;
+    g[3] = scale*g4;
 
     return;
 }
 
-void eval_h_polar(int I, int n, double *x, double *A, double *param,
+void eval_h_polar(int I, int n, double scale, double *x, double *A, double *param,
                   double YffR, double YffI,
                   double YftR, double YftI,
                   double YttR, double YttI,
@@ -709,7 +712,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 11]*(dqji_dvi*dqji_dvi);
     // (2*rho_vi*vi)*(2*vi) + rho_vi*(vi^2 - tilde_vi)*2
     v += 4*param[start + 12]*(x[0]*x[0]) + param[start + 12]*(x[0]*x[0] - param[start + 20])*2;
-    A[0] = v;
+    A[0] = scale*v;
 
     // d2f_dvidvj
 
@@ -742,7 +745,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 10]*(dpji_dvj)*dpji_dvi + param[start + 10]*(pji - param[start + 18])*(d2pji_dvidvj);
     // rho_qji*(dqji_dvj)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidvj)
     v += param[start + 11]*(dqji_dvj)*dqji_dvi + param[start + 11]*(qji - param[start + 19])*(d2qji_dvidvj);
-    A[1] = v;
+    A[1] = scale*v;
 
     // d2f_dvidti
     double dpij_dti, dqij_dti, dpji_dti, dqji_dti;
@@ -774,7 +777,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 10]*(dpji_dti)*dpji_dvi + param[start + 10]*(pji - param[start + 18])*(d2pji_dvidti);
     // rho_qji*(dqji_dti)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidti)
     v += param[start + 11]*(dqji_dti)*dqji_dvi + param[start + 11]*(qji - param[start + 19])*(d2qji_dvidti);
-    A[2] = v;
+    A[2] = scale*v;
 
     // d2f_dvidtj
 
@@ -794,7 +797,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 10]*(-dpji_dti)*dpji_dvi + param[start + 10]*(pji - param[start + 18])*(-d2pji_dvidti);
     // rho_qji*(dqji_dtj)*dqji_dvi + rho_qji*(qji - tilde_qji)*(d2qji_dvidtj)
     v += param[start + 11]*(-dqji_dti)*dqji_dvi + param[start + 11]*(qji - param[start + 19])*(-d2qji_dvidti);
-    A[3] = v;
+    A[3] = scale*v;
 
     // d2f_dvjdvj
 
@@ -815,7 +818,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 11]*(dqji_dvj*dqji_dvj) + param[start + 11]*(qji - param[start + 19])*(-2*YttI);
     // (2*rho_vj*vj)*(2*vj) + rho_vj*(vj^2 - tilde_vj)*2
     v += 4*param[start + 13]*(x[1]*x[1]) + param[start + 13]*(x[1]*x[1] - param[start + 21])*2;
-    A[n + 1] = v;
+    A[n + 1] = scale*v;
 
     // d2f_dvjdti
     double d2pij_dvjdti, d2qij_dvjdti, d2pji_dvjdti, d2qji_dvjdti;
@@ -841,7 +844,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 10]*(dpji_dti)*dpji_dvj + param[start + 10]*(pji - param[start + 18])*d2pji_dvjdti;
     // rho_qji*(dqji_dti)*dqji_dvj + rho_qji*(qji - tilde_qji)*(d2qji_dvjdti)
     v += param[start + 11]*(dqji_dti)*dqji_dvj + param[start + 11]*(qji - param[start + 19])*d2qji_dvjdti;
-    A[n + 2] = v;
+    A[n + 2] = scale*v;
 
     // d2f_dvjdtj
 
@@ -861,7 +864,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 10]*(-dpji_dti)*dpji_dvj + param[start + 10]*(pji - param[start + 18])*(-d2pji_dvjdti);
     // rho_qji*(dqji_dtj)*dqji_dvj + rho_qji*(qji - tilde_qji)*(d2qji_dvjdtj)
     v += param[start + 11]*(-dqji_dti)*dqji_dvj + param[start + 11]*(qji - param[start + 19])*(-d2qji_dvjdti);
-    A[n + 3] = v;
+    A[n + 3] = scale*v;
 
     // d2f_dtidti
     double d2pij_dtidti, d2qij_dtidti, d2pji_dtidti, d2qji_dtidti;
@@ -889,7 +892,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 11]*(dqji_dti*dqji_dti) + param[start + 11]*(qji - param[start + 19])*(d2qji_dtidti);
     // rho_ti
     v += param[start + 14];
-    A[n*2 + 2] = v;
+    A[n*2 + 2] = scale*v;
 
     // d2f_dtidtj
 
@@ -909,7 +912,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 10]*(-(dpji_dti*dpji_dti)) + param[start + 10]*(pji - param[start + 18])*(-d2pji_dtidti);
     // rho_qji*(dqji_dtj)*dqji_dti + rho_qji*(qji - tilde_qji)*(d2qji_dtidtj)
     v += param[start + 11]*(-(dqji_dti*dqji_dti)) + param[start + 11]*(qji - param[start + 19])*(-d2qji_dtidti);
-    A[n*2 + 3] = v;
+    A[n*2 + 3] = scale*v;
 
     // d2f_dtjdtj
 
@@ -931,7 +934,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     v += param[start + 11]*(dqji_dti*dqji_dti) + param[start + 11]*(qji - param[start + 19])*(d2qji_dtidti);
     // rho_tj
     v += param[start + 15];
-    A[n*3 + 3] = v;
+    A[n*3 + 3] = scale*v;
 
     #pragma unroll
     for (int j = 0; j < n; j++) {
@@ -943,7 +946,7 @@ void eval_h_polar(int I, int n, double *x, double *A, double *param,
     return;
 }
 
-void polar(int nbranches, int n, int line_start,
+void polar(int nbranches, int n, int line_start, double scale,
            double *u_curr, double *v_curr, double *l_curr,
            double *rho, double *param,
            double *_YffR, double *_YffI,
@@ -1011,7 +1014,7 @@ void polar(int nbranches, int n, int line_start,
         // Solve the branch problem.
         int status, minor_iter;
 
-        driver_auglag(I, n, 500, 200, &status, &minor_iter,
+        driver_auglag(I, n, 500, 200, &status, &minor_iter, scale,
                       x, xl, xu, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
                       &eval_f_polar, &eval_grad_f_polar, &eval_h_polar);
 

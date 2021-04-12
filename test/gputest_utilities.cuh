@@ -1107,18 +1107,18 @@ void driver(int n, int max_feval, int max_minor,
 }
 
 void driver_auglag(int I, int n, int max_feval, int max_minor,
-                   int *_status, int *_minor_iter,
+                   int *_status, int *_minor_iter, double scale,
                    double *x, double *xl, double *xu,
                    double *param,
                    double YffR, double YffI, double YftR, double YftI,
                    double YttR, double YttI, double YtfR, double YtfI,
-                   double (*eval_f)(int I, int n, double *x, double *param,
+                   double (*eval_f)(int I, int n, double scale, double *x, double *param,
                                     double YffR, double YffI, double YftR, double YftI,
                                     double YttR, double YttI, double YtfR, double YtfI),
-                   void (*eval_g)(int I, int n, double *x, double *g, double *param,
+                   void (*eval_g)(int I, int n, double scale, double *x, double *g, double *param,
                                   double YffR, double YffI, double YftR, double YftI,
                                   double YttR, double YttI, double YtfR, double YtfI),
-                   void (*eval_h)(int I, int n, double *x, double *H, double *param,
+                   void (*eval_h)(int I, int n, double scale, double *x, double *H, double *param,
                                   double YffR, double YffI, double YftR, double YftI,
                                   double YttR, double YttI, double YtfR, double YtfI))
 {
@@ -1166,7 +1166,7 @@ void driver_auglag(int I, int n, int max_feval, int max_minor,
         // [0|1]: Evaluate function.
 
         if (task == 0 || task == 1) {
-            f = eval_f(I, n, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI);
+            f = eval_f(I, n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI);
             nfev += 1;
             if (nfev >= max_feval) {
                 search = false;
@@ -1176,8 +1176,8 @@ void driver_auglag(int I, int n, int max_feval, int max_minor,
         // [2] G or H: Evaluate gradient and Hessian.
 
         if (task == 0 || task == 2) {
-            eval_g(I, n, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI);
-            eval_h(I, n, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI);
+            eval_g(I, n, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI);
+            eval_h(I, n, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI);
             ngev += 1;
             nhev += 1;
             minor_iter += 1;
