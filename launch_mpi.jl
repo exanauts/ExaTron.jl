@@ -4,7 +4,7 @@ MPI.Init()
 
 comm = MPI.COMM_WORLD
 
-datafile = "../admm/data/"*ARGS[1]
+datafile = "./data/"*ARGS[1]
 pq_val = parse(Float64, ARGS[2])
 va_val = parse(Float64, ARGS[3])
 max_iter = parse(Int, ARGS[4])
