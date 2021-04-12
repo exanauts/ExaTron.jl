@@ -17,6 +17,12 @@ This package can be installed by cloning this repository:
 ```bash
 $ julia --project src/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
 ```
+where
+* `caename`: the name of the test file of type `string`
+* `rho_pq`: ADMM parameter for power flow of type `float`
+* `rho_va`: ADMM parameter for voltage and angle of type `float`
+* `max_iter`: maximum number of iterations of type `int`
+* `use_gpu`: indicates whether to use gpu or not, of type `bool`
 
 #### Example
 ```bash
@@ -30,6 +36,18 @@ julia> ExaTron.admm_rect_gpu("./data/"*caesname; iterlim=max_iter, rho_pq=rho_pq
 ```
 
 ## Usage: solving ACOPF using ADMM and ExaTron.jl on multiple GPUs.
+In order to employ multiple GPUs, `MPI.jl` should be configured to work with `CuArray`.
+We recommend to configure `Spack` for this.
+```bash
+$ git clone https://github.com/spack/spack.git
+$ cd spack/
+$ source share/spack/setup-env.sh
+$ spack install openmpi +cuda
+$ spack load openmpi
+$ julia --project -e 'ENV["JULIA_MPI_BINARY"]="system"; using Pkg; Pkg.build("MPI"; verbose=true)'
+```
+
+Once `MPI.jl` is configured, run `launch_mpi.jl` to use MPI:
 ```bash
 $ mpiexec -n num julia --project launch_mpi.jl casename rho_pq rho_va max_iter use_gpu
 ```
