@@ -1,8 +1,10 @@
 # ExaTron.jl
 
-We implement a trust-region Newton solver for batched nonlinear programming on GPUs.
-Our algorithm for a single optimization is based on the paper by
-[Lin and More](https://doi.org/10.1137/S1052623498345075) and its code [TRON](https://www.mcs.anl.gov/~more/tron).
+ExaTron.jl implements a trust-region Newton solver for batched nonlinear programming on GPUs.
+Problems in the batch are solved in parallel by employing multiple thread blocks on GPUs.
+Our basic algorithm to solve each problem on GPUs is an extension of the
+algorithm by [Lin and More](https://doi.org/10.1137/S1052623498345075)
+and its code [TRON](https://www.mcs.anl.gov/~more/tron).
 
 ## Installation
 
