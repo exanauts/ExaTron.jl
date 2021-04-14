@@ -214,6 +214,43 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
+function check_linelimit_violation(data, u::Array{Float64,1})
+    lines = data.lines
+    nline = length(data.lines)
+    line_start = 2*length(data.generators) + 1
+
+    rateA_nviols = 0
+    rateA_maxviol = 0.0
+    rateC_nviols = 0
+    rateC_maxviol = 0.0
+
+    for l=1:nline
+        pij_idx = line_start + 8*(l-1)
+        ij_val = u[pij_idx]^2 + u[pij_idx+1]^2
+        ji_val = u[pij_idx+2]^2 + u[pij_idx+3]^2
+
+        limit = (lines[l].rateA / data.baseMVA)^2
+        if limit > 0 && limit < 1e10
+            if ij_val > limit || ji_val > limit
+                rateA_nviols += 1
+                rateA_maxviol = max(rateA_maxviol, max(ij_val - limit, ji_val - limit))
+            end
+        end
+
+        limit = (lines[l].rateC / data.baseMVA)^2
+        if limit > 0 && limit < 1e10
+            if ij_val > limit || ji_val > limit
+                rateC_nviols += 1
+                rateC_maxviol = max(rateC_maxviol, max(ij_val - limit, ji_val - limit))
+            end
+        end
+    end
+    rateA_maxviol = sqrt(rateA_maxviol)
+    rateC_maxviol = sqrt(rateC_maxviol)
+
+    return rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol
+end
+
 function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
                        use_gpu=false, use_polar=true, gpu_no=1)
     data = opf_loaddata(case)
@@ -417,6 +454,14 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
     if use_gpu
         copyto!(u_curr, cu_u_curr)
     end
+
+    rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
+    @printf(" ** Line limit violations\n")
+    @printf("RateA number of violations = %d (%d)\n", rateA_nviols, nline)
+    @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
+    @printf("RateC number of violations = %d (%d)\n", rateC_nviols, nline)
+    @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
+
     @printf(" ** Time\n")
     @printf("Generator = %.2f\n", time_gen)
     @printf("Branch    = %.2f\n", time_br)
