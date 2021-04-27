@@ -1,6 +1,5 @@
 function dtsol(n, L::TronSparseMatrixCSC, r)
     T = eltype(r)
-    zero = zero(T)
 
     # Solve L'*x = r and store the result in r.
 

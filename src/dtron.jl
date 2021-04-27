@@ -9,12 +9,11 @@ solution of large bound-constrained optimization problems
 where the Hessian matrix is sparse. The user must evaluate the
 function, gradient, and the Hessian matrix.
 """
-function dtron(n,x,xl,xu,f,g,A,
+function dtron(n,x::AbstractVector{T},xl,xu,f,g,A,
                frtol,fatol,fmin,cgtol,itermax,delta,task,
                B, L,
                xc,s,indfree,
-               isave,dsave,wa,iwa)
-    T = eltype(x)
+               isave,dsave::AbstractVector{T},wa,iwa) where T
     p5 = T(0.5)
 
     # Parameters for updating the iterates.
@@ -55,9 +54,9 @@ function dtron(n,x,xl,xu,f,g,A,
         end
         iter = isave[2]
         iterscg = isave[3]
-        fc = dsave[1]
-        alphac = dsave[2]
-        prered = dsave[3]
+        fc = dsave[1]::T
+        alphac = dsave[2]::T
+        prered = dsave[3]::T
     end
 
     # Search for a lower function value.

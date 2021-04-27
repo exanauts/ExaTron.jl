@@ -172,7 +172,7 @@ function createProblem(n::Integer, x_l::AbstractVector{T}, x_u::AbstractVector{T
 
     tron.eval_h(tron.x, :Structure, tron.rows, tron.cols, 1.0, Float64[], Float64[])
     # Instantiate sparse matrix
-    p = tron.options["p"]
+    p = tron.options["p"]::Int
 
     if tron.options["matrix_type"] == :Sparse
         tron.A = TronSparseMatrixCSC(tron.rows, tron.cols, tron.values, n)
@@ -195,7 +195,52 @@ function createProblem(n::Integer, x_l::AbstractVector{T}, x_u::AbstractVector{T
     return tron
 end
 
-function solveProblem(tron::ExaTronProblem)
+function createDenseProblem(n::Integer, x_l::AbstractVector{T}, x_u::AbstractVector{T},
+                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb; options...) where T
+    @assert n == length(x_l) == length(x_u)
+    @assert typeof(x_l) == typeof(x_u)
+
+    # Load options first, as we need to know :matrix_type for type inference
+    options_dict = Dict{String, Any}()
+    set_default_options!(options_dict)
+    for (name, value) in options
+        options_dict[string(name)] = value
+    end
+
+    VI = Vector{Cint}
+    VD = typeof(x_l)
+    AT = isa(x_l, Array) ? Array{T, 2} : CuArray{T, 2}
+    TM = TronDenseMatrix{AT}
+
+    tron = ExaTronProblem{VI, VD, TM}()
+    tron.options = options_dict
+    instantiate_memory!(tron, n, Int64(nele_hess))
+    copyto!(tron.x_l, 1, x_l, 1, n)
+    copyto!(tron.x_u, 1, x_u, 1, n)
+
+    tron.eval_f = eval_f_cb
+    tron.eval_grad_f = eval_grad_f_cb
+    tron.eval_h = eval_h_cb
+
+    tron.eval_h(tron.x, :Structure, tron.rows, tron.cols, 1.0, Float64[], Float64[])
+    # Instantiate sparse matrix
+    p = tron.options["p"]::Int
+
+    tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
+    if isa(x_l, Array)
+        tron.B = TronDenseMatrix{Array{T, 2}}(n)
+        tron.L = TronDenseMatrix{Array{T, 2}}(n)
+    else
+        tron.B = TronDenseMatrix{CuArray{T, 2}}(n)
+        tron.L = TronDenseMatrix{CuArray{T, 2}}(n)
+    end
+    tron.nnz_a = n*n
+    tron.status = :NotSolved
+
+    return tron
+end
+
+function solveProblem(tron::ExaTronProblem, ::Type{T}) where {T}
     task = Vector{UInt8}(undef, 60)
     for (i,s) in enumerate("START")
         task[i] = UInt8(s)
@@ -203,15 +248,14 @@ function solveProblem(tron::ExaTronProblem)
 
     VI = Vector{Cint}
     VD = typeof(tron.x)
-    T = eltype(tron.x)
 
     isave = VI(undef, 3)
     dsave = tron_zeros(VD, 3)
-    fatol = T(tron.options["fatol"])
-    frtol = T(tron.options["frtol"])
-    fmin = T(tron.options["fmin"])
-    cgtol = T(tron.options["cgtol"])
-    gtol = T(tron.options["tol"])
+    fatol = convert(T, tron.options["fatol"])::T
+    frtol = convert(T, tron.options["frtol"])::T
+    fmin = convert(T, tron.options["fmin"])::T
+    cgtol = convert(T, tron.options["cgtol"])::T
+    gtol = convert(T, tron.options["tol"])::T
     max_feval = tron.options["max_feval"]::Int
     tcode = tron.options["tron_code"]::Symbol
     max_minor = tron.options["max_minor"]::Int
@@ -256,7 +300,7 @@ function solveProblem(tron::ExaTronProblem)
 
         if unsafe_string(pointer(task), 5) == "START"
             gnorm0 = norm(tron.g)
-            tron.delta = gnorm0
+            tron.delta = T(gnorm0)
         end
 
         # Call Tron.

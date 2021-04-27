@@ -166,12 +166,12 @@ function dicf(n, nnz, L::TronSparseMatrixCSC, p, indr, indf, list, w)
 end
 
 function dicf(n, nnz, L::TronDenseMatrix, p, indr, indf, list, w)
-    zero = 0.0
+    T = eltype(w)
     info = 0
 
     # We perform left-looking Cholesky factorization.
     @inbounds for j=1:n
-        if L.vals[j,j] <= zero
+        if L.vals[j,j] <= zero(T)
             info = -j
             return info
         end

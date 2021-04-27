@@ -246,15 +246,14 @@ end
 @inline getdiagvalue(A::TronSparseMatrixCSC, i) = A.diag_vals[i]
 @inline getdiagvalue(A::TronDenseMatrix, i) = A.vals[i,i]
 
-function dssyax(n, A::TronDenseMatrix, x, y)
-    zero = 0.0
+function dssyax(n, A::TronDenseMatrix, x::AbstractVector{T}, y::AbstractVector{T}) where T
 
     @inbounds for i=1:n
         y[i] = A.vals[i,i]*x[i]
     end
 
     @inbounds for j=1:n
-        rowsum = zero
+        rowsum = zero(T)
         for i=j+1:n
             rowsum += A.vals[i,j]*x[i]
             y[i] += A.vals[i,j]*x[j]

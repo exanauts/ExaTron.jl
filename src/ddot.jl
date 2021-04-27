@@ -5,13 +5,8 @@ This subroutine forms the dot product of two vectors.
 It uses unrolled loops for increments equal to one.
 Jack Dongarra, LINPACK, 3/11/78.
 """
-function tron_ddot(n,dx,incx,dy,incy)
-    T = eltype(dx)
+function tron_ddot(n,dx::AbstractVector{T},incx,dy::AbstractVector{T},incy) where T
     dtemp = zero(T)
-
-    if n <= 0
-        return
-    end
     if (incx == 1 && incy == 1)
         # Code for both increments equal to 1
         m = mod(n,5)
