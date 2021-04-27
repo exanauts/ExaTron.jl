@@ -47,12 +47,13 @@ Random.seed!(0)
     nblk = 5120
 
     @testset "dicf" begin
-        function dicf_test(n::Int, d_in::CuDeviceArray{Float64},
-                           d_out::CuDeviceArray{Float64})
+        T = Float64
+        function dicf_test(n::Int, d_in::CuDeviceArray{T},
+                           d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            L = @cuDynamicSharedMem(Float64, (n,n))
+            L = @cuDynamicSharedMem(T, (n,n))
             L[tx,ty] = d_in[tx,ty]
             CUDA.sync_threads()
 
@@ -64,44 +65,45 @@ Random.seed!(0)
         end
 
         for i=1:itermax
-            L = tril(rand(n,n))
+            L = tril(rand(T, n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             tron_A.vals .= A
 
-            d_in = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            d_in = CuArray{T,2}(undef, (n,n))
+            d_out = CuArray{T,2}(undef, (n,n))
             copyto!(d_in, tron_A.vals)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(n^2*sizeof(Float64)) dicf_test(n,d_in,d_out)
-            h_L = zeros(n,n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(n^2*sizeof(T)) dicf_test(n,d_in,d_out)
+            h_L = zeros(T, n,n)
             copyto!(h_L, d_out)
 
-            tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             tron_L.vals .= tron_A.vals
             indr = zeros(Int, n)
-            indf = zeros(n)
-            list = zeros(n)
-            w = zeros(n)
+            indf = zeros(T, n)
+            list = zeros(T, n)
+            w = zeros(T, n)
             ExaTron.dicf(n, n^2, tron_L, 5, indr, indf, list, w)
 
-            @test norm(tron_A.vals .- tril(h_L)*transpose(tril(h_L))) <= 1e-10
-            @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            tol = eps(T)^.6
+            @test norm(tron_A.vals .- tril(h_L)*transpose(tril(h_L))) <= tol
+            @test norm(tril(h_L) .- transpose(triu(h_L))) <= tol
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= tol
         end
     end
 
     @testset "dicfs" begin
-        function dicfs_test(n::Int, alpha::Float64,
-                            dA::CuDeviceArray{Float64},
-                            d_out::CuDeviceArray{Float64})
+        function dicfs_test(n::Int, alpha::T,
+                            dA::CuDeviceArray{T},
+                            d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            wa1 = @cuDynamicSharedMem(Float64, n)
-            wa2 = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            A = @cuDynamicSharedMem(Float64, (n,n), (2*n)*sizeof(Float64))
-            L = @cuDynamicSharedMem(Float64, (n,n), (2*n+n^2)*sizeof(Float64))
+            wa1 = @cuDynamicSharedMem(T, n)
+            wa2 = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            A = @cuDynamicSharedMem(T, (n,n), (2*n)*sizeof(T))
+            L = @cuDynamicSharedMem(T, (n,n), (2*n+n^2)*sizeof(T))
 
             A[tx,ty] = dA[tx,ty]
             CUDA.sync_threads()
@@ -114,62 +116,64 @@ Random.seed!(0)
         end
 
         for i=1:itermax
-            L = tril(rand(n,n))
+            T = Float64
+            L = tril(rand(T, n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-            tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             tron_A.vals .= A
 
-            dA = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64,2}(undef, (n,n))
-            alpha = 1.0
+            dA = CuArray{T,2}(undef, (n,n))
+            d_out = CuArray{T,2}(undef, (n,n))
+            alpha = T(1.0)
             copyto!(dA, tron_A.vals)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n+2*n^2)*sizeof(Float64)) dicfs_test(n,alpha,dA,d_out)
-            h_L = zeros(n,n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n+2*n^2)*sizeof(T)) dicfs_test(n,alpha,dA,d_out)
+            h_L = zeros(T, n,n)
             copyto!(h_L, d_out)
             iwa = zeros(Int, 3*n)
-            wa1 = zeros(n)
-            wa2 = zeros(n)
+            wa1 = zeros(T, n)
+            wa2 = zeros(T, n)
             ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
-            @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            tol = eps(T)^.6
+            @test norm(tril(h_L) .- transpose(triu(h_L))) <= tol
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= tol
 
             # Make it negative definite.
             for j=1:n
                 tron_A.vals[j,j] = -tron_A.vals[j,j]
             end
             copyto!(dA, tron_A.vals)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n+2*n^2)*sizeof(Float64)) dicfs_test(n,alpha,dA,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n+2*n^2)*sizeof(T)) dicfs_test(n,alpha,dA,d_out)
             copyto!(h_L, d_out)
             ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
-            @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            @test norm(tril(h_L) .- transpose(triu(h_L))) <= tol
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= tol
         end
     end
 
     @testset "dcauchy" begin
-        function dcauchy_test(n::Int,dx::CuDeviceArray{Float64},
-                              dl::CuDeviceArray{Float64},
-                              du::CuDeviceArray{Float64},
-                              dA::CuDeviceArray{Float64},
-                              dg::CuDeviceArray{Float64},
-                              delta::Float64,
-                              alpha::Float64,
-                              d_out1::CuDeviceArray{Float64},
-                              d_out2::CuDeviceArray{Float64})
+        function dcauchy_test(n::Int,dx::CuDeviceArray{T},
+                              dl::CuDeviceArray{T},
+                              du::CuDeviceArray{T},
+                              dA::CuDeviceArray{T},
+                              dg::CuDeviceArray{T},
+                              delta::T,
+                              alpha::T,
+                              d_out1::CuDeviceArray{T},
+                              d_out2::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g =  @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            s =  @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            wa = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            A =  @cuDynamicSharedMem(Float64, (n,n), (6*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            g =  @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+            s =  @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
+            wa = @cuDynamicSharedMem(T, n, (5*n)*sizeof(T))
+            A =  @cuDynamicSharedMem(T, (n,n), (6*n)*sizeof(T))
 
             A[tx,ty] = dA[tx,ty]
             if ty == 1
@@ -189,64 +193,66 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            L = tril(rand(n,n))
-            A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            L = tril(rand(T, n,n))
+            A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             A.vals .= L*transpose(L)
             A.vals .= tril(A.vals) .+ (transpose(tril(A.vals)) .- Diagonal(A.vals))
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            g = A.vals*x .+ rand(n)
-            s = zeros(n)
-            wa = zeros(n)
-            alpha = 1.0
-            delta = 2.0*norm(g)
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            g = A.vals*x .+ rand(T, n)
+            s = zeros(T, n)
+            wa = zeros(T, n)
+            alpha = T(1.0)
+            delta = T(2.0*norm(g))
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dg = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            d_out1 = CuArray{Float64}(undef, n)
-            d_out2 = CuArray{Float64}(undef, n)
+            dx = CuArray{T}(undef, n)
+            dl = CuArray{T}(undef, n)
+            du = CuArray{T}(undef, n)
+            dg = CuArray{T}(undef, n)
+            dA = CuArray{T,2}(undef, (n,n))
+            d_out1 = CuArray{T}(undef, n)
+            d_out2 = CuArray{T}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dg, g)
             copyto!(dA, A.vals)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((6*n+n^2)*sizeof(Float64)) dcauchy_test(n,dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2)
-            h_s = zeros(n)
-            h_alpha = zeros(n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((6*n+n^2)*sizeof(T)) dcauchy_test(n,dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2)
+            h_s = zeros(T, n)
+            h_alpha = zeros(T, n)
             copyto!(h_s, d_out1)
             copyto!(h_alpha, d_out2)
 
             alpha = ExaTron.dcauchy(n, x, xl, xu, A, g, delta, alpha, s, wa)
 
-            @test norm(s .- h_s) <= 1e-10
-            @test norm(alpha .- h_alpha) <= 1e-10
+            tol = eps(T)^.6
+            @test norm(s .- h_s) <= tol
+            @test norm(alpha .- h_alpha) <= tol
         end
     end
 
     @testset "dtrpcg" begin
-        function dtrpcg_test(n::Int, delta::Float64, tol::Float64,
-                             stol::Float64, d_in::CuDeviceArray{Float64},
-                             d_g::CuDeviceArray{Float64},
-                             d_out_L::CuDeviceArray{Float64},
-                             d_out::CuDeviceArray{Float64})
+        function dtrpcg_test(n::Int, delta::T, tol::T,
+                             stol::T, d_in::CuDeviceArray{T},
+                             d_g::CuDeviceArray{T},
+                             d_out_L::CuDeviceArray{T},
+                             d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            A = @cuDynamicSharedMem(Float64, (n,n))
-            L = @cuDynamicSharedMem(Float64, (n,n), (n^2)*sizeof(Float64))
+            A = @cuDynamicSharedMem(T, (n,n))
+            L = @cuDynamicSharedMem(T, (n,n), (n^2)*sizeof(T))
 
-            g = @cuDynamicSharedMem(Float64, n, (2*n^2)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (2*n^2 + n)*sizeof(Float64))
-            p = @cuDynamicSharedMem(Float64, n, (2*n^2 + 2*n)*sizeof(Float64))
-            q = @cuDynamicSharedMem(Float64, n, (2*n^2 + 3*n)*sizeof(Float64))
-            r = @cuDynamicSharedMem(Float64, n, (2*n^2 + 4*n)*sizeof(Float64))
-            t = @cuDynamicSharedMem(Float64, n, (2*n^2 + 5*n)*sizeof(Float64))
-            z = @cuDynamicSharedMem(Float64, n, (2*n^2 + 6*n)*sizeof(Float64))
+            g = @cuDynamicSharedMem(T, n, (2*n^2)*sizeof(T))
+            w = @cuDynamicSharedMem(T, n, (2*n^2 + n)*sizeof(T))
+            p = @cuDynamicSharedMem(T, n, (2*n^2 + 2*n)*sizeof(T))
+            q = @cuDynamicSharedMem(T, n, (2*n^2 + 3*n)*sizeof(T))
+            r = @cuDynamicSharedMem(T, n, (2*n^2 + 4*n)*sizeof(T))
+            t = @cuDynamicSharedMem(T, n, (2*n^2 + 5*n)*sizeof(T))
+            z = @cuDynamicSharedMem(T, n, (2*n^2 + 6*n)*sizeof(T))
 
             A[tx,ty] = d_in[tx,ty]
             L[tx,ty] = d_in[tx,ty]
@@ -266,39 +272,40 @@ Random.seed!(0)
             return
         end
 
-        delta = 100.0
-        tol = 1e-6
-        stol = 1e-6
-        tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-        tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+        T = Float64
+        delta = T(100.0)
+        tol = T(1e-6)
+        stol = T(1e-6)
+        tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+        tron_L = ExaTron.TronDenseMatrix{Array{T,2}}(n)
         for i=1:itermax
-            L = tril(rand(n,n))
+            L = tril(rand(T,n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            g = 0.1*ones(n)
-            w = zeros(n)
-            p = zeros(n)
-            q = zeros(n)
-            r = zeros(n)
-            t = zeros(n)
-            z = zeros(n)
+            g = T(0.1)*ones(T, n)
+            w = zeros(T,n)
+            p = zeros(T,n)
+            q = zeros(T,n)
+            r = zeros(T,n)
+            t = zeros(T,n)
+            z = zeros(T,n)
             tron_A.vals .= A
             tron_L.vals .= A
-            d_in = CuArray{Float64,2}(undef, (n,n))
-            d_g = CuArray{Float64}(undef, n)
-            d_out_L = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64}(undef, n)
+            d_in = CuArray{T,2}(undef, (n,n))
+            d_g = CuArray{T}(undef, n)
+            d_out_L = CuArray{T,2}(undef, (n,n))
+            d_out = CuArray{T}(undef, n)
             copyto!(d_in, A)
             copyto!(d_g, g)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n^2+7*n)*sizeof(Float64)) dtrpcg_test(n,delta,tol,stol,d_in,d_g,d_out_L,d_out)
-            h_w = zeros(n)
-            h_L = zeros(n,n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n^2+7*n)*sizeof(T)) dtrpcg_test(n,delta,tol,stol,d_in,d_g,d_out_L,d_out)
+            h_w = zeros(T,n)
+            h_L = zeros(T,n,n)
             copyto!(h_L, d_out_L)
             copyto!(h_w, d_out)
 
             indr = zeros(Int, n)
-            indf = zeros(n)
-            list = zeros(n)
+            indf = zeros(T,n)
+            list = zeros(T,n)
             ExaTron.dicf(n, n^2, tron_L, 5, indr, indf, list, w)
             ExaTron.dtrpcg(n, tron_A, g, delta, tron_L, tol, stol, n, w, p, q, r, t, z)
 
@@ -308,25 +315,25 @@ Random.seed!(0)
     end
 
     @testset "dprsrch" begin
-        function dprsrch_test(n::Int,d_x::CuDeviceArray{Float64},
-                              d_xl::CuDeviceArray{Float64},
-                              d_xu::CuDeviceArray{Float64},
-                              d_g::CuDeviceArray{Float64},
-                              d_w::CuDeviceArray{Float64},
-                              d_A::CuDeviceArray{Float64},
-                              d_out1::CuDeviceArray{Float64},
-                              d_out2::CuDeviceArray{Float64})
+        function dprsrch_test(n::Int,d_x::CuDeviceArray{T},
+                              d_xl::CuDeviceArray{T},
+                              d_xu::CuDeviceArray{T},
+                              d_g::CuDeviceArray{T},
+                              d_w::CuDeviceArray{T},
+                              d_A::CuDeviceArray{T},
+                              d_out1::CuDeviceArray{T},
+                              d_out2::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            A = @cuDynamicSharedMem(Float64, (n,n), (7*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            g = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+            w = @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
+            wa1 = @cuDynamicSharedMem(T, n, (5*n)*sizeof(T))
+            wa2 = @cuDynamicSharedMem(T, n, (6*n)*sizeof(T))
+            A = @cuDynamicSharedMem(T, (n,n), (7*n)*sizeof(T))
 
             A[tx,ty] = d_A[tx,ty]
             if ty == 1
@@ -348,54 +355,56 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            L = tril(rand(n,n))
-            A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            L = tril(rand(T, n,n))
+            A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             A.vals .= L*transpose(L)
             A.vals .= tril(A.vals) .+ (transpose(tril(A.vals)) .- Diagonal(A.vals))
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            g = A.vals*x .+ rand(n)
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            g = A.vals*x .+ rand(T, n)
             w = -g
-            wa1 = zeros(n)
-            wa2 = zeros(n)
+            wa1 = zeros(T, n)
+            wa2 = zeros(T, n)
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dg = CuArray{Float64}(undef, n)
-            dw = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            d_out1 = CuArray{Float64}(undef, n)
-            d_out2 = CuArray{Float64}(undef, n)
+            dx = CuArray{T}(undef, n)
+            dl = CuArray{T}(undef, n)
+            du = CuArray{T}(undef, n)
+            dg = CuArray{T}(undef, n)
+            dw = CuArray{T}(undef, n)
+            dA = CuArray{T,2}(undef, (n,n))
+            d_out1 = CuArray{T}(undef, n)
+            d_out2 = CuArray{T}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dg, g)
             copyto!(dw, w)
             copyto!(dA, A.vals)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((7*n+n^2)*sizeof(Float64)) dprsrch_test(n,dx,dl,du,dg,dw,dA,d_out1,d_out2)
-            h_x = zeros(n)
-            h_w = zeros(n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((7*n+n^2)*sizeof(T)) dprsrch_test(n,dx,dl,du,dg,dw,dA,d_out1,d_out2)
+            h_x = zeros(T, n)
+            h_w = zeros(T, n)
             copyto!(h_x, d_out1)
             copyto!(h_w, d_out2)
 
             ExaTron.dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
 
-            @test norm(x .- h_x) <= 1e-10
-            @test norm(w .- h_w) <= 1e-10
+            tol = eps(T)^.6
+            @test norm(x .- h_x) <= tol
+            @test norm(w .- h_w) <= tol
         end
     end
 
     @testset "daxpy" begin
-        function daxpy_test(n::Int, da, d_in::CuDeviceArray{Float64},
-                            d_out::CuDeviceArray{Float64})
+        function daxpy_test(n::Int, da, d_in::CuDeviceArray{T},
+                            d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            y = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            y = @cuDynamicSharedMem(T, n, n*sizeof(T))
             if ty == 1
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx + n]
@@ -411,14 +420,15 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            da = rand(1)[1]
-            h_in = rand(2*n)
-            h_out = zeros(n)
-            d_in = CuArray{Float64}(undef, 2*n)
-            d_out = CuArray{Float64}(undef, n)
+            da = rand(T, 1)[1]
+            h_in = rand(T, 2*n)
+            h_out = zeros(T, n)
+            d_in = CuArray{T}(undef, 2*n)
+            d_out = CuArray{T}(undef, n)
             copyto!(d_in, h_in)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(Float64)) daxpy_test(n,da,d_in,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(T)) daxpy_test(n,da,d_in,d_out)
             copyto!(h_out, d_out)
 
             @test norm(h_out .- (h_in[n+1:2*n] .+ da.*h_in[1:n])) <= 1e-12
@@ -426,15 +436,15 @@ Random.seed!(0)
     end
 
     @testset "dssyax" begin
-        function dssyax_test(n::Int,d_z::CuDeviceArray{Float64},
-                             d_in::CuDeviceArray{Float64},
-                             d_out::CuDeviceArray{Float64})
+        function dssyax_test(n::Int,d_z::CuDeviceArray{T},
+                             d_in::CuDeviceArray{T},
+                             d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            z = @cuDynamicSharedMem(Float64, n)
-            q = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            A = @cuDynamicSharedMem(Float64, (n,n), (2*n)*sizeof(Float64))
+            z = @cuDynamicSharedMem(T, n)
+            q = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            A = @cuDynamicSharedMem(T, (n,n), (2*n)*sizeof(T))
             A[tx,ty] = d_in[tx,ty]
             if ty == 1
                 z[tx] = d_z[tx]
@@ -450,16 +460,17 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            z = rand(n)
-            h_in = rand(n,n)
-            h_out = zeros(n)
-            d_z = CuArray{Float64}(undef, n)
-            d_in = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64}(undef, n)
+            z = rand(T, n)
+            h_in = rand(T, n,n)
+            h_out = zeros(T, n)
+            d_z = CuArray{T}(undef, n)
+            d_in = CuArray{T,2}(undef, (n,n))
+            d_out = CuArray{T}(undef, n)
             copyto!(d_z, z)
             copyto!(d_in, h_in)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n+n^2)*sizeof(Float64)) dssyax_test(n,d_z,d_in,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n+n^2)*sizeof(T)) dssyax_test(n,d_z,d_in,d_out)
             copyto!(h_out, d_out)
 
             @test norm(h_out .- h_in*z) <= 1e-12
@@ -467,16 +478,16 @@ Random.seed!(0)
     end
 
     @testset "dmid" begin
-        function dmid_test(n::Int, dx::CuDeviceArray{Float64},
-                           dl::CuDeviceArray{Float64},
-                           du::CuDeviceArray{Float64},
-                           d_out::CuDeviceArray{Float64})
+        function dmid_test(n::Int, dx::CuDeviceArray{T},
+                           dl::CuDeviceArray{T},
+                           du::CuDeviceArray{T},
+                           d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
             if ty == 1
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -493,10 +504,11 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
 
             # Force some components to go below or above bounds
             # so that we can test all cases.
@@ -508,15 +520,15 @@ Random.seed!(0)
                     x[j] = xu[j] + 0.1
                 end
             end
-            x_out = zeros(n)
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            x_out = zeros(T, n)
+            dx = CuArray{T}(undef, n)
+            dl = CuArray{T}(undef, n)
+            du = CuArray{T}(undef, n)
+            d_out = CuArray{T}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Float64)) dmid_test(n,dx,dl,du,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(T)) dmid_test(n,dx,dl,du,d_out)
             copyto!(x_out, d_out)
 
             ExaTron.dmid(n, x, xl, xu)
@@ -525,20 +537,20 @@ Random.seed!(0)
     end
 
     @testset "dgpstep" begin
-        function dgpstep_test(n,dx::CuDeviceArray{Float64},
-                              dl::CuDeviceArray{Float64},
-                              du::CuDeviceArray{Float64},
-                              alpha::Float64,
-                              dw::CuDeviceArray{Float64},
-                              d_out::CuDeviceArray{Float64})
+        function dgpstep_test(n,dx::CuDeviceArray{T},
+                              dl::CuDeviceArray{T},
+                              du::CuDeviceArray{T},
+                              alpha::T,
+                              dw::CuDeviceArray{T},
+                              d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            w = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+            s = @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
             if ty == 1
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -556,14 +568,15 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            w = rand(n)
-            alpha = rand(1)[1]
-            s = zeros(n)
-            s_out = zeros(n)
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            w = rand(T, n)
+            alpha = rand(T, 1)[1]
+            s = zeros(T, n)
+            s_out = zeros(T, n)
 
             # Force some components to go below or above bounds
             # so that we can test all cases.
@@ -580,16 +593,16 @@ Random.seed!(0)
                 end
             end
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dw = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            dx = CuArray{T}(undef, n)
+            dl = CuArray{T}(undef, n)
+            du = CuArray{T}(undef, n)
+            dw = CuArray{T}(undef, n)
+            d_out = CuArray{T}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dw, w)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((5*n)*sizeof(Float64)) dgpstep_test(n,dx,dl,du,alpha,dw,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((5*n)*sizeof(T)) dgpstep_test(n,dx,dl,du,alpha,dw,d_out)
             copyto!(s_out, d_out)
 
             ExaTron.dgpstep(n, x, xl, xu, alpha, w, s)
@@ -598,20 +611,20 @@ Random.seed!(0)
     end
 
     @testset "dbreakpt" begin
-        function dbreakpt_test(n,dx::CuDeviceArray{Float64},
-                               dl::CuDeviceArray{Float64},
-                               du::CuDeviceArray{Float64},
-                               dw::CuDeviceArray{Float64},
-                               d_nbrpt::CuDeviceArray{Float64},
-                               d_brptmin::CuDeviceArray{Float64},
-                               d_brptmax::CuDeviceArray{Float64})
+        function dbreakpt_test(n,dx::CuDeviceArray{T},
+                               dl::CuDeviceArray{T},
+                               du::CuDeviceArray{T},
+                               dw::CuDeviceArray{T},
+                               d_nbrpt::CuDeviceArray{T},
+                               d_brptmin::CuDeviceArray{T},
+                               d_brptmax::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            w = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
             if ty == 1
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -629,27 +642,28 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            w = 2.0*rand(n) .- 1.0     # (-1,1]
-            h_nbrpt = zeros((n,n))
-            h_brptmin = zeros((n,n))
-            h_brptmax = zeros((n,n))
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            w = 2.0*rand(T, n) .- 1.0     # (-1,1]
+            h_nbrpt = zeros(T, (n,n))
+            h_brptmin = zeros(T, (n,n))
+            h_brptmax = zeros(T, (n,n))
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dw = CuArray{Float64}(undef, n)
-            d_nbrpt = CuArray{Float64,2}(undef, (n,n))
-            d_brptmin = CuArray{Float64,2}(undef, (n,n))
-            d_brptmax = CuArray{Float64,2}(undef, (n,n))
+            dx = CuArray{T}(undef, n)
+            dl = CuArray{T}(undef, n)
+            du = CuArray{T}(undef, n)
+            dw = CuArray{T}(undef, n)
+            d_nbrpt = CuArray{T,2}(undef, (n,n))
+            d_brptmin = CuArray{T,2}(undef, (n,n))
+            d_brptmax = CuArray{T,2}(undef, (n,n))
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dw, w)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((4*n)*sizeof(Float64)) dbreakpt_test(n,dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((4*n)*sizeof(T)) dbreakpt_test(n,dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax)
             copyto!(h_nbrpt, d_nbrpt)
             copyto!(h_brptmin, d_brptmin)
             copyto!(h_brptmax, d_brptmax)
@@ -661,46 +675,46 @@ Random.seed!(0)
         end
     end
 
-    @testset "dnrm2" begin
-        function dnrm2_test(n::Int, d_in::CuDeviceArray{Float64},
-                            d_out::CuDeviceArray{Float64})
-            tx = threadIdx().x
-            ty = threadIdx().y
+    # @testset "dnrm2" begin
+    #     function dnrm2_test(n::Int, d_in::CuDeviceArray{Float64},
+    #                         d_out::CuDeviceArray{Float64})
+    #         tx = threadIdx().x
+    #         ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            if ty == 1
-                x[tx] = d_in[tx]
-            end
-            CUDA.sync_threads()
+    #         x = @cuDynamicSharedMem(Float64, n)
+    #         if ty == 1
+    #             x[tx] = d_in[tx]
+    #         end
+    #         CUDA.sync_threads()
 
-            v = ExaTron.dnrm2(n, x, 1)
-            d_out[tx,ty] = v
-            CUDA.sync_threads()
+    #         v = ExaTron.dnrm2(n, x, 1)
+    #         d_out[tx,ty] = v
+    #         CUDA.sync_threads()
 
-            return
-        end
+    #         return
+    #     end
 
-        @inbounds for i=1:itermax
-            h_in = rand(n)
-            h_out = zeros((n,n))
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64,2}(undef, (n,n))
-            copyto!(d_in, h_in)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(n*sizeof(Float64)) dnrm2_test(n,d_in,d_out)
-            copyto!(h_out, d_out)
-            xnorm = norm(h_in, 2)
+    #     @inbounds for i=1:itermax
+    #         h_in = rand(n)
+    #         h_out = zeros((n,n))
+    #         d_in = CuArray{Float64}(undef, n)
+    #         d_out = CuArray{Float64,2}(undef, (n,n))
+    #         copyto!(d_in, h_in)
+    #         CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(n*sizeof(Float64)) dnrm2_test(n,d_in,d_out)
+    #         copyto!(h_out, d_out)
+    #         xnorm = norm(h_in, 2)
 
-            @test norm(xnorm .- h_out) <= 1e-10
-        end
-    end
+    #         @test norm(xnorm .- h_out) <= 1e-10
+    #     end
+    # end
 
     @testset "nrm2" begin
-        function nrm2_test(n::Int, d_A::CuDeviceArray{Float64}, d_out::CuDeviceArray{Float64})
+        function nrm2_test(n::Int, d_A::CuDeviceArray{T}, d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            wa = @cuDynamicSharedMem(Float64, n)
-            A = @cuDynamicSharedMem(Float64, (n,n), n*sizeof(Float64))
+            wa = @cuDynamicSharedMem(T, n)
+            A = @cuDynamicSharedMem(T, (n,n), n*sizeof(T))
             A[tx,ty] = d_A[tx,ty]
             CUDA.sync_threads()
 
@@ -713,34 +727,36 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         @inbounds for i=1:itermax
-            L = tril(rand(n,n))
+            L = tril(rand(T, n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            wa = zeros(n)
-            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            wa = zeros(T, n)
+            tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             tron_A.vals .= A
             ExaTron.nrm2!(wa, tron_A, n)
 
-            d_A = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64}(undef, n)
-            h_wa = zeros(n)
+            d_A = CuArray{T,2}(undef, (n,n))
+            d_out = CuArray{T}(undef, n)
+            h_wa = zeros(T, n)
             copyto!(d_A, A)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((n^2+n)*sizeof(Float64)) nrm2_test(n,d_A,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((n^2+n)*sizeof(T)) nrm2_test(n,d_A,d_out)
             copyto!(h_wa, d_out)
 
-            @test norm(wa .- h_wa) <= 1e-10
+            tol = eps(T)^.6
+            @test norm(wa .- h_wa) <= tol
         end
     end
 
     @testset "dcopy" begin
-        function dcopy_test(n::Int, d_in::CuDeviceArray{Float64},
-                            d_out::CuDeviceArray{Float64})
+        function dcopy_test(n::Int, d_in::CuDeviceArray{T},
+                            d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            y = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            y = @cuDynamicSharedMem(T, n, n*sizeof(T))
 
             if ty == 1
                 x[tx] = d_in[tx]
@@ -757,13 +773,14 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         @inbounds for i=1:itermax
-            h_in = rand(n)
-            h_out = zeros(n)
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            h_in = rand(T, n)
+            h_out = zeros(T, n)
+            d_in = CuArray{T}(undef, n)
+            d_out = CuArray{T}(undef, n)
             copyto!(d_in, h_in)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(Float64)) dcopy_test(n,d_in,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(T)) dcopy_test(n,d_in,d_out)
             copyto!(h_out, d_out)
 
             @test !(false in (h_in .== h_out))
@@ -771,13 +788,13 @@ Random.seed!(0)
     end
 
     @testset "ddot" begin
-        function ddot_test(n::Int, d_in::CuDeviceArray{Float64},
-                           d_out::CuDeviceArray{Float64})
+        function ddot_test(n::Int, d_in::CuDeviceArray{T},
+                           d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            y = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            y = @cuDynamicSharedMem(T, n, n*sizeof(T))
             if ty == 1
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx]
@@ -791,27 +808,29 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         @inbounds for i=1:itermax
-            h_in = rand(n)
-            h_out = zeros((n,n))
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            h_in = rand(T, n)
+            h_out = zeros(T, (n,n))
+            d_in = CuArray{T}(undef, n)
+            d_out = CuArray{T,2}(undef, (n,n))
             copyto!(d_in, h_in)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(Float64)) ddot_test(n,d_in,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(T)) ddot_test(n,d_in,d_out)
             copyto!(h_out, d_out)
 
-            @test norm(dot(h_in,h_in) .- h_out, 2) <= 1e-10
+            tol = eps(T)^.6
+            @test norm(dot(h_in,h_in) .- h_out, 2) <= tol
         end
     end
 
     @testset "dscal" begin
-        function dscal_test(n::Int, da::Float64,
-                            d_in::CuDeviceArray{Float64},
-                            d_out::CuDeviceArray{Float64})
+        function dscal_test(n::Int, da::T,
+                            d_in::CuDeviceArray{T},
+                            d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
+            x = @cuDynamicSharedMem(T, n)
             if ty == 1
                 x[tx] = d_in[tx]
             end
@@ -826,30 +845,32 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            h_in = rand(n)
-            h_out = zeros(n)
-            da = rand(1)[1]
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            h_in = rand(T, n)
+            h_out = zeros(T, n)
+            da = rand(T, 1)[1]
+            d_in = CuArray{T}(undef, n)
+            d_out = CuArray{T}(undef, n)
             copyto!(d_in, h_in)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(n*sizeof(Float64)) dscal_test(n,da,d_in,d_out)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(n*sizeof(T)) dscal_test(n,da,d_in,d_out)
             copyto!(h_out, d_out)
 
-            @test norm(h_out .- (da.*h_in)) <= 1e-12
+            tol = eps(T)^(2/3)
+            @test norm(h_out .- (da.*h_in)) <= tol
         end
     end
 
     @testset "dtrqsol" begin
-        function dtrqsol_test(n::Int, d_x::CuDeviceArray{Float64},
-                              d_p::CuDeviceArray{Float64},
-                              d_out::CuDeviceArray{Float64},
-                              delta::Float64)
+        function dtrqsol_test(n::Int, d_x::CuDeviceArray{T},
+                              d_p::CuDeviceArray{T},
+                              d_out::CuDeviceArray{T},
+                              delta::T) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            p = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            p = @cuDynamicSharedMem(T, n, n*sizeof(T))
 
             if ty == 1
                 x[tx] = d_x[tx]
@@ -862,53 +883,55 @@ Random.seed!(0)
             CUDA.sync_threads()
         end
 
+        T = Float64
         for i=1:itermax
-            x = rand(n)
-            p = rand(n)
-            sigma = abs(rand(1)[1])
+            x = rand(T, n)
+            p = rand(T, n)
+            sigma = abs(rand(T, 1)[1])
             delta = norm(x .+ sigma.*p)
 
-            d_x = CuArray{Float64}(undef, n)
-            d_p = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            d_x = CuArray{T}(undef, n)
+            d_p = CuArray{T}(undef, n)
+            d_out = CuArray{T,2}(undef, (n,n))
             copyto!(d_x, x)
             copyto!(d_p, p)
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(Float64)) dtrqsol_test(n,d_x,d_p,d_out,delta)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((2*n)*sizeof(T)) dtrqsol_test(n,d_x,d_p,d_out,delta)
 
-            @test norm(sigma .- d_out) <= 1e-10
+            tol = eps(T)^(2/3)
+            @test norm(sigma .- d_out) <= tol
         end
     end
 
     @testset "dspcg" begin
-        function dspcg_test(n::Int, delta::Float64, rtol::Float64,
-                            cg_itermax::Int, dx::CuDeviceArray{Float64},
-                            dxl::CuDeviceArray{Float64},
-                            dxu::CuDeviceArray{Float64},
-                            dA::CuDeviceArray{Float64},
-                            dg::CuDeviceArray{Float64},
-                            ds::CuDeviceArray{Float64},
-                            d_out::CuDeviceArray{Float64})
+        function dspcg_test(n::Int, delta::T, rtol::T,
+                            cg_itermax::Int, dx::CuDeviceArray{T},
+                            dxl::CuDeviceArray{T},
+                            dxu::CuDeviceArray{T},
+                            dA::CuDeviceArray{T},
+                            dg::CuDeviceArray{T},
+                            ds::CuDeviceArray{T},
+                            d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-            wa3 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-            wa4 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-            wa5 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-            gfree = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-            indfree = @cuDynamicSharedMem(Int, n, (12*n)*sizeof(Float64))
-            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (12*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            g = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+            s = @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
+            w = @cuDynamicSharedMem(T, n, (5*n)*sizeof(T))
+            wa1 = @cuDynamicSharedMem(T, n, (6*n)*sizeof(T))
+            wa2 = @cuDynamicSharedMem(T, n, (7*n)*sizeof(T))
+            wa3 = @cuDynamicSharedMem(T, n, (8*n)*sizeof(T))
+            wa4 = @cuDynamicSharedMem(T, n, (9*n)*sizeof(T))
+            wa5 = @cuDynamicSharedMem(T, n, (10*n)*sizeof(T))
+            gfree = @cuDynamicSharedMem(T, n, (11*n)*sizeof(T))
+            indfree = @cuDynamicSharedMem(Int, n, (12*n)*sizeof(T))
+            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (12*n)*sizeof(T))
 
-            A = @cuDynamicSharedMem(Float64, (n,n), (12*n)*sizeof(Float64)+(3*n)*sizeof(Int))
-            B = @cuDynamicSharedMem(Float64, (n,n), (12*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
-            L = @cuDynamicSharedMem(Float64, (n,n), (12*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+            A = @cuDynamicSharedMem(T, (n,n), (12*n)*sizeof(T)+(3*n)*sizeof(Int))
+            B = @cuDynamicSharedMem(T, (n,n), (12*n+n^2)*sizeof(T)+(3*n)*sizeof(Int))
+            L = @cuDynamicSharedMem(T, (n,n), (12*n+2*n^2)*sizeof(T)+(3*n)*sizeof(Int))
 
             A[tx,ty] = dA[tx,ty]
             if ty == 1
@@ -932,35 +955,36 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            L = tril(rand(n,n))
+            L = tril(rand(T,n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             tron_A.vals .= A
-            tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-            tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            g = A*x .+ rand(n)
-            s = rand(n)
-            delta = 2.0*norm(g)
-            rtol = 1e-6
+            tron_B = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+            x = rand(T,n)
+            xl = x .- abs.(rand(T,n))
+            xu = x .+ abs.(rand(T,n))
+            g = A*x .+ rand(T,n)
+            s = rand(T,n)
+            delta = T(2.0*norm(g))
+            rtol = T(1e-6)
             cg_itermax = n
-            w = zeros(n)
-            wa = zeros(5*n)
-            gfree = zeros(n)
+            w = zeros(T, n)
+            wa = zeros(T, 5*n)
+            gfree = zeros(T, n)
             indfree = zeros(Int, n)
             iwa = zeros(Int, 3*n)
 
-            dx = CuArray{Float64}(undef, n)
-            dxl = CuArray{Float64}(undef, n)
-            dxu = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            dg = CuArray{Float64}(undef, n)
-            ds = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            dx = CuArray{T}(undef, n)
+            dxl = CuArray{T}(undef, n)
+            dxu = CuArray{T}(undef, n)
+            dA = CuArray{T,2}(undef, (n,n))
+            dg = CuArray{T}(undef, n)
+            ds = CuArray{T}(undef, n)
+            d_out = CuArray{T}(undef, n)
 
             copyto!(dx, x)
             copyto!(dxl, xl)
@@ -969,8 +993,8 @@ Random.seed!(0)
             copyto!(dg, g)
             copyto!(ds, s)
 
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Int)+(12*n+3*(n^2))*sizeof(Float64)) dspcg_test(n,delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out)
-            h_x = zeros(n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Int)+(12*n+3*(n^2))*sizeof(T)) dspcg_test(n,delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out)
+            h_x = zeros(T, n)
             copyto!(h_x, d_out)
 
             ExaTron.dspcg(n, x, xl, xu, tron_A, g, delta, rtol, s, 5, cg_itermax,
@@ -981,14 +1005,14 @@ Random.seed!(0)
     end
 
     @testset "dgpnorm" begin
-        function dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
+        function dgpnorm_test(n, dx::CuDeviceVector{T, 1}, dxl, dxu, dg, d_out) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            g = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
 
             if ty == 1
                 x[tx] = dx[tx]
@@ -1005,25 +1029,26 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            g = 2.0*rand(n) .- 1.0
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            g = T(2.0)*rand(T, n) .- T(1.0)
 
-            dx = CuArray{Float64}(undef, n)
-            dxl = CuArray{Float64}(undef, n)
-            dxu = CuArray{Float64}(undef, n)
-            dg = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            dx = CuVector{T}(undef, n)
+            dxl = CuVector{T}(undef, n)
+            dxu = CuVector{T}(undef, n)
+            dg = CuVector{T}(undef, n)
+            d_out = CuVector{T}(undef, n)
 
             copyto!(dx, x)
             copyto!(dxl, xl)
             copyto!(dxu, xu)
             copyto!(dg, g)
 
-            gptime = @timed CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(4*n*sizeof(Float64)) dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
-            h_v = zeros(n)
+            gptime = @timed CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=(4*n*sizeof(T)) dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
+            h_v = zeros(T, n)
             copyto!(h_v, d_out)
 
             v = ExaTron.dgpnorm(n, x, xl, xu, g)
@@ -1032,34 +1057,34 @@ Random.seed!(0)
     end
 
     @testset "dtron" begin
-        function dtron_test(n::Int, f::Float64, frtol::Float64, fatol::Float64, fmin::Float64,
-                            cgtol::Float64, cg_itermax::Int, delta::Float64, task::Int,
-                            disave::CuDeviceArray{Int}, ddsave::CuDeviceArray{Float64},
-                            dx::CuDeviceArray{Float64}, dxl::CuDeviceArray{Float64},
-                            dxu::CuDeviceArray{Float64}, dA::CuDeviceArray{Float64},
-                            dg::CuDeviceArray{Float64}, d_out::CuDeviceArray{Float64})
+        function dtron_test(n::Int, f::T, frtol::T, fatol::T, fmin::T,
+                            cgtol::T, cg_itermax::Int, delta::T, task::Int,
+                            disave::CuDeviceArray{Int}, ddsave::CuDeviceArray{T},
+                            dx::CuDeviceArray{T}, dxl::CuDeviceArray{T},
+                            dxu::CuDeviceArray{T}, dA::CuDeviceArray{T},
+                            dg::CuDeviceArray{T}, d_out::CuDeviceArray{T}) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-            wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-            wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-            wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-            gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-            indfree = @cuDynamicSharedMem(Int, n, (13*n)*sizeof(Float64))
-            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (13*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
+            g = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+            xc = @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
+            s = @cuDynamicSharedMem(T, n, (5*n)*sizeof(T))
+            wa = @cuDynamicSharedMem(T, n, (6*n)*sizeof(T))
+            wa1 = @cuDynamicSharedMem(T, n, (7*n)*sizeof(T))
+            wa2 = @cuDynamicSharedMem(T, n, (8*n)*sizeof(T))
+            wa3 = @cuDynamicSharedMem(T, n, (9*n)*sizeof(T))
+            wa4 = @cuDynamicSharedMem(T, n, (10*n)*sizeof(T))
+            wa5 = @cuDynamicSharedMem(T, n, (11*n)*sizeof(T))
+            gfree = @cuDynamicSharedMem(T, n, (12*n)*sizeof(T))
+            indfree = @cuDynamicSharedMem(Int, n, (13*n)*sizeof(T))
+            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (13*n)*sizeof(T))
 
-            A = @cuDynamicSharedMem(Float64, (n,n), (13*n)*sizeof(Float64)+(3*n)*sizeof(Int))
-            B = @cuDynamicSharedMem(Float64, (n,n), (13*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
-            L = @cuDynamicSharedMem(Float64, (n,n), (13*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+            A = @cuDynamicSharedMem(T, (n,n), (13*n)*sizeof(T)+(3*n)*sizeof(Int))
+            B = @cuDynamicSharedMem(T, (n,n), (13*n+n^2)*sizeof(T)+(3*n)*sizeof(Int))
+            L = @cuDynamicSharedMem(T, (n,n), (13*n+2*n^2)*sizeof(T)+(3*n)*sizeof(Int))
 
             A[tx,ty] = dA[tx,ty]
             if ty == 1
@@ -1081,45 +1106,46 @@ Random.seed!(0)
             return
         end
 
+        T = Float64
         for i=1:itermax
-            L = tril(rand(n,n))
+            L = tril(rand(T, n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            c = rand(n)
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            c = rand(T, n)
             g = A*x .+ c
-            xc = zeros(n)
-            s = zeros(n)
-            wa = zeros(7*n)
-            gfree = zeros(n)
+            xc = zeros(T, n)
+            s = zeros(T, n)
+            wa = zeros(T, 7*n)
+            gfree = zeros(T, n)
             indfree = zeros(Int, n)
             iwa = zeros(Int, 3*n)
             isave = zeros(Int, 3)
-            dsave = zeros(3)
+            dsave = zeros(T, 3)
             task = 0
-            fatol = 0.0
-            frtol = 1e-12
-            fmin = -1e32
-            cgtol = 0.1
+            fatol = T(0.0)
+            frtol = T(1e-12)
+            fmin = -T(1e32)
+            cgtol = T(0.1)
             cg_itermax = n
-            delta = 2.0*norm(g)
-            f = 0.5*transpose(x)*A*x .+ transpose(x)*c
+            delta = T(2.0*norm(g))
+            f = T(0.5)*transpose(x)*A*x .+ transpose(x)*c
 
-            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
             tron_A.vals .= A
-            tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-            tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_B = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array{T,2}}(n)
 
-            dx = CuArray{Float64}(undef, n)
-            dxl = CuArray{Float64}(undef, n)
-            dxu = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            dg = CuArray{Float64}(undef, n)
+            dx = CuArray{T}(undef, n)
+            dxl = CuArray{T}(undef, n)
+            dxu = CuArray{T}(undef, n)
+            dA = CuArray{T,2}(undef, (n,n))
+            dg = CuArray{T}(undef, n)
             disave = CuArray{Int}(undef, n)
-            ddsave = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            ddsave = CuArray{T}(undef, n)
+            d_out = CuArray{T}(undef, n)
 
             copyto!(dx, x)
             copyto!(dxl, xl)
@@ -1127,8 +1153,8 @@ Random.seed!(0)
             copyto!(dA, tron_A.vals)
             copyto!(dg, g)
 
-            @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Int)+(13*n+3*(n^2))*sizeof(Float64)) dtron_test(n,f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out)
-            h_x = zeros(n)
+            @cuda threads=(n,n) blocks=nblk shmem=((3*n)*sizeof(Int)+(13*n+3*(n^2))*sizeof(T)) dtron_test(n,f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out)
+            h_x = zeros(T, n)
             copyto!(h_x, d_out)
 
             task_str = Vector{UInt8}(undef, 60)
@@ -1144,14 +1170,14 @@ Random.seed!(0)
     end
 
     @testset "driver_kernel" begin
-        function eval_f(n, x, dA, dc)
-            f = 0
+        function eval_f(n, x::CuDeviceVector{T, 1}, dA, dc) where T
+            f = T(0)
             @inbounds for i=1:n
                 @inbounds for j=1:n
                     f += x[i]*dA[i,j]*x[j]
                 end
             end
-            f = 0.5*f
+            f = T(0.5)*f
             @inbounds for i=1:n
                 f += x[i]*dc[i]
             end
@@ -1159,9 +1185,9 @@ Random.seed!(0)
             return f
         end
 
-        function eval_g(n, x, g, dA, dc)
+        function eval_g(n, x::CuDeviceVector{T, 1}, g, dA, dc) where T
             @inbounds for i=1:n
-                gval = 0
+                gval = T(0)
                 @inbounds for j=1:n
                     gval += dA[i,j]*x[j]
                 end
@@ -1181,43 +1207,43 @@ Random.seed!(0)
         end
 
         function driver_kernel(n::Int, max_feval::Int, max_minor::Int,
-                               x::CuDeviceArray{Float64}, xl::CuDeviceArray{Float64},
-                               xu::CuDeviceArray{Float64}, dA::CuDeviceArray{Float64},
-                               dc::CuDeviceArray{Float64})
+                               x::CuDeviceArray{T}, xl::CuDeviceArray{T},
+                               xu::CuDeviceArray{T}, dA::CuDeviceArray{T},
+                               dc::CuDeviceArray{T}) where T
             # We start with a shared memory allocation.
             # The first 3*n*sizeof(Float64) bytes are used for x, xl, and xu.
 
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-            wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-            wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-            wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-            gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-            dsave = @cuDynamicSharedMem(Float64, n, (13*n)*sizeof(Float64))
-            indfree = @cuDynamicSharedMem(Int, n, (14*n)*sizeof(Float64))
-            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(Float64))
-            isave = @cuDynamicSharedMem(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(Float64))
+            g = @cuDynamicSharedMem(T, n, (3*n)*sizeof(T))
+            xc = @cuDynamicSharedMem(T, n, (4*n)*sizeof(T))
+            s = @cuDynamicSharedMem(T, n, (5*n)*sizeof(T))
+            wa = @cuDynamicSharedMem(T, n, (6*n)*sizeof(T))
+            wa1 = @cuDynamicSharedMem(T, n, (7*n)*sizeof(T))
+            wa2 = @cuDynamicSharedMem(T, n, (8*n)*sizeof(T))
+            wa3 = @cuDynamicSharedMem(T, n, (9*n)*sizeof(T))
+            wa4 = @cuDynamicSharedMem(T, n, (10*n)*sizeof(T))
+            wa5 = @cuDynamicSharedMem(T, n, (11*n)*sizeof(T))
+            gfree = @cuDynamicSharedMem(T, n, (12*n)*sizeof(T))
+            dsave = @cuDynamicSharedMem(T, n, (13*n)*sizeof(T))
+            indfree = @cuDynamicSharedMem(Int, n, (14*n)*sizeof(T))
+            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(T))
+            isave = @cuDynamicSharedMem(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(T))
 
-            A = @cuDynamicSharedMem(Float64, (n,n), (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
-            B = @cuDynamicSharedMem(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
-            L = @cuDynamicSharedMem(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+            A = @cuDynamicSharedMem(T, (n,n), (14*n)*sizeof(T)+(4*n)*sizeof(Int))
+            B = @cuDynamicSharedMem(T, (n,n), (14*n+n^2)*sizeof(T)+(4*n)*sizeof(Int))
+            L = @cuDynamicSharedMem(T, (n,n), (14*n+2*n^2)*sizeof(T)+(4*n)*sizeof(Int))
 
             task = 0
             status = 0
 
-            delta = 0.0
-            fatol = 0.0
-            frtol = 1e-12
-            fmin = -1e32
-            gtol = 1e-6
-            cgtol = 0.1
+            delta = T(0.0)
+            fatol = T(0.0)
+            frtol = T(1e-12)
+            fmin = -T(1e32)
+            gtol = T(1e-6)
+            cgtol = T(0.1)
             cg_itermax = n
 
-            f = 0.0
+            f = T(0.0)
             nfev = 0
             ngev = 0
             nhev = 0
@@ -1229,7 +1255,7 @@ Random.seed!(0)
                 # [0|1]: Evaluate function.
 
                 if task == 0 || task == 1
-                    f = eval_f(n, x, dA, dc)
+                    f = eval_f(n, x, dA, dc)::T
                     nfev += 1
                     if nfev >= max_feval
                         search = false
@@ -1240,7 +1266,7 @@ Random.seed!(0)
 
                 if task == 0 || task == 2
                     eval_g(n, x, g, dA, dc)
-                    eval_h(1.0, x, A, dA)
+                    eval_h(T(1.0), x, A, dA)
                     ngev += 1
                     nhev += 1
                     minor_iter += 1
@@ -1286,13 +1312,13 @@ Random.seed!(0)
         end
 
         function driver_kernel_test(n, max_feval, max_minor,
-                                    dx, dxl, dxu, dA, dc, d_out)
+                                    dx::CuDeviceVector{T, 1}, dxl, dxu, dA, dc, d_out) where T
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            x = @cuDynamicSharedMem(T, n)
+            xl = @cuDynamicSharedMem(T, n, n*sizeof(T))
+            xu = @cuDynamicSharedMem(T, n, (2*n)*sizeof(T))
 
             if ty == 1
                 x[tx] = dx[tx]
@@ -1313,25 +1339,26 @@ Random.seed!(0)
         max_feval = 500
         max_minor = 100
 
-        tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-        tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
-        tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+        T = Float64
+        tron_A = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+        tron_B = ExaTron.TronDenseMatrix{Array{T,2}}(n)
+        tron_L = ExaTron.TronDenseMatrix{Array{T,2}}(n)
 
-        dx = CuArray{Float64}(undef, n)
-        dxl = CuArray{Float64}(undef, n)
-        dxu = CuArray{Float64}(undef, n)
-        dA = CuArray{Float64,2}(undef, (n,n))
-        dc = CuArray{Float64}(undef, n)
-        d_out = CuArray{Float64}(undef, n)
+        dx = CuArray{T}(undef, n)
+        dxl = CuArray{T}(undef, n)
+        dxu = CuArray{T}(undef, n)
+        dA = CuArray{T,2}(undef, (n,n))
+        dc = CuArray{T}(undef, n)
+        d_out = CuArray{T}(undef, n)
 
         for i=1:itermax
-            L = tril(rand(n,n))
+            L = tril(rand(T, n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
-            x = rand(n)
-            xl = x .- abs.(rand(n))
-            xu = x .+ abs.(rand(n))
-            c = rand(n)
+            x = rand(T, n)
+            xl = x .- abs.(rand(T, n))
+            xu = x .+ abs.(rand(T, n))
+            c = rand(T, n)
 
             tron_A.vals .= A
 
@@ -1342,7 +1369,7 @@ Random.seed!(0)
             copyto!(dc, c)
 
             function eval_f_cb(x)
-                f = 0.5*(transpose(x)*A*x) + transpose(c)*x
+                f = T(0.5)*(transpose(x)*A*x) + transpose(c)*x
                 return f
             end
 
@@ -1373,10 +1400,11 @@ Random.seed!(0)
             nele_hess = div(n*(n+1), 2)
             tron = ExaTron.createProblem(n, xl, xu, nele_hess, eval_f_cb, eval_g_cb, eval_h_cb; :matrix_type=>:Dense, :max_minor=>max_minor)
             copyto!(tron.x, x)
-            status = ExaTron.solveProblem(tron)
+            status = ExaTron.solveProblem(tron, T)
 
-            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((4*n)*sizeof(Int)+(14*n+3*(n^2))*sizeof(Float64)) driver_kernel_test(n,max_feval,max_minor,dx,dxl,dxu,dA,dc,d_out)
-            h_x = zeros(n)
+            CUDA.@sync @cuda threads=(n,n) blocks=nblk shmem=((4*n)*sizeof(Int)+(14*n+3*(n^2))*sizeof(T)) driver_kernel_test(n,max_feval,max_minor,dx,dxl,dxu,dA,dc,d_out)
+            # @device_code_warntype interactive=true @cuda driver_kernel_test(n,max_feval,max_minor,dx,dxl,dxu,dA,dc,d_out)
+            h_x = zeros(T, n)
             copyto!(h_x, d_out)
 
             @test norm(h_x .- tron.x) <= 1e-10
