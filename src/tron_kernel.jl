@@ -62,9 +62,9 @@ Driver to run TRON on GPU. This should be called from a kernel.
 
         if task == 0 || task == 1
             if use_polar
-                f = eval_f_polar_kernel(n, shift, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                f = eval_f_polar_kernel(n, shift, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)::T
             else
-                f = eval_f_kernel(n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                f = eval_f_kernel(n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)::T
             end
             nfev += 1
             if nfev >= max_feval
@@ -127,6 +127,6 @@ Driver to run TRON on GPU. This should be called from a kernel.
     end
 
     CUDA.sync_threads()
-    return
+    return (status, minor_iter)
 
 end

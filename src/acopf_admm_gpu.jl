@@ -42,8 +42,8 @@ function get_bus_data(data, T; use_gpu=false)
     ToStart = accumulate(+, vcat([1], [length(data.ToLines[b]) for b=1:nbus]))
     GenStart = accumulate(+, vcat([1], [length(data.BusGenerators[b]) for b=1:nbus]))
 
-    Pd = [data.buses[i].Pd for i=1:nbus]
-    Qd = [data.buses[i].Qd for i=1:nbus]
+    Pd = T[data.buses[i].Pd for i=1:nbus]
+    Qd = T[data.buses[i].Qd for i=1:nbus]
 
     if use_gpu
         cuFrIdx = CuArray{Int}(undef, length(FrIdx))
@@ -114,7 +114,8 @@ function get_branch_data(data, T; use_gpu=false)
 end
 
 function init_values(data, ybus, gen_start, line_start,
-                     rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
+                     rho_pq, rho_va, u_curr::AbstractVector{T}, v_curr::AbstractVector{T},
+                     l_curr::AbstractVector{T}, rho::AbstractVector{T}, wRIij) where T
     lines = data.lines
     buses = data.buses
     BusIdx = data.BusIdx
@@ -129,8 +130,8 @@ function init_values(data, ybus, gen_start, line_start,
 
     for g=1:ngen
         pg_idx = gen_start + 2*(g-1)
-        u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
-        u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        u_curr[pg_idx] = T(0.5)*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
+        u_curr[pg_idx+1] = T(0.5)*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
     end
 
     rho .= rho_pq
@@ -147,20 +148,20 @@ function init_values(data, ybus, gen_start, line_start,
         u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
         u_curr[pij_idx+4] = wij0
         u_curr[pij_idx+5] = wji0
-        u_curr[pij_idx+6] = 0.0
-        u_curr[pij_idx+7] = 0.0
+        u_curr[pij_idx+6] = zero(T)
+        u_curr[pij_idx+7] = zero(T)
         wRIij[2*(l-1)+1] = wR0
-        wRIij[2*l] = 0.0
+        wRIij[2*l] = zero(T)
 
         v_curr[pij_idx+4] = wij0
         v_curr[pij_idx+5] = wji0
-        v_curr[pij_idx+6] = 0.0
-        v_curr[pij_idx+7] = 0.0
+        v_curr[pij_idx+6] = zero(T)
+        v_curr[pij_idx+7] = zero(T)
 
-        rho[pij_idx+4:pij_idx+7] .= rho_va
+        rho[pij_idx+4:pij_idx+7] .= T(rho_va)
     end
 
-    l_curr .= 0
+    l_curr .= zero(T)
     return
 end
 
@@ -210,7 +211,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{T,1},
     return
 end
 
-function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-5,
+function admm_rect_gpu(case, T; iterlim=800, rho_pq=T(400.0), rho_va=T(40000.0), scale=T(1e-5),
                        use_gpu=false, use_polar=true, gpu_no=1)
     data = opf_loaddata(case)
 
@@ -219,17 +220,17 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
     nbus = length(data.buses)
     nvar = 2*ngen + 8*nline
 
-    baseMVA = data.baseMVA
     n = (use_polar == true) ? 4 : 10
-    mu_max = 1e8
-    rho_max = 1e6
-    rho_min_pq = 5.0
-    rho_min_w = 5.0
-    eps_rp = 1e-4
-    eps_rp_min = 1e-5
-    rt_inc = 2.0
-    rt_dec = 2.0
-    eta = 0.99
+    baseMVA = T(data.baseMVA)
+    mu_max = T(1e8)
+    rho_max = T(1e6)
+    rho_min_pq = T(5.0)
+    rho_min_w = T(5.0)
+    eps_rp = T(1e-4)
+    eps_rp_min = T(1e-5)
+    rt_inc = T(2.0)
+    rt_dec = T(2.0)
+    eta = T(0.99)
     Kf = 100
     Kf_mean = 10
 
@@ -296,8 +297,8 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
     nblk_br = nline
     nblk_bus = div(nbus, 32, RoundUp)
 
-    ABSTOL = 1e-6
-    RELTOL = 1e-5
+    ABSTOL = T(1e-6)
+    RELTOL = T(1e-5)
 
     it = 0
     time_gen = time_br = time_bus = 0
@@ -309,7 +310,6 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
     shift_lines = 0
     shmem_size = sizeof(T)*(14*n+3*n^2) + sizeof(Int)*(4*n)
 
-    @time begin
     while it < iterlim
         it += 1
 
@@ -339,7 +339,6 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
                                          FrStart, FrIdx, ToStart, ToIdx, GenStart,
                                          GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
             time_bus += tcpu.time
-
             l_curr .+= rho .* (u_curr .- v_curr)
             rd .= -rho .* (v_curr .- v_prev)
             rp .= u_curr .- v_curr
@@ -362,10 +361,6 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
             tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(baseMVA, ngen, gen_start,
                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
                                                                                  cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1)
-            # MPI routines to be implemented:
-            #  - Broadcast cu_v_curr and cu_l_curr to GPUs.
-            #  - Collect cu_u_curr.
-            #  - div(nblk_br / number of GPUs, RoundUp)
 
             time_gen += tgpu.time
             if use_polar
@@ -400,7 +395,6 @@ function admm_rect_gpu(case, T; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale
 
             @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
         end
-    end
     end
 
     if use_gpu

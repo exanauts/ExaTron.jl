@@ -3,7 +3,7 @@
                        YffR::T, YffI::T,
                        YftR::T, YftI::T,
                        YttR::T, YttI::T,
-                       YtfR::T, YtfI::T) where T
+                       YtfR::T, YtfI::T)::T where T
                        #=
                        YffR::CuDeviceArray{Float64}, YffI::CuDeviceArray{Float64},
                        YftR::CuDeviceArray{Float64}, YftI::CuDeviceArray{Float64},
@@ -529,7 +529,7 @@ end
                              YffR::T, YffI::T,
                              YftR::T, YftI::T,
                              YttR::T, YttI::T,
-                             YtfR::T, YtfI::T) where T
+                             YtfR::T, YtfI::T)::T where T
     I = blockIdx().x + shift
     f = zero(T)
 
@@ -550,14 +550,14 @@ end
         f += param[7,I]*x[3]
         f += param[8,I]*x[4]
 
-        f += 0.5*(param[9,I]*(pij - param[17,I])^2)
-        f += 0.5*(param[10,I]*(qij - param[18,I])^2)
-        f += 0.5*(param[11,I]*(pji - param[19,I])^2)
-        f += 0.5*(param[12,I]*(qji - param[20,I])^2)
-        f += 0.5*(param[13,I]*(x[1]^2 - param[21,I])^2)
-        f += 0.5*(param[14,I]*(x[2]^2 - param[22,I])^2)
-        f += 0.5*(param[15,I]*(x[3] - param[23,I])^2)
-        f += 0.5*(param[16,I]*(x[4] - param[24,I])^2)
+        f += T(0.5)*(param[9,I]*(pij - param[17,I])^2)
+        f += T(0.5)*(param[10,I]*(qij - param[18,I])^2)
+        f += T(0.5)*(param[11,I]*(pji - param[19,I])^2)
+        f += T(0.5)*(param[12,I]*(qji - param[20,I])^2)
+        f += T(0.5)*(param[13,I]*(x[1]^2 - param[21,I])^2)
+        f += T(0.5)*(param[14,I]*(x[2]^2 - param[22,I])^2)
+        f += T(0.5)*(param[15,I]*(x[3] - param[23,I])^2)
+        f += T(0.5)*(param[16,I]*(x[4] - param[24,I])^2)
     end
 
     f *= scale
@@ -589,8 +589,8 @@ end
         qji = -YttI*x[2]^2 - YtfI*vi_vj_cos - YtfR*vi_vj_sin
 
         # Derivative with respect to vi.
-        dpij_dx = 2*YffR*x[1] + YftR*x[2]*cos_ij + YftI*x[2]*sin_ij
-        dqij_dx = -2*YffI*x[1] - YftI*x[2]*cos_ij + YftR*x[2]*sin_ij
+        dpij_dx = T(2)*YffR*x[1] + YftR*x[2]*cos_ij + YftI*x[2]*sin_ij
+        dqij_dx = -T(2)*YffI*x[1] - YftI*x[2]*cos_ij + YftR*x[2]*sin_ij
         dpji_dx = YtfR*x[2]*cos_ij - YtfI*x[2]*sin_ij
         dqji_dx = -YtfI*x[2]*cos_ij - YtfR*x[2]*sin_ij
 
@@ -598,18 +598,18 @@ end
         g1 += param[2,I]*(dqij_dx)
         g1 += param[3,I]*(dpji_dx)
         g1 += param[4,I]*(dqji_dx)
-        g1 += param[5,I]*(2*x[1])
+        g1 += param[5,I]*(T(2)*x[1])
         g1 += param[9,I]*(pij - param[17,I])*dpij_dx
         g1 += param[10,I]*(qij - param[18,I])*dqij_dx
         g1 += param[11,I]*(pji - param[19,I])*dpji_dx
         g1 += param[12,I]*(qji - param[20,I])*dqji_dx
-        g1 += param[13,I]*(x[1]^2 - param[21,I])*(2*x[1])
+        g1 += param[13,I]*(x[1]^2 - param[21,I])*(T(2)*x[1])
 
         # Derivative with respect to vj.
         dpij_dx = YftR*x[1]*cos_ij + YftI*x[1]*sin_ij
         dqij_dx = -YftI*x[1]*cos_ij + YftR*x[1]*sin_ij
-        dpji_dx = 2*YttR*x[2] + YtfR*x[1]*cos_ij - YtfI*x[1]*sin_ij
-        dqji_dx = -2*YttI*x[2] - YtfI*x[1]*cos_ij - YtfR*x[1]*sin_ij
+        dpji_dx = T(2)*YttR*x[2] + YtfR*x[1]*cos_ij - YtfI*x[1]*sin_ij
+        dqji_dx = -T(2)*YttI*x[2] - YtfI*x[1]*cos_ij - YtfR*x[1]*sin_ij
 
         g2 = param[1,I]*(dpij_dx)
         g2 += param[2,I]*(dqij_dx)
@@ -620,7 +620,7 @@ end
         g2 += param[10,I]*(qij - param[18,I])*dqij_dx
         g2 += param[11,I]*(pji - param[19,I])*dpji_dx
         g2 += param[12,I]*(qji - param[20,I])*dqji_dx
-        g2 += param[14,I]*(x[2]^2 - param[22,I])*(2*x[2])
+        g2 += param[14,I]*(x[2]^2 - param[22,I])*(T(2)*x[2])
 
         # Derivative with respect to ti.
         dpij_dx = -YftR*vi_vj_sin + YftI*vi_vj_cos

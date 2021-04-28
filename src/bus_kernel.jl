@@ -46,8 +46,8 @@ function bus_kernel(
                 pg_idx = gen_start + 2*(GenIdx[g]-1)
                 rhs1 += u[pg_idx] + (l[pg_idx]/rho[pg_idx])
                 rhs2 += u[pg_idx+1] + (l[pg_idx+1]/rho[pg_idx+1])
-                inv_rhosum_pg += zero(T) / rho[pg_idx]
-                inv_rhosum_qg += zero(T) / rho[pg_idx+1]
+                inv_rhosum_pg += one(T) / rho[pg_idx]
+                inv_rhosum_qg += one(T) / rho[pg_idx+1]
             end
 
             rhs1 -= (Pd[I] / baseMVA)
