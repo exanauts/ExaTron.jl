@@ -541,6 +541,9 @@ end
 function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
                        use_gpu=false, use_polar=true, gpu_no=1)
     TArray = ifelse(use_gpu, CuArray, Array)
+    if use_gpu
+        CUDA.device!(gpu_no)
+    end
     env = AdmmEnv{Float64,TArray{Float64},TArray{Int}}(case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no)
     admm_restart(env, iterlim=iterlim, scale=scale)
     return env
