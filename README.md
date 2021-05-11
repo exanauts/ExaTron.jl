@@ -34,7 +34,7 @@ $ julia --project src/admm_standalone.jl case2868rte 10 1000 5000 true
 ### On REPL
 ```julia
 julia> using ExaTron
-julia> env = ExaTron.admm_rect_gpu("./data/"*caesname; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
+julia> env = ExaTron.admm_rect_gpu("./data/"*casename; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
 julia> ExaTron.admm_restart(env; iterlim=max_iter)
 ```
 
