@@ -257,8 +257,8 @@ end
 This structure carries everything required to run ADMM from a given solution.
 """
 mutable struct AdmmEnv{T,TD,TI}
-    case
-    data
+    case::String
+    data::OPFData
     use_gpu::Bool
     use_polar::Bool
     gpu_no::Int
