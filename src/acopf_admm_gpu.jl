@@ -251,146 +251,214 @@ function check_linelimit_violation(data, u::Array{Float64,1})
     return rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                       use_gpu=false, use_polar=true, gpu_no=1)
-    data = opf_loaddata(case)
+"""
+    AdmmEnv{T,TD,TI}
 
-    ngen = length(data.generators)
-    nline = length(data.lines)
-    nbus = length(data.buses)
-    nvar = 2*ngen + 8*nline
+This structure carries everything required to run ADMM from a given solution.
+"""
+mutable struct AdmmEnv{T,TD,TI}
+    case
+    data
+    use_gpu::Bool
+    use_polar::Bool
+    gpu_no::Int
 
-    baseMVA = data.baseMVA
-    n = (use_polar == true) ? 4 : 10
-    mu_max = 1e8
-    rho_max = 1e6
-    rho_min_pq = 5.0
-    rho_min_w = 5.0
-    eps_rp = 1e-4
-    eps_rp_min = 1e-5
-    rt_inc = 2.0
-    rt_dec = 2.0
-    eta = 0.99
-    Kf = 100
-    Kf_mean = 10
+    n::Int
+    mu_max::Float64
+    rho_max::Float64
+    rho_min_pq::Float64
+    rho_min_w::Float64
+    eps_rp::Float64
+    eps_rp_min::Float64
+    rt_inc::Float64
+    rt_dec::Float64
+    eta::Float64
 
-    if use_gpu
-        CUDA.device!(gpu_no)
+    max_auglag::Int
+
+    ABSTOL::Float64
+    RELTOL::Float64
+
+    ngen::Int
+    nline::Int
+    nbus::Int
+    nvar::Int
+
+    pgmin::TD
+    pgmax::TD
+    qgmin::TD
+    qgmax::TD
+    c2::TD
+    c1::TD
+    c0::TD
+    YshR::TD
+    YshI::TD
+    YffR::TD
+    YffI::TD
+    YftR::TD
+    YftI::TD
+    YttR::TD
+    YttI::TD
+    YtfR::TD
+    YtfI::TD
+    FrBound::TD
+    ToBound::TD
+    FrStart::TI
+    FrIdx::TI
+    ToStart::TI
+    ToIdx::TI
+    GenStart::TI
+    GenIdx::TI
+    Pd::TD
+    Qd::TD
+
+    u_curr::TD
+    v_curr::TD
+    l_curr::TD
+    u_prev::TD
+    v_prev::TD
+    l_prev::TD
+    rho::TD
+    rd::TD
+    rp::TD
+    membuf::TD # was param
+
+    gen_start::Int
+    line_start::Int
+
+    function AdmmEnv{T,TD,TI}(case, rho_pq, rho_va; use_gpu=false, use_polar=false, gpu_no=1) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
+        d = new{T,TD,TI}()
+
+        d.case = case
+        d.data = opf_loaddata(d.case)
+        d.use_gpu = use_gpu
+        d.use_polar = use_polar
+        d.gpu_no = gpu_no
+        
+        d.n = (use_polar == true) ? 4 : 10
+        d.mu_max = 1e8
+        d.rho_max = 1e6
+        d.rho_min_pq = 5.0
+        d.rho_min_w = 5.0
+        d.eps_rp = 1e-4
+        d.eps_rp_min = 1e-5
+        d.rt_inc = 2.0
+        d.rt_dec = 2.0
+        d.eta = 0.99
+
+        d.max_auglag = 50
+    
+        d.ABSTOL = 1e-6
+        d.RELTOL = 1e-5
+
+        d.ngen = length(d.data.generators)
+        d.nline = length(d.data.lines)
+        d.nbus = length(d.data.buses)
+        d.nvar = 2*d.ngen + 8*d.nline
+
+        d.pgmin, d.pgmax, d.qgmin, d.qgmax, d.c2, d.c1, d.c0 = get_generator_data(d.data; use_gpu=use_gpu)
+        d.YshR, d.YshI, d.YffR, d.YffI, d.YftR, d.YftI, d.YttR, d.YttI, d.YtfR, d.YtfI, d.FrBound, d.ToBound = get_branch_data(d.data; use_gpu=use_gpu)
+        d.FrStart, d.FrIdx, d.ToStart, d.ToIdx, d.GenStart, d.GenIdx, d.Pd, d.Qd = get_bus_data(d.data; use_gpu=use_gpu)
+
+        ybus = Ybus{Array{Float64}}(computeAdmitances(d.data.lines, d.data.buses, d.data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
+
+        u_curr = zeros(d.nvar)
+        v_curr = zeros(d.nvar)
+        l_curr = zeros(d.nvar)
+        u_prev = zeros(d.nvar)
+        v_prev = zeros(d.nvar)
+        l_prev = zeros(d.nvar)
+        rho = zeros(d.nvar)
+        rd = zeros(d.nvar)
+        rp = zeros(d.nvar)
+        membuf = zeros(31, d.nline)
+        wRIij = zeros(2*d.nline)
+
+        d.gen_start = 1
+        d.line_start = 2*d.ngen + 1
+    
+        init_values(d.data, ybus, d.gen_start, d.line_start,
+                    rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
+
+        d.u_curr = TD(undef, d.nvar)
+        d.v_curr = TD(undef, d.nvar)
+        d.l_curr = TD(undef, d.nvar)
+        d.u_prev = TD(undef, d.nvar)
+        d.v_prev = TD(undef, d.nvar)
+        d.l_prev = TD(undef, d.nvar)
+        d.rho = TD(undef, d.nvar)
+        d.rd = TD(undef, d.nvar)
+        d.rp = TD(undef, d.nvar)
+        d.membuf = TD(undef, (31, d.nline))
+
+        copyto!(d.u_curr, u_curr)
+        copyto!(d.v_curr, v_curr)
+        copyto!(d.l_curr, l_curr)
+        copyto!(d.rho, rho)
+        copyto!(d.membuf, membuf)
+
+        return d
+    end
+end
+
+function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
+    if env.use_gpu
+        CUDA.device!(env.gpu_no)
     end
 
-    ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
+    data = env.data
 
-    pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data)
-    YshR, YshI, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, FrBound, ToBound = get_branch_data(data)
-    FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx, Pd, Qd = get_bus_data(data)
+    shift_lines = 0
+    shmem_size = sizeof(Float64)*(14*env.n+3*env.n^2) + sizeof(Int)*(4*env.n)
 
-    cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1, cu_c0 = get_generator_data(data; use_gpu=use_gpu)
-    cuYshR, cuYshI, cuYffR, cuYffI, cuYftR, cuYftI, cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound = get_branch_data(data; use_gpu=use_gpu)
-    cu_FrStart, cu_FrIdx, cu_ToStart, cu_ToIdx, cu_GenStart, cu_GenIdx, cu_Pd, cu_Qd = get_bus_data(data; use_gpu=use_gpu)
-
-    gen_start = 1
-    line_start = 2*ngen + 1
-
-    u_curr = zeros(nvar)
-    v_curr = zeros(nvar)
-    l_curr = zeros(nvar)
-    u_prev = zeros(nvar)
-    v_prev = zeros(nvar)
-    l_prev = zeros(nvar)
-    rho = zeros(nvar)
-    rd = zeros(nvar)
-    rp = zeros(nvar)
-    rp_old = zeros(nvar)
-    rp_k0 = zeros(nvar)
-    param = zeros(31, nline)
-    wRIij = zeros(2*nline)
-
-    init_values(data, ybus, gen_start, line_start,
-                rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
-
-    if use_gpu
-        cu_u_curr = CuArray{Float64}(undef, nvar)
-        cu_v_curr = CuArray{Float64}(undef, nvar)
-        cu_l_curr = CuArray{Float64}(undef, nvar)
-        cu_u_prev = CuArray{Float64}(undef, nvar)
-        cu_v_prev = CuArray{Float64}(undef, nvar)
-        cu_l_prev = CuArray{Float64}(undef, nvar)
-        cu_rho = CuArray{Float64}(undef, nvar)
-        cu_rd = CuArray{Float64}(undef, nvar)
-        cu_rp = CuArray{Float64}(undef, nvar)
-        cu_rp_old = CuArray{Float64}(undef, nvar)
-        cu_rp_k0 = CuArray{Float64}(undef, nvar)
-        cuParam = CuArray{Float64}(undef, (31, nline))
-        cuWRIij = CuArray{Float64}(undef, 2*nline)
-
-        copyto!(cu_u_curr, u_curr)
-        copyto!(cu_v_curr, v_curr)
-        copyto!(cu_l_curr, l_curr)
-        copyto!(cu_rho, rho)
-        copyto!(cuParam, param)
-        copyto!(cuWRIij, wRIij)
-    end
-
-    max_auglag = 50
-
-    nblk_gen = div(ngen, 32, RoundUp)
-    nblk_br = nline
-    nblk_bus = div(nbus, 32, RoundUp)
-
-    ABSTOL = 1e-6
-    RELTOL = 1e-5
+    nblk_gen = div(env.ngen, 32, RoundUp)
+    nblk_br = env.nline
+    nblk_bus = div(env.nbus, 32, RoundUp)
 
     it = 0
     time_gen = time_br = time_bus = 0
-
-    h_u_curr = zeros(nvar)
-    h_param = zeros(31, nline)
-    h_wRIij = zeros(2*nline)
-
-    shift_lines = 0
-    shmem_size = sizeof(Float64)*(14*n+3*n^2) + sizeof(Int)*(4*n)
 
     @time begin
     while it < iterlim
         it += 1
 
-        if !use_gpu
-            u_prev .= u_curr
-            v_prev .= v_curr
-            l_prev .= l_curr
+        if !env.use_gpu
+            env.u_prev .= env.u_curr
+            env.v_prev .= env.v_curr
+            env.l_prev .= env.l_curr
 
-            tcpu = @timed generator_kernel_cpu(baseMVA, ngen, gen_start, u_curr, v_curr, l_curr, rho,
-                                               pgmin, pgmax, qgmin, qgmax, c2, c1)
+            tcpu = @timed generator_kernel_cpu(data.baseMVA, env.ngen, env.gen_start, env.u_curr, env.v_curr, env.l_curr, env.rho,
+                                               env.pgmin, env.pgmax, env.qgmin, env.qgmax, env.c2, env.c1)
             time_gen += tcpu.time
 
-            if use_polar
-                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(n, nline, line_start, scale,
-                                                                    u_curr, v_curr, l_curr, rho,
-                                                                    shift_lines, param, YffR, YffI, YftR, YftI,
-                                                                    YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+            if env.use_polar
+                tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(env.n, env.nline, env.line_start, scale,
+                                                                    env.u_curr, env.v_curr, env.l_curr, env.rho,
+                                                                    shift_lines, env.membuf, env.YffR, env.YffI, env.YftR, env.YftI,
+                                                                    env.YttR, env.YttI, env.YtfR, env.YtfI, env.FrBound, env.ToBound)
             else
-                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(n, nline, it, max_auglag, line_start, mu_max,
-                                                                     u_curr, v_curr, l_curr, rho,
-                                                                     wRIij, param, YffR, YffI, YftR, YftI,
-                                                                     YttR, YttI, YtfR, YtfI, FrBound, ToBound)
+                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(env.n, env.nline, it, env.max_auglag, env.line_start, env.mu_max,
+                                                                     env.u_curr, env.v_curr, env.l_curr, env.rho,
+                                                                     shift_lines, env.membuf, env.YffR, env.YffI, env.YftR, env.YftI,
+                                                                     env.YttR, env.YttI, env.YtfR, env.YtfI, env.FrBound, env.ToBound)
             end
             time_br += tcpu.time
 
-            tcpu = @timed bus_kernel_cpu(baseMVA, nbus, gen_start, line_start,
-                                         FrStart, FrIdx, ToStart, ToIdx, GenStart,
-                                         GenIdx, Pd, Qd, u_curr, v_curr, l_curr, rho, YshR, YshI)
+            tcpu = @timed bus_kernel_cpu(data.baseMVA, env.nbus, env.gen_start, env.line_start,
+                                         env.FrStart, env.FrIdx, env.ToStart, env.ToIdx, env.GenStart,
+                                         env.GenIdx, env.Pd, env.Qd, env.u_curr, env.v_curr, env.l_curr, env.rho, env.YshR, env.YshI)
             time_bus += tcpu.time
 
-            l_curr .+= rho .* (u_curr .- v_curr)
-            rd .= -rho .* (v_curr .- v_prev)
-            rp .= u_curr .- v_curr
-            #rp_old .= u_prev .- v_prev
+            env.l_curr .+= env.rho .* (env.u_curr .- env.v_curr)
+            env.rd .= -env.rho .* (env.v_curr .- env.v_prev)
+            env.rp .= env.u_curr .- env.v_curr
+            #env.rp_old .= env.u_prev .- env.v_prev
 
-            primres = norm(rp)
-            dualres = norm(rd)
+            primres = norm(env.rp)
+            dualres = norm(env.rd)
 
-            eps_pri = sqrt(length(l_curr))*ABSTOL + RELTOL*max(norm(u_curr), norm(-v_curr))
-            eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*norm(l_curr)
+            eps_pri = sqrt(length(env.l_curr))*env.ABSTOL + env.RELTOL*max(norm(env.u_curr), norm(-env.v_curr))
+            eps_dual = sqrt(length(env.u_curr))*env.ABSTOL + env.RELTOL*norm(env.l_curr)
 
             @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n",
                     it, primres, dualres, eps_pri, eps_dual, auglag_it, tron_it)
@@ -399,48 +467,44 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
                 break
             end
         else
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_u_prev, cu_u_curr)
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_v_prev, cu_v_curr)
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_l_prev, cu_l_curr)
+            @cuda threads=64 blocks=(div(env.nvar-1, 64)+1) copy_data_kernel(env.nvar, env.u_prev, env.u_curr)
+            @cuda threads=64 blocks=(div(env.nvar-1, 64)+1) copy_data_kernel(env.nvar, env.v_prev, env.v_curr)
+            @cuda threads=64 blocks=(div(env.nvar-1, 64)+1) copy_data_kernel(env.nvar, env.l_prev, env.l_curr)
             CUDA.synchronize()
 
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(baseMVA, ngen, gen_start,
-                                                                                 cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                 cu_pgmin, cu_pgmax, cu_qgmin, cu_qgmax, cu_c2, cu_c1)
-            # MPI routines to be implemented:
-            #  - Broadcast cu_v_curr and cu_l_curr to GPUs.
-            #  - Collect cu_u_curr.
-            #  - div(nblk_br / number of GPUs, RoundUp)
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(data.baseMVA, env.ngen, env.gen_start,
+                                                                                 env.u_curr, env.v_curr, env.l_curr, env.rho,
+                                                                                 env.pgmin, env.pgmax, env.qgmin, env.qgmax, env.c2, env.c1)
 
             time_gen += tgpu.time
-            if use_polar
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(n, nline, line_start, scale,
-                                                                                                 cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                                 shift_lines, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
-                                                                                                 cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
+            if env.use_polar
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(env.n, env.nline, env.line_start, scale,
+                                                                                                 env.u_curr, env.v_curr, env.l_curr, env.rho,
+                                                                                                 shift_lines, env.membuf, env.YffR, env.YffI, env.YftR, env.YftI,
+                                                                                                 env.YttR, env.YttI, env.YtfR, env.YtfI, env.FrBound, env.ToBound)
             else
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(n, it, max_auglag, line_start, scale, mu_max,
-                                                                                                  cu_u_curr, cu_v_curr, cu_l_curr, cu_rho,
-                                                                                                  cuWRIij, cuParam, cuYffR, cuYffI, cuYftR, cuYftI,
-                                                                                                  cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound)
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(env.n, it, env.max_auglag, env.line_start, scale, env.mu_max,
+                                                                                                  env.u_curr, env.v_curr, env.l_curr, env.rho,
+                                                                                                  shift_lines, env.membuf, env.YffR, env.YffI, env.YftR, env.YftI,
+                                                                                                  env.YttR, env.YttI, env.YtfR, env.YtfI, env.FrBound, env.ToBound)
             end
             time_br += tgpu.time
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(baseMVA, nbus, gen_start, line_start,
-                                                                           cu_FrStart, cu_FrIdx, cu_ToStart, cu_ToIdx, cu_GenStart,
-                                                                           cu_GenIdx, cu_Pd, cu_Qd, cu_u_curr, cu_v_curr, cu_l_curr,
-                                                                           cu_rho, cuYshR, cuYshI)
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(data.baseMVA, env.nbus, env.gen_start, env.line_start,
+                                                                           env.FrStart, env.FrIdx, env.ToStart, env.ToIdx, env.GenStart,
+                                                                           env.GenIdx, env.Pd, env.Qd, env.u_curr, env.v_curr, env.l_curr,
+                                                                           env.rho, env.YshR, env.YshI)
             time_bus += tgpu.time
 
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) update_multiplier_kernel(nvar, cu_l_curr, cu_u_curr, cu_v_curr, cu_rho)
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) primal_residual_kernel(nvar, cu_rp, cu_u_curr, cu_v_curr)
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) dual_residual_kernel(nvar, cu_rd, cu_v_prev, cu_v_curr, cu_rho)
+            @cuda threads=64 blocks=(div(env.nvar-1, 64)+1) update_multiplier_kernel(env.nvar, env.l_curr, env.u_curr, env.v_curr, env.rho)
+            @cuda threads=64 blocks=(div(env.nvar-1, 64)+1) primal_residual_kernel(env.nvar, env.rp, env.u_curr, env.v_curr)
+            @cuda threads=64 blocks=(div(env.nvar-1, 64)+1) dual_residual_kernel(env.nvar, env.rd, env.v_prev, env.v_curr, env.rho)
             CUDA.synchronize()
 
-            gpu_primres = CUDA.norm(cu_rp)
-            gpu_dualres = CUDA.norm(cu_rd)
+            gpu_primres = CUDA.norm(env.rp)
+            gpu_dualres = CUDA.norm(env.rd)
 
-            gpu_eps_pri = sqrt(length(l_curr))*ABSTOL + RELTOL*max(CUDA.norm(cu_u_curr), CUDA.norm(cu_v_curr))
-            gpu_eps_dual = sqrt(length(u_curr))*ABSTOL + RELTOL*CUDA.norm(cu_l_curr)
+            gpu_eps_pri = sqrt(length(env.l_curr))*env.ABSTOL + env.RELTOL*max(CUDA.norm(env.u_curr), CUDA.norm(env.v_curr))
+            gpu_eps_dual = sqrt(length(env.u_curr))*env.ABSTOL + env.RELTOL*CUDA.norm(env.l_curr)
 
             @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
 
@@ -451,15 +515,14 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
     end
     end
 
-    if use_gpu
-        copyto!(u_curr, cu_u_curr)
-    end
+    u_curr = zeros(env.nvar)
+    copyto!(u_curr, env.u_curr)
 
     rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
     @printf(" ** Line limit violations\n")
-    @printf("RateA number of violations = %d (%d)\n", rateA_nviols, nline)
+    @printf("RateA number of violations = %d (%d)\n", rateA_nviols, env.nline)
     @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
-    @printf("RateC number of violations = %d (%d)\n", rateC_nviols, nline)
+    @printf("RateC number of violations = %d (%d)\n", rateC_nviols, env.nline)
     @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
 
     @printf(" ** Time\n")
@@ -468,15 +531,22 @@ function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e
     @printf("Bus       = %.2f\n", time_bus)
     @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
 
-    objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(baseMVA*u_curr[gen_start+2*(g-1)])^2 +
-                 data.generators[g].coeff[data.generators[g].n-1]*(baseMVA*u_curr[gen_start+2*(g-1)]) +
+    objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[env.gen_start+2*(g-1)])^2 +
+                 data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[env.gen_start+2*(g-1)]) +
                  data.generators[g].coeff[data.generators[g].n]
-                 for g in 1:ngen)
+                 for g in 1:env.ngen)
     @printf("Objective value = %.6e\n", objval)
-
-    return
 end
 
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+                       use_gpu=false, use_polar=true, gpu_no=1)
+    TArray = ifelse(use_gpu, CuArray, Array)
+    env = AdmmEnv{Float64,TArray{Float64},TArray{Int}}(case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no)
+    admm_restart(env, iterlim=iterlim, scale=scale)
+    return env
+end
+
+# TODO: This needs revised to use AdmmEnv.
 function admm_rect_gpu_mpi(
     case;
     iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4, use_gpu=false, use_polar=true, gpu_no=1,
