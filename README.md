@@ -17,7 +17,7 @@ This package can be installed by cloning this repository:
 
 ### On command line
 ```bash
-$ julia --project src/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
+$ julia --project examples/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
 ```
 where
 * `caename`: the name of the test file of type `string`
@@ -28,7 +28,7 @@ where
 
 #### Example
 ```bash
-$ julia --project src/admm_standalone.jl case2868rte 10 1000 5000 true
+$ julia --project examples/admm_standalone.jl case2868rte 10 1000 5000 true
 ```
 
 ### On REPL
