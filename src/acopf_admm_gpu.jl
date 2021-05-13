@@ -214,7 +214,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function check_linelimit_violation(data, u::Array{Float64,1})
+function check_linelimit_violation(data, u)
     lines = data.lines
     nline = length(data.lines)
     line_start = 2*length(data.generators) + 1

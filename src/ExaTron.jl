@@ -52,5 +52,6 @@ include("tron_kernel.jl")
 include("eval_kernel.jl")
 include("auglag_kernel.jl")
 include("acopf_admm_gpu.jl")
+include("acopf_admm_gpu_two_level.jl")
 
 end # module
