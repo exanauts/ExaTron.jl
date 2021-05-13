@@ -454,7 +454,7 @@ function update_rho(rho, rp, rp_old, theta, gamma)
 end
 
 function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                                 use_gpu=false, use_polar=true, gpu_no=1)
+                                 use_gpu=false, use_polar=true, gpu_no=1, outer_eps=2*1e-4)
     data = opf_loaddata(case)
 
     ngen = length(data.generators)
@@ -547,8 +547,6 @@ function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_
                           rho_pq, rho_va, u_curr, v_curr, xbar_curr, lu_curr, lv_curr, rho_u, rho_v, wRIij)
 
     if use_gpu
-        CUDA.allowscalar(false)
-
         cu_x_curr = CuArray{Float64}(undef, nvar)
         cu_xbar_curr = CuArray{Float64}(undef, nvar_v)
         cu_z_outer = CuArray{Float64}(undef, nvar)
@@ -606,7 +604,7 @@ function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_
 
     MAX_MULTIPLIER = 1e12
     DUAL_TOL = 1e-8
-    OUTER_TOL = sqrt_d*(2*1e-4)
+    OUTER_TOL = sqrt_d*(outer_eps)
 
     outer = 0
     inner = 0
