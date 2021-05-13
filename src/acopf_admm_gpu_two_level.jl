@@ -1,4 +1,43 @@
-function check_power_balance_violation(data, gen_start, line_start, bus_start, v, YshR, YshI)
+function check_generator_bounds(data, gen_start, xbar)
+    ngen = length(data.generators)
+    pgmin = data.genvec.Pmin
+    pgmax = data.genvec.Pmax
+    qgmin = data.genvec.Qmin
+    qgmax = data.genvec.Qmax
+
+    max_viol_real = 0.0
+    max_viol_reactive = 0.0
+
+    for g=1:ngen
+        pidx = gen_start + 2*(g-1)
+        qidx = gen_start + 2*(g-1) + 1
+
+        real_err = max(max(0.0, xbar[pidx] - pgmax[g]), max(0.0, pgmin[g] - xbar[pidx]))
+        reactive_err = max(max(0.0, xbar[qidx] - qgmax[g]), max(0.0, qgmin[g] - xbar[qidx]))
+
+        max_viol_real = (max_viol_real < real_err) ? real_err : max_viol_real
+        max_viol_reactive = (max_viol_reactive < reactive_err) ? reactive_err : max_viol_reactive
+    end
+
+    return max_viol_real, max_viol_reactive
+end
+
+function check_voltage_bounds(data, bus_start, xbar)
+    nbus = length(data.buses)
+    buses = data.buses
+
+    max_viol = 0.0
+
+    for b=1:nbus
+        bidx = bus_start + 2*(b-1)
+        err = max(max(0.0, xbar[bidx] - buses[b].Vmax^2), max(0.0, buses[b].Vmin^2 - xbar[bidx]))
+        max_viol = (max_viol < err) ? err : max_viol
+    end
+
+    return max_viol
+end
+
+function check_power_balance_violation(data, gen_start, line_start, bus_start, xbar, YshR, YshI)
     baseMVA = data.baseMVA
     nbus = length(data.buses)
 
@@ -8,25 +47,25 @@ function check_power_balance_violation(data, gen_start, line_start, bus_start, v
         real_err = 0.0
         reactive_err = 0.0
         for g in data.BusGenerators[b]
-            real_err += v[gen_start + 2*(g-1)]
-            reactive_err += v[gen_start + 2*(g-1)+1]
+            real_err += xbar[gen_start + 2*(g-1)]
+            reactive_err += xbar[gen_start + 2*(g-1)+1]
         end
 
         real_err -= (data.buses[b].Pd / baseMVA)
         reactive_err -= (data.buses[b].Qd / baseMVA)
 
         for l in data.FromLines[b]
-            real_err -= v[line_start + 4*(l-1)]
-            reactive_err -= v[line_start + 4*(l-1) + 1]
+            real_err -= xbar[line_start + 4*(l-1)]
+            reactive_err -= xbar[line_start + 4*(l-1) + 1]
         end
 
         for l in data.ToLines[b]
-            real_err -= v[line_start + 4*(l-1) + 2]
-            reactive_err -= v[line_start + 4*(l-1) + 3]
+            real_err -= xbar[line_start + 4*(l-1) + 2]
+            reactive_err -= xbar[line_start + 4*(l-1) + 3]
         end
 
-        real_err -= YshR[b] * v[bus_start + 2*(b-1)]
-        reactive_err += YshI[b] * v[bus_start + 2*(b-1)]
+        real_err -= YshR[b] * xbar[bus_start + 2*(b-1)]
+        reactive_err += YshI[b] * xbar[bus_start + 2*(b-1)]
 
         max_viol_real = (max_viol_real < abs(real_err)) ? abs(real_err) : max_viol_real
         max_viol_reactive = (max_viol_reactive < abs(reactive_err)) ? abs(reactive_err) : max_viol_reactive
@@ -798,16 +837,19 @@ function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_
         # We ignore this seemingly wrong message for now.
         copyto!(u_curr, cu_u_curr)
         copyto!(v_curr, cu_v_curr)
+        copyto!(xbar_curr, cu_xbar_curr)
     end
 
-    #=
-    # This will always give us very small error if we measure it based on bus variables, since we solve component-wise.
-    # ||Ax+By|| is the right measure for checking consensus.
-    real_err, reactive_err = check_power_balance_violation(data, gen_start, line_start, bus_start, v_curr, YshR, YshI)
-    @printf(" ** Power balance violations\n")
-    @printf("Real power violation      = %.6e\n", real_err)
-    @printf("Reaactive power violation = %.6e\n", reactive_err)
-    =#
+    # Test feasibility of global variable xbar:
+    pg_err, qg_err = check_generator_bounds(data, gen_start, xbar_curr)
+    vm_err = check_voltage_bounds(data, bus_start, xbar_curr)
+    real_err, reactive_err = check_power_balance_violation(data, gen_start, line_start, bus_start, xbar_curr, YshR, YshI)
+    @printf(" ** Violations of global variable xbar\n")
+    @printf("Real power generator bounds     = %.6e\n", pg_err)
+    @printf("Reactive power generator bounds = %.6e\n", qg_err)
+    @printf("Voltage bounds                  = %.6e\n", vm_err)
+    @printf("Real power balance              = %.6e\n", real_err)
+    @printf("Reaactive power balance         = %.6e\n", reactive_err)
 
     rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
     @printf(" ** Line limit violations\n")
