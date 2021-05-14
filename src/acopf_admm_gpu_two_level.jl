@@ -835,8 +835,8 @@ function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_
     if use_gpu
         # Copying from view to view generates "Warning: Performing scalar operations on GPU arrays."
         # We ignore this seemingly wrong message for now.
-        copyto!(u_curr, cu_u_curr)
-        copyto!(v_curr, cu_v_curr)
+        copyto!(x_curr, 1, cu_x_curr, 1, nvar_u)
+        copyto!(x_curr, nvar_u+1, cu_x_curr, nvar_u+1, nvar_v)
         copyto!(xbar_curr, cu_xbar_curr)
     end
 
