@@ -851,8 +851,8 @@ function admm_rect_gpu_two_level(
     if use_gpu
         CUDA.device!(gpu_no)
     end
-    env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
-        case, rho_pq, rho_va;
+    env = AdmmEnv(
+        case, VT, rho_pq, rho_va;
         use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true,
         gpu_no=gpu_no, verbose=verbose, outer_eps=outer_eps,
     )

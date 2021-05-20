@@ -144,7 +144,7 @@ mutable struct Ybus{VD}
   Ybus{VD}(YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI) where {VD} = new(YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI)
 end
 
-function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64})
+function opf_loaddata(case_name, lineOff=Line())
   #
   # load buses
   #

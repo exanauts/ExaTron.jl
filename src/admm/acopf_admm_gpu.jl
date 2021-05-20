@@ -134,8 +134,6 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
 
     for g=1:ngen
         pg_idx = model.gen_start + 2*(g-1)
-        #u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
-        #u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
         sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
         sol.v_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
     end
@@ -415,8 +413,8 @@ function admm_rect_gpu(case::String, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_
     if use_gpu
         CUDA.device!(gpu_no)
     end
-    env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
-        case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
+    env = AdmmEnv(
+        case, VT, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
     )
     admm_restart!(env, iterlim=iterlim, scale=scale)
     return env

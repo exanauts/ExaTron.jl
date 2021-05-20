@@ -251,13 +251,12 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     membuf::TM # was param
 
     function AdmmEnv{T,TD,TI,TM}(
-        case, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=1, verbose=1,
+        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=1, verbose=1,
         outer_eps=2e-4,
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         env = new{T,TD,TI,TM}()
 
-        env.case = case
-        env.data = opf_loaddata(env.case, Line(); VI=TI, VD=TD)
+        env.data = opfdata
         env.use_gpu = use_gpu
         env.use_polar = use_polar
         env.gpu_no = gpu_no
@@ -282,6 +281,36 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     end
 end
 
+function AdmmEnv(case::String, ::Type{VT}, rho_pq, rho_va; options...) where VT
+    use_gpu = VT <: CuArray
+    opfdata = opf_loaddata(case)
+    env =  AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
+        opfdata, rho_pq, rho_va; use_gpu=use_gpu, options...
+    )
+    env.case = case
+
+    return env
+end
+
+function AdmmEnv(opfdata::OPFData, ::Type{VT}, rho_pq, rho_va; options...) where VT
+    use_gpu = VT <: CuArray
+    return AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
+        opfdata, rho_pq, rho_va; use_gpu=use_gpu, options...
+    )
+end
+
 active_power_generation(env::AdmmEnv) = active_power_generation(env.model, env.solution)
 reactive_power_generation(env::AdmmEnv) = reactive_power_generation(env.model, env.solution)
+
+function set_active_load!(env::AdmmEnv, pd::AbstractArray)
+    @assert length(pd) == env.model.nbus
+    copyto!(env.model.Pd, pd)
+    return
+end
+
+function set_reactive_load!(env::AdmmEnv, qd::AbstractArray)
+    @assert length(qd) == env.model.nbus
+    copyto!(env.model.Qd, qd)
+    return
+end
 

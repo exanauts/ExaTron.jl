@@ -17,7 +17,7 @@ end
     VI = Vector{Int}
     VT = Vector{Float64}
     MT = Matrix{Float64}
-    env = ExaTron.AdmmEnv{T,VT,VI,MT}(CASE, rho_pq, rho_va)
+    env = ExaTron.AdmmEnv(CASE, Array, rho_pq, rho_va)
 
     @test env.case == CASE
     @test env.solution.status == ExaTron.INITIAL
