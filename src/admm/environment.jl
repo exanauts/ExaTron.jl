@@ -150,7 +150,9 @@ mutable struct AdmmEnv{T,TD,TI,TM}
 
     membuf::TM # was param
 
-    function AdmmEnv{T,TD,TI,TM}(case, rho_pq, rho_va; use_gpu=false, use_polar=false, gpu_no=1) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
+    function AdmmEnv{T,TD,TI,TM}(
+        case, rho_pq, rho_va; use_gpu=false, use_polar=true, gpu_no=1, verbose=1,
+    ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         env = new{T,TD,TI,TM}()
 
         env.case = case
@@ -160,6 +162,8 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         env.gpu_no = gpu_no
 
         env.params = Parameters()
+        env.params.verbose = verbose
+
         env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar)
         env.solution = Solution{T,TD}(env.data, env.model, rho_pq, rho_va)
 
@@ -170,7 +174,6 @@ mutable struct AdmmEnv{T,TD,TI,TM}
 
         init_solution!(env.solution, env.data, ybus, env.model.gen_start, env.model.line_start,
                     rho_pq, rho_va, wRIij)
-        println(env.solution.u_curr[1:10])
         env.membuf = TM(undef, (31, env.model.nline))
         fill!(env.membuf, 0.0)
 

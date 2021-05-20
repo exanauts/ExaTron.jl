@@ -388,8 +388,8 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
     sol.objval = objval
 
 
-    rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
     if par.verbose > 0
+        rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
         @printf(" ** Line limit violations\n")
         @printf("RateA number of violations = %d (%d)\n", rateA_nviols, mod.nline)
         @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
@@ -408,12 +408,12 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
 end
 
 function admm_rect_gpu(case, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                       use_gpu=false, use_polar=true, gpu_no=1) where VT
+                       use_gpu=false, use_polar=true, gpu_no=1, verbose=1) where VT
     if use_gpu
         CUDA.device!(gpu_no)
     end
     env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
-        case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no
+        case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
     )
     admm_restart(env, iterlim=iterlim, scale=scale)
     return env
