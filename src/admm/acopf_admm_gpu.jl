@@ -19,13 +19,20 @@ function get_generator_data(data; use_gpu=false)
         c0 = Array{Float64}(undef, ngen)
     end
 
-    copyto!(pgmin, data.genvec.Pmin)
-    copyto!(pgmax, data.genvec.Pmax)
-    copyto!(qgmin, data.genvec.Qmin)
-    copyto!(qgmax, data.genvec.Qmax)
-    copyto!(c0, data.genvec.coeff0)
-    copyto!(c1, data.genvec.coeff1)
-    copyto!(c2, data.genvec.coeff2)
+    Pmin = Float64[data.generators[g].Pmin for g in 1:ngen]
+    Pmax = Float64[data.generators[g].Pmax for g in 1:ngen]
+    Qmin = Float64[data.generators[g].Qmin for g in 1:ngen]
+    Qmax = Float64[data.generators[g].Qmax for g in 1:ngen]
+    coeff0 = Float64[data.generators[g].coeff[3] for g in 1:ngen]
+    coeff1 = Float64[data.generators[g].coeff[2] for g in 1:ngen]
+    coeff2 = Float64[data.generators[g].coeff[1] for g in 1:ngen]
+    copyto!(pgmin, Pmin)
+    copyto!(pgmax, Pmax)
+    copyto!(qgmin, Qmin)
+    copyto!(qgmax, Qmax)
+    copyto!(c0, coeff0)
+    copyto!(c1, coeff1)
+    copyto!(c2, coeff2)
 
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
@@ -42,8 +49,8 @@ function get_bus_data(data; use_gpu=false)
     ToStart = accumulate(+, vcat([1], [length(data.ToLines[b]) for b=1:nbus]))
     GenStart = accumulate(+, vcat([1], [length(data.BusGenerators[b]) for b=1:nbus]))
 
-    Pd = [data.buses[i].Pd for i=1:nbus]
-    Qd = [data.buses[i].Qd for i=1:nbus]
+    Pd = Float64[data.buses[i].Pd for i=1:nbus]
+    Qd = Float64[data.buses[i].Qd for i=1:nbus]
 
     if use_gpu
         cuFrIdx = CuArray{Int}(undef, length(FrIdx))
@@ -113,8 +120,8 @@ function get_branch_data(data; use_gpu=false)
     end
 end
 
-function init_values(data, ybus, gen_start, line_start,
-                     rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
+function init_solution!(sol, data, ybus, gen_start, line_start,
+                     rho_pq, rho_va, wRIij)
     lines = data.lines
     buses = data.buses
     BusIdx = data.BusIdx
@@ -131,11 +138,13 @@ function init_values(data, ybus, gen_start, line_start,
         pg_idx = gen_start + 2*(g-1)
         #u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
         #u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
-        v_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
-        v_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
+        sol.v_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
     end
 
-    rho .= rho_pq
+    sol.rho .= rho_pq
+    fill!(sol.u_curr, 0.0)
+    fill!(sol.v_curr, 0.0)
 
     for l=1:nline
         wij0 = (buses[BusIdx[lines[l].from]].Vmax^2 + buses[BusIdx[lines[l].from]].Vmin^2) / 2
@@ -143,10 +152,10 @@ function init_values(data, ybus, gen_start, line_start,
         wR0 = sqrt(wij0 * wji0)
 
         pij_idx = line_start + 8*(l-1)
-        u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
-        u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
-        u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
-        u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        sol.u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
         #=
         u_curr[pij_idx+4] = wij0
         u_curr[pij_idx+5] = wji0
@@ -156,15 +165,15 @@ function init_values(data, ybus, gen_start, line_start,
         wRIij[2*(l-1)+1] = wR0
         wRIij[2*l] = 0.0
 
-        v_curr[pij_idx+4] = wij0
-        v_curr[pij_idx+5] = wji0
-        v_curr[pij_idx+6] = 0.0
-        v_curr[pij_idx+7] = 0.0
+        sol.v_curr[pij_idx+4] = wij0
+        sol.v_curr[pij_idx+5] = wji0
+        sol.v_curr[pij_idx+6] = 0.0
+        sol.v_curr[pij_idx+7] = 0.0
 
-        rho[pij_idx+4:pij_idx+7] .= rho_va
+        sol.rho[pij_idx+4:pij_idx+7] .= rho_va
     end
 
-    l_curr .= 0
+    sol.l_curr .= 0
     return
 end
 
@@ -271,7 +280,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
     nblk_bus = div(mod.nbus, 32, RoundUp)
 
     it = 0
-    time_gen = time_br = time_bus = 0
+    time_gen = time_br = time_bus = 0.0
 
     @time begin
     while it < iterlim
@@ -315,7 +324,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(norm(sol.u_curr), norm(-sol.v_curr))
             eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*norm(sol.l_curr)
 
-            @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n",
+            (par.verbose > 0) && @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n",
                     it, primres, dualres, eps_pri, eps_dual, auglag_it, tron_it)
 
             if primres <= eps_pri && dualres <= eps_dual
@@ -361,7 +370,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             gpu_eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(CUDA.norm(sol.u_curr), CUDA.norm(sol.v_curr))
             gpu_eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*CUDA.norm(sol.l_curr)
 
-            @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
+            (par.verbose > 0) && @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
 
             if gpu_primres <= gpu_eps_pri && gpu_dualres <= gpu_eps_dual
                 break
@@ -372,34 +381,40 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
 
     u_curr = zeros(mod.nvar)
     copyto!(u_curr, sol.u_curr)
-
-    rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
-    @printf(" ** Line limit violations\n")
-    @printf("RateA number of violations = %d (%d)\n", rateA_nviols, mod.nline)
-    @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
-    @printf("RateC number of violations = %d (%d)\n", rateC_nviols, mod.nline)
-    @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
-
-    @printf(" ** Time\n")
-    @printf("Generator = %.2f\n", time_gen)
-    @printf("Branch    = %.2f\n", time_br)
-    @printf("Bus       = %.2f\n", time_bus)
-    @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
-
     objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
                  data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
                  data.generators[g].coeff[data.generators[g].n]
-                 for g in 1:mod.ngen)
-    @printf("Objective value = %.6e\n", objval)
+                 for g in 1:mod.ngen)::Float64
+    sol.objval = objval
+
+
+    if par.verbose > 0
+        rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
+        @printf(" ** Line limit violations\n")
+        @printf("RateA number of violations = %d (%d)\n", rateA_nviols, mod.nline)
+        @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
+        @printf("RateC number of violations = %d (%d)\n", rateC_nviols, mod.nline)
+        @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
+
+        @printf(" ** Time\n")
+        @printf("Generator = %.2f\n", time_gen)
+        @printf("Branch    = %.2f\n", time_br)
+        @printf("Bus       = %.2f\n", time_bus)
+        @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
+
+        @printf("Objective value = %.6e\n", objval)
+    end
+    return
 end
 
-function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                       use_gpu=false, use_polar=true, gpu_no=1)
-    TArray = ifelse(use_gpu, CuArray, Array)
+function admm_rect_gpu(case, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+                       use_gpu=false, use_polar=true, gpu_no=1, verbose=1) where VT
     if use_gpu
         CUDA.device!(gpu_no)
     end
-    env = AdmmEnv{Float64,TArray{Float64},TArray{Int}}(case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no)
+    env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
+        case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
+    )
     admm_restart(env, iterlim=iterlim, scale=scale)
     return env
 end

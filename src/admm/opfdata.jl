@@ -117,11 +117,10 @@ mutable struct GenerVec{VI, VD}
   end
 end
 
-mutable struct OPFData{VI, VD}
+struct OPFData
   buses::Array{Bus}
   lines::Array{Line}
   generators::Array{Gener}
-  genvec::GenerVec{VI, VD}
   bus_ref::Int
   baseMVA::Float64
   BusIdx::Dict{Int,Int}    #map from bus ID to bus index
@@ -222,31 +221,6 @@ function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64
     println("loaddata: ", num_gens-num_on, " generators are off and will be discarded (out of ", num_gens, ")")
   end
 
-  genvec = GenerVec{VI, VD}(num_on)
-  copyto!(genvec.bus, 1, Int.(gen_arr[gens_on,1]), 1, num_on)
-  copyto!(genvec.Pg, 1, gen_arr[gens_on,2] ./ baseMVA, 1, num_on)
-  copyto!(genvec.Qg, 1, gen_arr[gens_on,3] ./ baseMVA, 1, num_on)
-  copyto!(genvec.Qmax, 1, gen_arr[gens_on,4] ./ baseMVA, 1, num_on)
-  copyto!(genvec.Qmin, 1, gen_arr[gens_on,5] ./ baseMVA, 1, num_on)
-  copyto!(genvec.Vg, 1, gen_arr[gens_on,6], 1, num_on)
-  copyto!(genvec.mBase, 1, gen_arr[gens_on,7], 1, num_on)
-  copyto!(genvec.status, 1, Int.(gen_arr[gens_on,8]), 1, num_on)
-  copyto!(genvec.Pmax, 1, gen_arr[gens_on,9] ./ baseMVA, 1, num_on)
-  copyto!(genvec.Pmin, 1, gen_arr[gens_on,10] ./ baseMVA, 1, num_on)
-  copyto!(genvec.Pc1, 1, gen_arr[gens_on,11], 1, num_on)
-  copyto!(genvec.Pc2, 1, gen_arr[gens_on,12], 1, num_on)
-  copyto!(genvec.Qc1min, 1, gen_arr[gens_on,13], 1, num_on)
-  copyto!(genvec.Qc1max, 1, gen_arr[gens_on,14], 1, num_on)
-  copyto!(genvec.Qc2min, 1, gen_arr[gens_on,15], 1, num_on)
-  copyto!(genvec.Qc2max, 1, gen_arr[gens_on,16], 1, num_on)
-  copyto!(genvec.gentype, 1, Int.(costgen_arr[gens_on,1]), 1, num_on)
-  copyto!(genvec.startup, 1, costgen_arr[gens_on,2], 1, num_on)
-  copyto!(genvec.shutdown, 1, costgen_arr[gens_on,3], 1, num_on)
-  copyto!(genvec.n, 1, Int.(costgen_arr[gens_on,4]), 1, num_on)
-  copyto!(genvec.coeff2, 1, costgen_arr[gens_on,5], 1, num_on)
-  copyto!(genvec.coeff1, 1, costgen_arr[gens_on,6], 1, num_on)
-  copyto!(genvec.coeff0, 1, costgen_arr[gens_on,7], 1, num_on)
-
   generators = Array{Gener}(undef, num_on)
   i=0
   for git in gens_on
@@ -299,7 +273,7 @@ function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64
 
   #println(generators)
   #println(bus_ref)
-  return OPFData{VI, VD}(buses, lines, generators, genvec, bus_ref, baseMVA, busIdx, FromLines, ToLines, BusGeners)
+  return OPFData(buses, lines, generators, bus_ref, baseMVA, busIdx, FromLines, ToLines, BusGeners)
 end
 
 function  computeAdmitances(lines, buses, baseMVA; VI=Array{Int}, VD=Array{Float64})

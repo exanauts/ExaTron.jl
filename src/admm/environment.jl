@@ -17,6 +17,7 @@ mutable struct Parameters
     rt_inc::Float64     # TODO: not used
     rt_dec::Float64     # TODO: not used
     eta::Float64        # TODO: not used
+    verbose::Int
 
     function Parameters()
         par = new()
@@ -32,6 +33,7 @@ mutable struct Parameters
         par.max_auglag = 50
         par.ABSTOL = 1e-6
         par.RELTOL = 1e-5
+        par.verbose = 1
         return par
     end
 end
@@ -47,7 +49,7 @@ mutable struct Model{T,TD,TI}
     nline::Int
     nbus::Int
     nvar::Int
-    
+
     gen_start::Int
     line_start::Int
 
@@ -81,7 +83,7 @@ mutable struct Model{T,TD,TI}
 
     function Model{T,TD,TI}(data::OPFData, use_gpu::Bool, use_polar::Bool) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
         model = new{T,TD,TI}()
-        
+
         model.n = (use_polar == true) ? 4 : 10
         model.ngen = length(data.generators)
         model.nline = length(data.lines)
@@ -112,41 +114,21 @@ mutable struct Solution{T,TD}
     rho::TD
     rd::TD
     rp::TD
+    objval::T
 
     function Solution{T,TD}(data::OPFData, model::Model, rho_pq, rho_va) where {T, TD<:AbstractArray{T}}
-        sol = new{T,TD}()
-        u_curr = zeros(model.nvar)
-        v_curr = zeros(model.nvar)
-        l_curr = zeros(model.nvar)
-        u_prev = zeros(model.nvar)
-        v_prev = zeros(model.nvar)
-        l_prev = zeros(model.nvar)
-        rho = zeros(model.nvar)
-        rd = zeros(model.nvar)
-        rp = zeros(model.nvar)
-        wRIij = zeros(2*model.nline) # TODO: Not used
-
-        ybus = Ybus{Array{Float64}}(computeAdmitances(
-            data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
-    
-        init_values(data, ybus, model.gen_start, model.line_start,
-                    rho_pq, rho_va, u_curr, v_curr, l_curr, rho, wRIij)
-
-        sol.u_curr = TD(undef, model.nvar)
-        sol.v_curr = TD(undef, model.nvar)
-        sol.l_curr = TD(undef, model.nvar)
-        sol.u_prev = TD(undef, model.nvar)
-        sol.v_prev = TD(undef, model.nvar)
-        sol.l_prev = TD(undef, model.nvar)
-        sol.rho = TD(undef, model.nvar)
-        sol.rd = TD(undef, model.nvar)
-        sol.rp = TD(undef, model.nvar)
-
-        copyto!(sol.u_curr, u_curr)
-        copyto!(sol.v_curr, v_curr)
-        copyto!(sol.l_curr, l_curr)
-        copyto!(sol.rho, rho)
-        return sol
+        return new{T,TD}(
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            TD(undef, model.nvar),
+            Inf,
+        )
     end
 end
 
@@ -155,7 +137,7 @@ end
 
 This structure carries everything required to run ADMM from a given solution.
 """
-mutable struct AdmmEnv{T,TD,TI}
+mutable struct AdmmEnv{T,TD,TI,TM}
     case::String
     data::OPFData
     use_gpu::Bool
@@ -166,24 +148,36 @@ mutable struct AdmmEnv{T,TD,TI}
     model::Model{T,TD,TI}
     solution::Solution{T,TD}
 
-    membuf::TD # was param
+    membuf::TM # was param
 
-    function AdmmEnv{T,TD,TI}(case, rho_pq, rho_va; use_gpu=false, use_polar=false, gpu_no=1) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
-        env = new{T,TD,TI}()
+    function AdmmEnv{T,TD,TI,TM}(
+        case, rho_pq, rho_va; use_gpu=false, use_polar=true, gpu_no=1, verbose=1,
+    ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
+        env = new{T,TD,TI,TM}()
 
         env.case = case
-        env.data = opf_loaddata(env.case)
+        env.data = opf_loaddata(env.case, Line(); VI=TI, VD=TD)
         env.use_gpu = use_gpu
         env.use_polar = use_polar
         env.gpu_no = gpu_no
 
         env.params = Parameters()
+        env.params.verbose = verbose
+
         env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar)
         env.solution = Solution{T,TD}(env.data, env.model, rho_pq, rho_va)
 
-        env.membuf = TD(undef, (31, env.model.nline))
+        wRIij = zeros(2*env.model.nline) # TODO: Not used
+
+        ybus = Ybus{Array{T}}(computeAdmitances(
+            env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
+
+        init_solution!(env.solution, env.data, ybus, env.model.gen_start, env.model.line_start,
+                    rho_pq, rho_va, wRIij)
+        env.membuf = TM(undef, (31, env.model.nline))
         fill!(env.membuf, 0.0)
 
         return env
     end
 end
+
