@@ -1,3 +1,9 @@
+@enum(Status::Int,
+    INITIAL = 0,
+    HAS_CONVERGED = 1,
+    MAXIMUM_ITERATIONS = 2,
+)
+
 """
     Parameters
 
@@ -105,6 +111,7 @@ end
 This contains the solutions of ACOPF model instance, including the ADMM parameter rho.
 """
 mutable struct Solution{T,TD}
+    status::Status
     u_curr::TD
     v_curr::TD
     l_curr::TD
@@ -118,6 +125,7 @@ mutable struct Solution{T,TD}
 
     function Solution{T,TD}(data::OPFData, model::Model, rho_pq, rho_va) where {T, TD<:AbstractArray{T}}
         return new{T,TD}(
+            INITIAL,
             TD(undef, model.nvar),
             TD(undef, model.nvar),
             TD(undef, model.nvar),
