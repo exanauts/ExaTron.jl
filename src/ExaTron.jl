@@ -53,5 +53,6 @@ include("admm/eval_kernel.jl")
 include("admm/auglag_kernel.jl")
 include("admm/environment.jl")
 include("admm/acopf_admm_gpu.jl")
+include("admm/acopf_admm_gpu_two_level.jl")
 
 end # module
