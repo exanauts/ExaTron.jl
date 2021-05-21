@@ -385,6 +385,11 @@ function admm_restart!(env::AdmmEnv; iterlim=800, scale=1e-4)
                  for g in 1:mod.ngen)::Float64
     sol.objval = objval
 
+    if it < iterlim
+        sol.status = HAS_CONVERGED
+    else
+        sol.status = MAXIMUM_ITERATIONS
+    end
 
     if par.verbose > 0
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)

@@ -3,7 +3,7 @@
 using Test
 using LinearAlgebra
 
-CASE = "data/case9"
+CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
 
 @testset "OPFData" begin
     data = ExaTron.opf_loaddata(CASE)
@@ -20,6 +20,7 @@ end
     env = ExaTron.AdmmEnv{T,VT,VI,MT}(CASE, rho_pq, rho_va)
 
     @test env.case == CASE
+    @test env.solution.status == ExaTron.INITIAL
 
     @testset "AdmmEnv.Model" begin
         model = env.model
@@ -62,15 +63,13 @@ end
     pg = x♯[1:2:2*ngen]
     qg = x♯[2:2:2*ngen]
 
-    # Test with solution returned by Matpower
-    @test pg ≈ [0.89747, 1.34315, 0.94208] atol=1e-3
-    # TODO: qg does not match Matpower's solution.
-    @test_broken qg ≈ [0.08270827253409152, -0.0323616842274177, -0.16890468875313758] atol=1e-2
-    @test sol.objval ≈ 5296.69 atol=1e-3
+    @test sol.status == ExaTron.HAS_CONVERGED
+    # Test with solution returned by PowerModels + Ipopt
+    @test pg ≈ [0.897987, 1.34321, 0.941874] atol=1e-3
+    @test qg ≈ [0.1296564, 0.00031842, -0.226342] atol=1e-3
+    @test sol.objval ≈ 5296.6862 rtol=1e-4
 
-
-    # Test restart
-    env.params.verbose = 1
-    ExaTron.admm_restart!(env; iterlim=2000, scale=1e-1)
+    # Test restart API
+    ExaTron.admm_restart!(env)
 end
 

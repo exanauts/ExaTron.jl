@@ -1,3 +1,9 @@
+@enum(Status::Int,
+    INITIAL = 0,
+    HAS_CONVERGED = 1,
+    MAXIMUM_ITERATIONS = 2,
+)
+
 """
     Parameters
 
@@ -134,6 +140,7 @@ abstract type AbstractSolution{T,TD} end
 This contains the solutions of ACOPF model instance, including the ADMM parameter rho.
 """
 mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
+    status::Status
     u_curr::TD
     v_curr::TD
     l_curr::TD
@@ -147,6 +154,7 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
 
     function SolutionOneLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
         return new{T,TD}(
+            INITIAL,
             TD(undef, model.nvar),
             TD(undef, model.nvar),
             TD(undef, model.nvar),
@@ -240,8 +248,8 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         ybus = Ybus{Array{T}}(computeAdmitances(
             env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
-        env.solution = ifelse(use_twolevel, 
-            SolutionTwoLevel{T,TD}(env.model), 
+        env.solution = ifelse(use_twolevel,
+            SolutionTwoLevel{T,TD}(env.model),
             SolutionOneLevel{T,TD}(env.model))
         init_solution!(env, env.solution, ybus, rho_pq, rho_va)
 
