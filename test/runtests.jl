@@ -14,3 +14,4 @@ end
 
 include("qptest.jl")
 include("densetest.jl")
+include("admmtest.jl")
