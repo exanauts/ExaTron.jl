@@ -17,7 +17,7 @@ This package can be installed by cloning this repository:
 
 ### On command line
 ```bash
-$ julia --project src/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
+$ julia --project examples/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
 ```
 where
 * `caename`: the name of the test file of type `string`
@@ -28,13 +28,14 @@ where
 
 #### Example
 ```bash
-$ julia --project src/admm_standalone.jl case2868rte 10 1000 5000 true
+$ julia --project examples/admm_standalone.jl case2868rte 10 1000 5000 true
 ```
 
 ### On REPL
 ```julia
 julia> using ExaTron
-julia> ExaTron.admm_rect_gpu("./data/"*caesname; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
+julia> env = ExaTron.admm_rect_gpu("./data/"*casename; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
+julia> ExaTron.admm_restart(env; iterlim=max_iter)
 ```
 
 ## Usage: solving ACOPF using ADMM and ExaTron.jl on multiple GPUs.
