@@ -589,7 +589,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
             z_outer .= z_curr
             z_prev_norm = norm(z_outer)
         else
-            @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(mod.nvar, z_outer, z_curr)
+            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, z_outer, z_curr)
             z_prev_norm = CUDA.norm(z_curr)
             CUDA.synchronize()
         end
