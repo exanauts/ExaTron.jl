@@ -169,6 +169,15 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
     end
 end
 
+function active_power_generation(model::Model, sol::SolutionOneLevel)
+    ngen = model.ngen
+    return sol.u_curr[1:2:2*ngen]
+end
+function reactive_power_generation(model::Model, sol::SolutionOneLevel)
+    ngen = model.ngen
+    return sol.u_curr[2:2:2*ngen]
+end
+
 """
     SolutionTwoLevel{T,TD}
 
@@ -176,6 +185,7 @@ This contains the solutions of ACOPF model instance for two-level ADMM algorithm
     including the ADMM parameter rho.
 """
 mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
+    status::Status
     x_curr::TD
     xbar_curr::TD
     z_outer::TD
@@ -193,6 +203,7 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
 
     function SolutionTwoLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
         return new{T,TD}(
+            INITIAL,
             TD(undef, model.nvar),      # x_curr
             TD(undef, model.nvar_v),    # xbar_curr
             TD(undef, model.nvar),      # z_outer
@@ -209,6 +220,15 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
             Inf,
         )
     end
+end
+
+function active_power_generation(model::Model, sol::SolutionTwoLevel)
+    ngen = model.ngen
+    return sol.xbar_curr[1:2:2*ngen]
+end
+function reactive_power_generation(model::Model, sol::SolutionTwoLevel)
+    ngen = model.ngen
+    return sol.xbar_curr[2:2:2*ngen]
 end
 
 """
@@ -232,6 +252,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
 
     function AdmmEnv{T,TD,TI,TM}(
         case, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=1, verbose=1,
+        outer_eps=2e-4,
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         env = new{T,TD,TI,TM}()
 
@@ -243,6 +264,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
 
         env.params = Parameters()
         env.params.verbose = verbose
+        env.params.outer_eps = outer_eps
 
         env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar, use_twolevel)
         ybus = Ybus{Array{T}}(computeAdmitances(
@@ -259,4 +281,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         return env
     end
 end
+
+active_power_generation(env::AdmmEnv) = active_power_generation(env.model, env.solution)
+reactive_power_generation(env::AdmmEnv) = reactive_power_generation(env.model, env.solution)
 

@@ -41,6 +41,8 @@ end
 end
 
 @testset "One-level ADMM algorithm" begin
+    # NB: Need to run almost 2,000 iterations to reach convergence with this
+    # set of parameters.
     env = ExaTron.admm_rect_gpu(CASE, Array; verbose=0, iterlim=2000, rho_pq=400.0, rho_va=40000.0)
     @test isa(env, ExaTron.AdmmEnv)
 
@@ -50,26 +52,47 @@ end
     par = env.params
     sol = env.solution
 
-    # Check convergence
-    primres = norm(sol.rp)
-    dualres = norm(sol.rd)
-    eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(norm(sol.u_curr), norm(-sol.v_curr))
-    eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*norm(sol.l_curr)
-
-    @test primres <= eps_pri && dualres <= eps_dual
-
     # Check results
-    x♯ = sol.u_curr
-    pg = x♯[1:2:2*ngen]
-    qg = x♯[2:2:2*ngen]
+    pg = ExaTron.active_power_generation(env)
+    qg = ExaTron.reactive_power_generation(env)
 
     @test sol.status == ExaTron.HAS_CONVERGED
     # Test with solution returned by PowerModels + Ipopt
-    @test pg ≈ [0.897987, 1.34321, 0.941874] atol=1e-3
-    @test qg ≈ [0.1296564, 0.00031842, -0.226342] atol=1e-3
     @test sol.objval ≈ 5296.6862 rtol=1e-4
+    @test pg ≈ [0.897987, 1.34321, 0.941874] rtol=1e-4
+    @test qg ≈ [0.1296564, 0.00031842, -0.226342] rtol=1e-2
 
     # Test restart API
     ExaTron.admm_restart!(env)
+end
+
+@testset "Two-level ADMM algorithm" begin
+    # Two-level algorithm has around two times more coupling constraints
+    # than the one-level algorithm, so it is expected to be less accurate
+    # than the one level algorithm.
+    env = ExaTron.admm_rect_gpu_two_level(
+        CASE, Array;
+        verbose=0, rho_pq=1000.0, rho_va=1000.0, inner_iterlim=2000, outer_iterlim=1500, outer_eps=1e-6
+    )
+    @test isa(env, ExaTron.AdmmEnv)
+
+    model = env.model
+    ngen = model.ngen
+
+    par = env.params
+    sol = env.solution
+
+    # Check results
+    pg = ExaTron.active_power_generation(env)
+    qg = ExaTron.reactive_power_generation(env)
+
+    @test sol.status == ExaTron.HAS_CONVERGED
+    # # Test with solution returned by PowerModels + Ipopt
+    @test sol.objval ≈ 5296.6862 rtol=1e-4
+    @test pg ≈ [0.897987, 1.34321, 0.941874] rtol=1e-4
+    @test qg ≈ [0.1296564, 0.00031842, -0.226342] atol=1e-2
+
+    # Test restart API
+    ExaTron.admm_restart_two_level!(env)
 end
 

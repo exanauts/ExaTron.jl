@@ -132,6 +132,20 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
     YftR = ybus.YftR; YftI = ybus.YftI
     YtfR = ybus.YtfR; YtfI = ybus.YtfI
 
+    # Init
+    fill!(sol.x_curr, 0.0)
+    fill!(sol.xbar_curr, 0.0)
+    fill!(sol.z_outer, 0.0)
+    fill!(sol.z_curr, 0.0)
+    fill!(sol.z_prev, 0.0)
+    fill!(sol.l_curr, 0.0)
+    fill!(sol.lz, 0.0)
+    fill!(sol.rho, 0.0)
+    fill!(sol.rp, 0.0)
+    fill!(sol.rp_old, 0.0)
+    fill!(sol.rd, 0.0)
+    fill!(sol.Ax_plus_By, 0.0)
+
     u_curr = view(sol.x_curr, 1:model.nvar_u)
     v_curr = view(sol.x_curr, model.nvar_u+1:model.nvar)
     rho_u = view(sol.rho, 1:model.nvar_u)
@@ -140,6 +154,7 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
     rho_u .= rho_pq
     rho_v .= rho_pq
     rho_v[bus_start:end] .= rho_va
+
 
     for g=1:ngen
         pg_idx = gen_start + 2*(g-1)
@@ -173,8 +188,6 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
         sol.xbar_curr[bus_start + 2*(b-1)] = (buses[b].Vmax^2 + buses[b].Vmin^2) / 2
         sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
     end
-
-    sol.l_curr .= 0.0
 
     return
 end
@@ -540,7 +553,7 @@ function update_rho(rho, rp, rp_old, theta, gamma)
     end
 end
 
-function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
+function admm_restart_two_level!(env::AdmmEnv; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
     if env.use_gpu
         CUDA.device!(env.gpu_no)
     end
@@ -605,6 +618,9 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
 
     mismatch = Inf
     z_prev_norm = z_curr_norm = Inf
+
+    # Return status
+    status = INITIAL
 
     @time begin
     while outer < outer_iterlim
@@ -680,7 +696,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                         @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
                                 "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
                     end
-    
+
                     @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
                             outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
                 end
@@ -769,6 +785,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
         end
 
         if mismatch <= OUTER_TOL
+            status = HAS_CONVERGED
             break
         end
 
@@ -782,6 +799,17 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
             beta = min(c*beta, 1e24)
         end
     end
+    end
+
+    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*xbar_curr[mod.gen_start+2*(g-1)])^2 +
+                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*xbar_curr[mod.gen_start+2*(g-1)]) +
+                data.generators[g].coeff[data.generators[g].n]
+                for g in 1:mod.ngen)
+
+    if outer >= outer_iterlim
+        sol.status = MAXIMUM_ITERATIONS
+    else
+        sol.status = status
     end
 
     if par.verbose > 0
@@ -808,27 +836,26 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
         @printf("Branch    = %.2f\n", time_br)
         @printf("Bus       = %.2f\n", time_bus)
         @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
+        @printf("Objective value = %.6e\n", sol.objval)
     end
-
-    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
-                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
-                data.generators[g].coeff[data.generators[g].n]
-                for g in 1:mod.ngen)
-    @printf("Objective value = %.6e\n", sol.objval)
 
     return
 end
 
-function admm_rect_gpu_two_level(case::String, ::Type{VT}; 
+function admm_rect_gpu_two_level(
+    case::String, ::Type{VT};
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-    use_gpu=false, use_polar=true, gpu_no=1, verbose=1) where VT
+    use_gpu=false, use_polar=true, gpu_no=1, verbose=1, outer_eps=2e-4,
+) where VT
 
     if use_gpu
         CUDA.device!(gpu_no)
     end
     env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
-        case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+        case, rho_pq, rho_va;
+        use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true,
+        gpu_no=gpu_no, verbose=verbose, outer_eps=outer_eps,
     )
-    admm_restart_two_level(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
+    admm_restart_two_level!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
 end
