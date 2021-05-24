@@ -1,4 +1,4 @@
-function get_generator_data(data; use_gpu=false)
+function get_generator_data(data::OPFData; use_gpu=false)
     ngen = length(data.generators)
 
     if use_gpu
@@ -37,10 +37,8 @@ function get_generator_data(data; use_gpu=false)
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
 
-function get_bus_data(data; use_gpu=false)
-    ngen = length(data.generators)
+function get_bus_data(data::OPFData; use_gpu=false)
     nbus = length(data.buses)
-    nline = length(data.lines)
 
     FrIdx = [l for b=1:nbus for l in data.FromLines[b]]
     ToIdx = [l for b=1:nbus for l in data.ToLines[b]]
@@ -77,7 +75,7 @@ function get_bus_data(data; use_gpu=false)
     end
 end
 
-function get_branch_data(data; use_gpu=false)
+function get_branch_data(data::OPFData; use_gpu=false)
     buses = data.buses
     lines = data.lines
     BusIdx = data.BusIdx
@@ -120,8 +118,9 @@ function get_branch_data(data; use_gpu=false)
     end
 end
 
-function init_solution!(sol, data, ybus, gen_start, line_start,
-                     rho_pq, rho_va, wRIij)
+function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq, rho_va)
+    data, model = env.data, env.model
+
     lines = data.lines
     buses = data.buses
     BusIdx = data.BusIdx
@@ -132,10 +131,9 @@ function init_solution!(sol, data, ybus, gen_start, line_start,
     YttR = ybus.YttR; YttI = ybus.YttI
     YftR = ybus.YftR; YftI = ybus.YftI
     YtfR = ybus.YtfR; YtfI = ybus.YtfI
-    YshR = ybus.YshR; YshI = ybus.YshI
 
     for g=1:ngen
-        pg_idx = gen_start + 2*(g-1)
+        pg_idx = model.gen_start + 2*(g-1)
         #u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
         #u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
         sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
@@ -151,7 +149,7 @@ function init_solution!(sol, data, ybus, gen_start, line_start,
         wji0 = (buses[BusIdx[lines[l].to]].Vmax^2 + buses[BusIdx[lines[l].to]].Vmin^2) / 2
         wR0 = sqrt(wij0 * wji0)
 
-        pij_idx = line_start + 8*(l-1)
+        pij_idx = model.line_start + 8*(l-1)
         sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
         sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
         sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
@@ -162,8 +160,8 @@ function init_solution!(sol, data, ybus, gen_start, line_start,
         u_curr[pij_idx+6] = 0.0
         u_curr[pij_idx+7] = 0.0
         =#
-        wRIij[2*(l-1)+1] = wR0
-        wRIij[2*l] = 0.0
+        # wRIij[2*(l-1)+1] = wR0
+        # wRIij[2*l] = 0.0
 
         sol.v_curr[pij_idx+4] = wij0
         sol.v_curr[pij_idx+5] = wji0
@@ -223,7 +221,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function check_linelimit_violation(data, u::Array{Float64})
+function check_linelimit_violation(data::OPFData, u)
     lines = data.lines
     nline = length(data.lines)
     line_start = 2*length(data.generators) + 1
@@ -407,7 +405,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
     return
 end
 
-function admm_rect_gpu(case, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+function admm_rect_gpu(case::String, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
                        use_gpu=false, use_polar=true, gpu_no=1, verbose=1) where VT
     if use_gpu
         CUDA.device!(gpu_no)
@@ -421,7 +419,7 @@ end
 
 # TODO: This needs revised to use AdmmEnv.
 function admm_rect_gpu_mpi(
-    case;
+    case::String;
     iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4, use_gpu=false, use_polar=true, gpu_no=1,
     comm::MPI.Comm=MPI.COMM_WORLD,
 )
