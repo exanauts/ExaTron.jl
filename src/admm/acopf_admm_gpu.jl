@@ -118,8 +118,8 @@ function get_branch_data(data::OPFData; use_gpu=false)
     end
 end
 
-function init_solution!(env::AdmmEnv, ybus::Ybus, rho_pq, rho_va)
-    sol, data, model = env.solution, env.data, env.model
+function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq, rho_va)
+    data, model = env.data, env.model
 
     lines = data.lines
     buses = data.buses

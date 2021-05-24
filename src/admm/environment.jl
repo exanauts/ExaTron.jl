@@ -240,13 +240,10 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         ybus = Ybus{Array{T}}(computeAdmitances(
             env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
-        if !use_twolevel
-            env.solution = SolutionOneLevel{T,TD}(env.model)
-            init_solution!(env, ybus, rho_pq, rho_va)
-        else
-            env.solution = SolutionTwoLevel{T,TD}(env.model)
-            init_values_two_level!(env, ybus, rho_pq, rho_va)
-        end
+        env.solution = ifelse(use_twolevel, 
+            SolutionTwoLevel{T,TD}(env.model), 
+            SolutionOneLevel{T,TD}(env.model))
+        init_solution!(env, env.solution, ybus, rho_pq, rho_va)
 
         env.membuf = TM(undef, (31, env.model.nline))
         fill!(env.membuf, 0.0)

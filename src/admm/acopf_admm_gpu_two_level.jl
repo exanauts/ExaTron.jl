@@ -116,8 +116,8 @@ function get_branch_bus_index(data::OPFData; use_gpu=false)
     end
 end
 
-function init_values_two_level!(env::AdmmEnv, ybus::Ybus, rho_pq, rho_va)
-    sol, data, model = env.solution, env.data, env.model
+function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq, rho_va)
+    data, model = env.data, env.model
     gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
 
     lines = data.lines
