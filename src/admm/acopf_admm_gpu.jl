@@ -1,4 +1,4 @@
-function get_generator_data(data; use_gpu=false)
+function get_generator_data(data::OPFData; use_gpu=false)
     ngen = length(data.generators)
 
     if use_gpu
@@ -37,10 +37,8 @@ function get_generator_data(data; use_gpu=false)
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
 
-function get_bus_data(data; use_gpu=false)
-    ngen = length(data.generators)
+function get_bus_data(data::OPFData; use_gpu=false)
     nbus = length(data.buses)
-    nline = length(data.lines)
 
     FrIdx = [l for b=1:nbus for l in data.FromLines[b]]
     ToIdx = [l for b=1:nbus for l in data.ToLines[b]]
@@ -77,7 +75,7 @@ function get_bus_data(data; use_gpu=false)
     end
 end
 
-function get_branch_data(data; use_gpu=false)
+function get_branch_data(data::OPFData; use_gpu=false)
     buses = data.buses
     lines = data.lines
     BusIdx = data.BusIdx
@@ -120,7 +118,7 @@ function get_branch_data(data; use_gpu=false)
     end
 end
 
-function init_solution!(env, ybus, rho_pq, rho_va)
+function init_solution!(env::AdmmEnv, ybus::Ybus, rho_pq, rho_va)
     sol, data, model = env.solution, env.data, env.model
 
     lines = data.lines
@@ -223,7 +221,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function check_linelimit_violation(data, u)
+function check_linelimit_violation(data::OPFData, u)
     lines = data.lines
     nline = length(data.lines)
     line_start = 2*length(data.generators) + 1
@@ -407,7 +405,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
     return
 end
 
-function admm_rect_gpu(case, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+function admm_rect_gpu(case::String, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
                        use_gpu=false, use_polar=true, gpu_no=1, verbose=1) where VT
     if use_gpu
         CUDA.device!(gpu_no)
@@ -421,7 +419,7 @@ end
 
 # TODO: This needs revised to use AdmmEnv.
 function admm_rect_gpu_mpi(
-    case;
+    case::String;
     iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4, use_gpu=false, use_polar=true, gpu_no=1,
     comm::MPI.Comm=MPI.COMM_WORLD,
 )
