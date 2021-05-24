@@ -129,11 +129,11 @@ end
 abstract type AbstractSolution{T,TD} end
 
 """
-    Solution{T,TD}
+    SolutionOneLevel{T,TD}
 
 This contains the solutions of ACOPF model instance, including the ADMM parameter rho.
 """
-mutable struct Solution{T,TD} <: AbstractSolution{T,TD}
+mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
     u_curr::TD
     v_curr::TD
     l_curr::TD
@@ -145,7 +145,7 @@ mutable struct Solution{T,TD} <: AbstractSolution{T,TD}
     rp::TD
     objval::T
 
-    function Solution{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
+    function SolutionOneLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
         return new{T,TD}(
             TD(undef, model.nvar),
             TD(undef, model.nvar),
@@ -162,12 +162,12 @@ mutable struct Solution{T,TD} <: AbstractSolution{T,TD}
 end
 
 """
-    Solution2{T,TD}
+    SolutionTwoLevel{T,TD}
 
 This contains the solutions of ACOPF model instance for two-level ADMM algorithm,
     including the ADMM parameter rho.
 """
-mutable struct Solution2{T,TD} <: AbstractSolution{T,TD}
+mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
     x_curr::TD
     xbar_curr::TD
     z_outer::TD
@@ -183,7 +183,7 @@ mutable struct Solution2{T,TD} <: AbstractSolution{T,TD}
     wRIij::TD
     objval::T
 
-    function Solution2{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
+    function SolutionTwoLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
         return new{T,TD}(
             TD(undef, model.nvar),      # x_curr
             TD(undef, model.nvar_v),    # xbar_curr
@@ -241,10 +241,10 @@ mutable struct AdmmEnv{T,TD,TI,TM}
             env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
         if !use_twolevel
-            env.solution = Solution{T,TD}(env.model)
+            env.solution = SolutionOneLevel{T,TD}(env.model)
             init_solution!(env, ybus, rho_pq, rho_va)
         else
-            env.solution = Solution2{T,TD}(env.model)
+            env.solution = SolutionTwoLevel{T,TD}(env.model)
             init_values_two_level!(env, ybus, rho_pq, rho_va)
         end
 
