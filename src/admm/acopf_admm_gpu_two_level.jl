@@ -240,8 +240,7 @@ function update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     end
 end
 
-function update_xbar_generator_kernel(model::Model, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    n, gen_start = model.n, model.gen_start
+function update_xbar_generator_kernel(n::Int, gen_start::Int, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -255,8 +254,7 @@ function update_xbar_generator_kernel(model::Model, u, v, xbar, zu, zv, lu, lv, 
     return
 end
 
-function update_xbar_branch_kernel(model::Model, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    n, line_start = model.n, model.line_start
+function update_xbar_branch_kernel(n::Int, line_start::Int, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -281,9 +279,7 @@ function update_xbar_branch_kernel(model::Model, u, v, xbar, zu, zv, lu, lv, rho
     return
 end
 
-function update_xbar_bus_kernel(model::Model, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    n, line_start, bus_start = model.n, model.line_start, model.bus_start
-    FrStart, FrIdx, ToStart, ToIdx = model.FrStart, model.FrIdx, model.ToStart, model.ToIdx
+function update_xbar_bus_kernel(n::Int, line_start::Int, bus_start::Int, FrStart, FrIdx, ToStart, ToIdx, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     b = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if b <= n
@@ -376,8 +372,7 @@ function update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
     end
 end
 
-function update_zu_generator_kernel(model::Model, u, xbar, z, l, rho, lz, beta)
-    n, gen_start = model.n, model.gen_start
+function update_zu_generator_kernel(n::Int, gen_start::Int, u, xbar, z, l, rho, lz, beta)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -391,8 +386,7 @@ function update_zu_generator_kernel(model::Model, u, xbar, z, l, rho, lz, beta)
     return
 end
 
-function update_zu_branch_kernel(model::Model, u, xbar, z, l, rho, lz, beta)
-    n, line_start, bus_start, brBusIdx = model.n, model.line_start, model.bus_start, model.brBusIdx
+function update_zu_branch_kernel(n::Int, line_start::Int, bus_start::Int, brBusIdx, u, xbar, z, l, rho, lz, beta)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -417,8 +411,7 @@ function update_zu_branch_kernel(model::Model, u, xbar, z, l, rho, lz, beta)
     return
 end
 
-function update_zv_kernel(model::Model, v, xbar, z, l, rho, lz, beta)
-    n = model.n
+function update_zv_kernel(n::Int, v, xbar, z, l, rho, lz, beta)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -430,8 +423,7 @@ function update_zv_kernel(model::Model, v, xbar, z, l, rho, lz, beta)
     return
 end
 
-function update_l_kernel(model::Model, l, z, lz, beta)
-    n = model.n
+function update_l_kernel(n::Int, l, z, lz, beta)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -473,8 +465,7 @@ function compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
     end
 end
 
-function compute_primal_residual_u_generator_kernel(model::Model, rp, u, xbar, z)
-    n, gen_start = model.n, model.gen_start
+function compute_primal_residual_u_generator_kernel(n::Int, gen_start::Int, rp, u, xbar, z)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -488,8 +479,7 @@ function compute_primal_residual_u_generator_kernel(model::Model, rp, u, xbar, z
     return
 end
 
-function compute_primal_residual_u_branch_kernel(model::Model, rp, u, xbar, z)
-    n, line_start, bus_start, brBusIdx = model.n, model.line_start, model.bus_start, model.brBusIdx
+function compute_primal_residual_u_branch_kernel(n::Int, line_start::Int, bus_start::Int, brBusIdx, rp, u, xbar, z)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -511,8 +501,7 @@ function compute_primal_residual_u_branch_kernel(model::Model, rp, u, xbar, z)
     return
 end
 
-function compute_primal_residual_v_kernel(model::Model, rp, v, xbar, z)
-    n = model.n
+function compute_primal_residual_v_kernel(n::Int, rp, v, xbar, z)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -532,8 +521,7 @@ function vector_difference(n::Int, c, a, b)
     return
 end
 
-function update_lz_kernel(env::AdmmEnv, z, lz, beta)
-    n, max_limit = env.model.n, env.params.max_limit
+function update_lz_kernel(n::Int, max_limit::Float64, z, lz, beta)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
@@ -733,26 +721,26 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 time_bus += tgpu.time
 
                 # Update xbar.
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_xbar_generator_kernel(mod, u_curr, v_curr,
+                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_xbar_generator_kernel(mod.n, mod.gen_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
-                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_xbar_branch_kernel(mod, u_curr, v_curr,
+                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_xbar_branch_kernel(mod.n, mod.line_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
-                @cuda threads=64 blocks=(div(mod.nbus-1, 64)+1) update_xbar_bus_kernel(mod, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+                @cuda threads=64 blocks=(div(mod.nbus-1, 64)+1) update_xbar_bus_kernel(mod.n, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
                 CUDA.synchronize()
 
                 # Update z.
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_zu_generator_kernel(mod, u_curr,
+                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_zu_generator_kernel(mod.n, mod.gen_start, u_curr,
                                                xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_zu_branch_kernel(mod, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) update_zv_kernel(mod, v_curr, xbar_curr, zv_curr,
+                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_zu_branch_kernel(mod.n, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) update_zv_kernel(mod.n, v_curr, xbar_curr, zv_curr,
                                                lv_curr, rho_v, lz_v, beta)
                 CUDA.synchronize()
 
                 # Update multiiplier and residuals.
-                @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod, l_curr, z_curr, lz, beta)
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod, rp_u, u_curr, xbar_curr, zu_curr)
-                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod, rp_u, u_curr, xbar_curr, zu_curr)
-                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod, rp_v, v_curr, xbar_curr, zv_curr)
+                @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod.n, l_curr, z_curr, lz, beta)
+                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.n, mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
+                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod.n, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr)
+                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod.n, rp_v, v_curr, xbar_curr, zv_curr)
                 @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, rd, z_curr, z_prev)
                 CUDA.synchronize()
 
@@ -787,7 +775,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
         if !env.use_gpu
             lz .+= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, beta .* z_curr))
         else
-            CUDA.@sync @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_lz_kernel(env, z_curr, lz, beta)
+            CUDA.@sync @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_lz_kernel(mod.nvar, par.MAX_MULTIPLIER, z_curr, lz, beta)
         end
 
         if z_curr_norm > theta*z_prev_norm
