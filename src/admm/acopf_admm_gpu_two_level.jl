@@ -553,12 +553,12 @@ function update_rho(rho, rp, rp_old, theta, gamma)
     end
 end
 
-function admm_restart_two_level!(env::AdmmEnv; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
+function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
     if env.use_gpu
         CUDA.device!(env.gpu_no)
     end
 
-    data, par, mod, sol = env.data, env.params, env.model, env.solution
+    data, par, mod = env.data, env.params, env.model
 
     # -------------------------------------------------------------------
     # Variables are of two types: u and v
@@ -856,6 +856,6 @@ function admm_rect_gpu_two_level(
         use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true,
         gpu_no=gpu_no, verbose=verbose, outer_eps=outer_eps,
     )
-    admm_restart_two_level!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
+    admm_restart!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
 end

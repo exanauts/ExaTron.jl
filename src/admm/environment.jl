@@ -177,6 +177,35 @@ function reactive_power_generation(model::Model, sol::SolutionOneLevel)
     ngen = model.ngen
     return sol.u_curr[2:2:2*ngen]
 end
+function voltage_magnitude(model::Model, sol::SolutionOneLevel)
+    nbus = model.nbus
+    return zeros(nbus)
+end
+function voltage_angle(model::Model, sol::SolutionOneLevel)
+    nbus = model.nbus
+    return zeros(nbus)
+end
+
+function set_active_power_generation!(model::Model, sol::SolutionOneLevel, val)
+    ngen = model.ngen
+    for g in 1:ngen
+        pg_idx = model.gen_start + 2 * (g-1)
+        @inbounds sol.v_curr[pg_idx] = val[g]
+    end
+end
+function set_reactive_power_generation!(model::Model, sol::SolutionOneLevel, val)
+    ngen = model.ngen
+    for g in 1:ngen
+        pg_idx = model.gen_start + 2 * (g-1)
+        @inbounds sol.v_curr[pg_idx+1] = val[g]
+    end
+end
+function set_voltage_magnitude!(model::Model, sol::SolutionOneLevel, val)
+    # TODO
+end
+function set_voltage_angle!(model::Model, sol::SolutionOneLevel, val)
+    # TODO
+end
 
 """
     SolutionTwoLevel{T,TD}
@@ -230,6 +259,45 @@ function reactive_power_generation(model::Model, sol::SolutionTwoLevel)
     ngen = model.ngen
     return sol.xbar_curr[2:2:2*ngen]
 end
+function voltage_magnitude(model::Model, sol::SolutionTwoLevel)
+    bus_start = model.bus_start
+    return sol.xbar_curr[bus_start:2:bus_start-1+2*model.nbus]
+end
+function voltage_angle(model::Model, sol::SolutionTwoLevel)
+    bus_start = model.bus_start
+    nbus = model.nbus
+    return sol.xbar_curr[bus_start+1:2:bus_start-1+2*model.nbus]
+end
+
+function set_active_power_generation!(model::Model, sol::SolutionTwoLevel, val)
+    ngen = model.ngen
+    for g in 1:ngen
+        pg_idx = model.gen_start + 2 * (g-1)
+        @inbounds sol.xbar_curr[pg_idx] = val[g]
+    end
+end
+function set_reactive_power_generation!(model::Model, sol::SolutionTwoLevel, val)
+    ngen = model.ngen
+    for g in 1:ngen
+        pg_idx = model.gen_start + 2 * (g-1)
+        @inbounds sol.xbar_curr[pg_idx+1] = val[g]
+    end
+end
+function set_voltage_magnitude!(model::Model, sol::SolutionTwoLevel, val)
+    bus_start = model.bus_start
+    for b in 1:model.nbus
+        bus_idx = bus_start + 2 * (b-1)
+        @inbounds sol.xbar_curr[bus_idx] = val[b]
+    end
+end
+function set_voltage_angle!(model::Model, sol::SolutionTwoLevel, val)
+    bus_start = model.bus_start
+    for b in 1:model.nbus
+        bus_idx = bus_start + 2 * (b-1)
+        @inbounds sol.xbar_curr[bus_idx+1] = val[b]
+    end
+end
+
 
 """
     AdmmEnv{T,TD,TI}
@@ -313,4 +381,9 @@ function set_reactive_load!(env::AdmmEnv, qd::AbstractArray)
     copyto!(env.model.Qd, qd)
     return
 end
+
+set_active_power_generation!(env::AdmmEnv, val) = set_active_power_generation!(env.model, env.solution, val)
+set_reactive_power_generation!(env::AdmmEnv, val) = set_reactive_power_generation!(env.model, env.solution, val)
+set_voltage_magnitude!(env::AdmmEnv, val) = set_voltage_magnitude!(env.model, env.solution, val)
+set_voltage_angle!(env::AdmmEnv, val) = set_voltage_angle!(env.model, env.solution, val)
 

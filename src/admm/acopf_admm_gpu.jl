@@ -261,12 +261,14 @@ end
 
 This function restarts the ADMM with a given `env::AdmmEnv` containing solutions and all the other parameters.
 """
-function admm_restart!(env::AdmmEnv; iterlim=800, scale=1e-4)
+admm_restart!(env::AdmmEnv; options...) = admm_solve!(env, env.solution; options...)
+
+function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-4)
     if env.use_gpu
         CUDA.device!(env.gpu_no)
     end
 
-    data, par, mod, sol = env.data, env.params, env.model, env.solution
+    data, par, mod = env.data, env.params, env.model
 
     shift_lines = 0
     shmem_size = sizeof(Float64)*(14*mod.n+3*mod.n^2) + sizeof(Int)*(4*mod.n)

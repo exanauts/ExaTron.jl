@@ -72,7 +72,7 @@ end
     # than the one level algorithm.
     env = ExaTron.admm_rect_gpu_two_level(
         CASE, Array;
-        verbose=0, rho_pq=1000.0, rho_va=1000.0, inner_iterlim=2000, outer_iterlim=1500, outer_eps=1e-6
+        verbose=1, rho_pq=1000.0, rho_va=1000.0, inner_iterlim=2000, outer_iterlim=1500, outer_eps=1e-6
     )
     @test isa(env, ExaTron.AdmmEnv)
 
@@ -93,6 +93,6 @@ end
     @test qg ≈ [0.1296564, 0.00031842, -0.226342] atol=1e-2
 
     # Test restart API
-    ExaTron.admm_restart_two_level!(env)
+    ExaTron.admm_restart!(env)
 end
 
