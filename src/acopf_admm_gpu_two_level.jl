@@ -484,16 +484,22 @@ function update_lz_kernel(n, max_limit, z, lz, beta)
     return
 end
 
-function update_rho(rho, rp, rp_old, theta, gamma)
-    for i=1:length(rho)
-        if abs(rp[i]) > theta*abs(rp_old[i])
-            rho[i] = min(gamma*rho[i], 1e24)
+function update_rho(rho, rp, rp_old, theta, gamma; individual=true)
+    if individual
+        for i=1:length(rho)
+            if abs(rp[i]) > theta*abs(rp_old[i])
+                rho[i] = min(gamma*rho[i], 1e24)
+            end
+        end
+    else
+        if norm(rp) > theta*norm(rp_old)
+            rho .= min.(gamma.*rho, 1e24)
         end
     end
 end
 
 function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                                 use_gpu=false, use_polar=true, gpu_no=1, outer_eps=2*1e-4)
+                                 use_gpu=false, use_polar=true, adjust_rho=false, gpu_no=1, outer_eps=2*1e-4)
     data = opf_loaddata(case)
 
     ngen = length(data.generators)
@@ -710,12 +716,6 @@ function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_
                 compute_primal_residual_u(data, gen_start, line_start, bus_start, rp_u, u_curr, xbar_curr, zu_curr)
                 rp_v .= v_curr .- xbar_curr .+ zv_curr
 
-                #=
-                if inner > 1
-                    update_rho(rho, rp, rp_old, theta, gamma)
-                end
-                =#
-
                 rd .= z_curr .- z_prev
                 Ax_plus_By .= rp .- z_curr
 
@@ -735,6 +735,10 @@ function admm_rect_gpu_two_level(case; outer_iterlim=10, inner_iterlim=800, rho_
 
                 if primres <= eps_pri || dualres <= DUAL_TOL
                     break
+                end
+
+                if adjust_rho && inner > 1
+                    update_rho(rho, rp, rp_old, theta, gamma)
                 end
             else
                 @cuda threads=64 blocks=(div(nvar-1, 64)+1) copy_data_kernel(nvar, cu_z_prev, cu_z_curr)
