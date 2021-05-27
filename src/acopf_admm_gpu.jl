@@ -436,6 +436,7 @@ function admm_rect_gpu_mpi(
     case;
     iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4, use_gpu=false, use_polar=true, gpu_no=1,
     comm::MPI.Comm=MPI.COMM_WORLD,
+    use_collective = true
 )
     data = opf_loaddata(case)
 
@@ -451,6 +452,7 @@ function admm_rect_gpu_mpi(
     root = 0
     is_master = MPI.Comm_rank(comm) == root
     n_processes = MPI.Comm_size(comm)
+    rank = MPI.Comm_rank(comm)
     nlines_local = div(nline, n_processes, RoundUp)
     nlines_padded = n_processes * nlines_local
 
@@ -543,6 +545,7 @@ function admm_rect_gpu_mpi(
     end
     # MPI: Local info
     # We need only to transfer info about lines
+    msg_size = 8 * nlines_local
     if use_gpu
         u_local = CUDA.zeros(Float64, 8 * nlines_local)
         v_local = CUDA.zeros(Float64, 8 * nlines_local)
@@ -555,8 +558,8 @@ function admm_rect_gpu_mpi(
         rho_local = zeros(8 * nlines_local)
     end
 
-    MPI.Scatter!(u_lines_root, u_local, root, comm)
-    MPI.Scatter!(rho_lines_root, rho_local, root, comm)
+    my_scatter!(u_lines_root, u_local, comm; use_collective = use_collective)
+    my_scatter!(rho_lines_root, rho_local, comm; use_collective = use_collective)
 
     max_auglag = 50
 
@@ -602,8 +605,8 @@ function admm_rect_gpu_mpi(
             # scatter / gather
 
             tcpu_mpi = @timed begin
-                MPI.Scatter!(v_lines_root, v_local, root, comm)
-                MPI.Scatter!(l_lines_root, l_local, root, comm)
+                my_scatter!(v_lines_root, v_local, comm; use_collective = use_collective)
+                my_scatter!(l_lines_root, l_local, comm; use_collective = use_collective)
             end
             time_br_scatter += tcpu_mpi.time
 
@@ -614,7 +617,7 @@ function admm_rect_gpu_mpi(
                                                                 YttR, YttI, YtfR, YtfI, FrBound, ToBound)
 
             time_br += tcpu.time
-            tcpu_mpi = @timed MPI.Gather!(u_local, u_lines_root, root, comm)
+            tcpu_mpi = @timed my_gather!(u_local, u_lines_root, comm; use_collective = use_collective)
             time_br_gather += tcpu_mpi.time
 
             if is_master
@@ -654,8 +657,8 @@ function admm_rect_gpu_mpi(
 
             #  - Broadcast cu_v_curr and cu_l_curr to GPUs.
             tgpu_mpi = @timed begin
-                MPI.Scatter!(v_lines_root, v_local, root, comm)
-                MPI.Scatter!(l_lines_root, l_local, root, comm)
+                my_scatter!(v_lines_root, v_local, comm; use_collective = use_collective)
+                my_scatter!(l_lines_root, l_local, comm; use_collective = use_collective)
             end
             time_br_scatter += tgpu_mpi.time
 
@@ -669,7 +672,7 @@ function admm_rect_gpu_mpi(
             time_br += tgpu.time
 
             #  - Collect cu_u_curr.
-            tgpu_mpi = @timed MPI.Gather!(u_local, u_lines_root, root, comm)
+            tgpu_mpi = @timed my_gather!(u_local, u_lines_root, comm; use_collective = use_collective)
             time_br_gather += tgpu_mpi.time
 
             if is_master
@@ -698,15 +701,21 @@ function admm_rect_gpu_mpi(
         copyto!(u_curr, cu_u_curr)
     end
 
-    rank = MPI.Comm_rank(comm)
-    @printf(" ** Time\n")
-    @printf("[%d] Generator = %.2f\n", rank, time_gen)
-    @printf("[%d] Branch    = %.2f\n", rank, time_br)
-    @printf("[%d] Bus       = %.2f\n", rank, time_bus)
-    @printf("[%d] G+Br+Bus  = %.2f\n", rank, time_gen + time_br + time_bus)
-    @printf("[%d] Scatter   = %.2f\n", rank, time_br_scatter)
-    @printf("[%d] Gather    = %.2f\n", rank, time_br_gather)
-    @printf("[%d] MPI(S+G)  = %.2f\n", rank, time_br_scatter + time_br_gather)
+    if is_master
+        @printf(" ** Time\n")
+    end
+    for proc = 1:n_processes
+        if proc - 1 == rank
+            @printf("[%d] Generator = %.2f\n", rank, time_gen)
+            @printf("[%d] Branch    = %.2f\n", rank, time_br)
+            @printf("[%d] Bus       = %.2f\n", rank, time_bus)
+            @printf("[%d] G+Br+Bus  = %.2f\n", rank, time_gen + time_br + time_bus)
+            @printf("[%d] Scatter   = %.2f\n", rank, time_br_scatter)
+            @printf("[%d] Gather    = %.2f\n", rank, time_br_gather)
+            @printf("[%d] MPI(S+G)  = %.2f\n", rank, time_br_scatter + time_br_gather)
+        end
+        MPI.Barrier(comm)
+    end
 
     if is_master
         objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(baseMVA*u_curr[gen_start+2*(g-1)])^2 +
@@ -717,4 +726,44 @@ function admm_rect_gpu_mpi(
     end
 
     return
+end
+
+function my_scatter!(src, dst, comm::MPI.Comm; use_collective = true)
+    if use_collective
+        MPI.Scatter!(src, dst, 0, comm)
+    else
+        comm_rank = MPI.Comm_rank(comm)
+        comm_size = MPI.Comm_size(comm)
+        if comm_rank == 0
+            src_part = @view src[1:length(dst)]
+            # copyto!(dst, src_part)
+            dst .= src_part
+            for proc = 1:(comm_size-1)
+                src_part = @view src[(1 + proc * length(dst)):((proc+1) * length(dst))]
+                MPI.Isend(src_part, proc, 0, comm)
+            end
+        else
+            MPI.Recv!(dst, 0, 0, comm)
+        end
+    end
+end
+
+function my_gather!(src, dst, comm::MPI.Comm; use_collective = true)
+    if use_collective
+        MPI.Gather!(src, dst, 0, comm)
+    else
+        comm_rank = MPI.Comm_rank(comm)
+        comm_size = MPI.Comm_size(comm)
+        if comm_rank == 0
+            dst_part = @view dst[1:length(src)]
+            # copyto!(dst_part, src)
+            dst_part .= src
+            for proc = 1:(comm_size-1)
+                dst_part = @view dst[(1 + proc * length(src)):((proc+1) * length(src))]
+                MPI.Recv!(dst_part, proc, 0, comm)
+            end
+        else
+            MPI.Isend(src, 0, 0, comm)
+        end
+    end
 end
