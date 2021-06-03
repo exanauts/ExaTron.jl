@@ -169,6 +169,7 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int, scale::Float64,
         tron.x .= x
         status = ExaTron.solveProblem(tron)
         x .= tron.x
+        @printf("[TRON] line %d iter %d max %e min %e\n", id_line, tron.minor_iter, maximum(param[1:8,id_line]), minimum(param[1:8,id_line]))
         avg_minor_it += tron.minor_iter
 
         cos_ij = cos(x[3] - x[4])
