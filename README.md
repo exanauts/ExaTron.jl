@@ -1,5 +1,8 @@
 # ExaTron.jl
 
+[![Run tests](https://github.com/exanauts/ExaTron.jl/actions/workflows/action.yml/badge.svg)](https://github.com/exanauts/ExaTron.jl/actions/workflows/action.yml)
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://exanauts.github.io/ExaTron.jl/dev)
+
 ExaTron is the Julia implementaion of novel GPU-accelerated algorithm for bound-constrained nonlinear nonconvex optimization problems of the form
 
 <!-- $$
