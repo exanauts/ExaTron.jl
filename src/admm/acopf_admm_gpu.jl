@@ -263,7 +263,7 @@ end
 
 This function restarts the ADMM with a given `env::AdmmEnv` containing solutions and all the other parameters.
 """
-function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
+function admm_restart!(env::AdmmEnv; iterlim=800, scale=1e-4)
     if env.use_gpu
         CUDA.device!(env.gpu_no)
     end
@@ -385,6 +385,11 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
                  for g in 1:mod.ngen)::Float64
     sol.objval = objval
 
+    if it < iterlim
+        sol.status = HAS_CONVERGED
+    else
+        sol.status = MAXIMUM_ITERATIONS
+    end
 
     if par.verbose > 0
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
@@ -413,7 +418,7 @@ function admm_rect_gpu(case::String, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_
     env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
         case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
     )
-    admm_restart(env, iterlim=iterlim, scale=scale)
+    admm_restart!(env, iterlim=iterlim, scale=scale)
     return env
 end
 
