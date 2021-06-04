@@ -3,7 +3,7 @@
 This presents the use case of `ExaTron.jl` for solving large-scale alternating current optimal power flow (ACOPF) problem.
 In this pacakge, we also provide the implementation of adaptive ADMM for distributed ACOPF introduced by [Mhanna et al. (2019)](https://doi.org/10.1109/TPWRS.2018.2886344). We have implemented the ADMM algorithm fully on GPUs without data transfer to the CPU, where `ExaTron.jl` is used to solve many small nonlinear nonconvex problems, each of which represents a branch subproblem of the ADMM.
 
-## Numerical Experiment 
+## Numerical Experiment
 
 All experiments were performed on a compute node of the Summit supercomputer at Oak Ridge
 National Laboratory using `Julia@1.6.0` and `CUDA.jl@2.6.1`.
@@ -47,3 +47,7 @@ However, the average computation time increases faster than that of the GPU impl
 Most of the speedup relates to the GPU's massive parallel computation capability.
 
 ![](cpu_vs_gpu.pdf)
+
+## How to Reproduce the Numerical Results
+
+TBD
