@@ -24,7 +24,7 @@ export JULIA_MPI_BINARY="system"
 DATA=("case2868rte" "case6515rte" "case9241pegase" "case13659pegase" "case19402_goc")
 PQ=(10 20 50 50 500)
 VA=(1000 2000 5000 5000 50000)
-ITER=(6000 15000 35000 45000 30000)
+ITER=(5648 13651 30927 41126 28358)
 NGPU=(2 3 4 5 6)
 
 for j in ${!NGPU[@]}; do

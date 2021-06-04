@@ -24,7 +24,7 @@ export JULIA_MPI_BINARY="system"
 DATA=("case2868rte" "case6515rte" "case9241pegase" "case13659pegase" "case19402_goc")
 PQ=(10 20 50 50 500)
 VA=(1000 2000 5000 5000 50000)
-ITER=(6000 15000 35000 45000 30000)
+ITER=(5718 13640 30932 41140 28358)
 
 for i in ${!DATA[@]}; do
 	mpirun -np 40 julia --project ./src/launch_mpi.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} false > output_cpu40_${DATA[$i]}.txt 2>&1

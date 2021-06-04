@@ -8,7 +8,14 @@
 export JULIA_CUDA_VERBOSE=1
 export JULIA_MPI_BINARY="system"
 
-DATA=("2868rte" "6515rte" "9241pegase" "13659pegase" "19402goc")
-for i in ${!DATA[@]}; do
-    julia --project ./src/load_imbalance.jl "./br_time_gpu_${DATA[$i]}.txt"
-done
+function usage() {
+    echo "Usage: ./table5.sh case"
+    echo "  case: the case file containing branch computation time of each GPU"
+}
+
+if [[ $# != 1 ]]; then
+    usage
+    exit
+fi
+
+julia --project ./src/load_imbalance.jl $1
