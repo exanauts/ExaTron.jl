@@ -14,4 +14,5 @@ makedocs(
 
 deploydocs(
     repo = "github.com/exanauts/ExaTron.jl.git",
+    devbranch = "sc2021",
 )
