@@ -737,26 +737,26 @@ function admm_restart_two_level!(env::AdmmEnv; outer_iterlim=10, inner_iterlim=8
                 time_bus += tgpu.time
 
                 # Update xbar.
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_xbar_generator_kernel(mod.n, mod.gen_start, u_curr, v_curr,
+                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_xbar_generator_kernel(mod.ngen, mod.gen_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
-                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_xbar_branch_kernel(mod.n, mod.line_start, u_curr, v_curr,
+                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_xbar_branch_kernel(mod.nline, mod.line_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
-                @cuda threads=64 blocks=(div(mod.nbus-1, 64)+1) update_xbar_bus_kernel(mod.n, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+                @cuda threads=64 blocks=(div(mod.nbus-1, 64)+1) update_xbar_bus_kernel(mod.nbus, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
                 CUDA.synchronize()
 
                 # Update z.
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_zu_generator_kernel(mod.n, mod.gen_start, u_curr,
+                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_zu_generator_kernel(mod.ngen, mod.gen_start, u_curr,
                                                xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_zu_branch_kernel(mod.n, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) update_zv_kernel(mod.n, v_curr, xbar_curr, zv_curr,
+                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_zu_branch_kernel(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) update_zv_kernel(mod.nvar_v, v_curr, xbar_curr, zv_curr,
                                                lv_curr, rho_v, lz_v, beta)
                 CUDA.synchronize()
 
                 # Update multiiplier and residuals.
-                @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod.n, l_curr, z_curr, lz, beta)
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.n, mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
-                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod.n, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr)
-                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod.n, rp_v, v_curr, xbar_curr, zv_curr)
+                @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod.nvar, l_curr, z_curr, lz, beta)
+                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.ngen, mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
+                @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr)
+                @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr)
                 @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, rd, z_curr, z_prev)
                 CUDA.synchronize()
 
