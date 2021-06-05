@@ -26,6 +26,7 @@ VA=(1000 2000 5000 5000 50000)
 ITER=(6000 15000 35000 45000 30000)
 
 for i in ${!DATA[@]}; do
-	julia --project ./src/admm_standalone.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} true > output_gpu1_${DATA[$i]}.txt 2>&1
+    echo "Solving ${DATA[$i]} . . ."
+    julia --project ./src/admm_standalone.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} true > output_gpu1_${DATA[$i]}.txt 2>&1
 done
 

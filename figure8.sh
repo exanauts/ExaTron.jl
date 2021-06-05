@@ -27,5 +27,6 @@ VA=(1000 2000 5000 5000 50000)
 ITER=(5718 13640 30932 41140 28358)
 
 for i in ${!DATA[@]}; do
-	mpirun -np 40 julia --project ./src/launch_mpi.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} false > output_cpu40_${DATA[$i]}.txt 2>&1
+    echo "Solving ${DATA[$i]} using 40 CPU cores . . ."
+    mpirun -np 40 julia --project ./src/launch_mpi.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} false > output_cpu40_${DATA[$i]}.txt 2>&1
 done

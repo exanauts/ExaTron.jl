@@ -28,8 +28,9 @@ ITER=(5648 13651 30927 41126 28358)
 NGPU=(2 3 4 5 6)
 
 for j in ${!NGPU[@]}; do
-	for i in ${!DATA[@]}; do
-		mpirun -np ${j} julia --project ./src/launch_mpi.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} true > output_gpu${j}_${DATA[$i]}.txt 2>&1
-        mv br_time_gpu.txt br_time_gpu${j}_${DATA[$i]}.txt
+    for i in ${!DATA[@]}; do
+        echo "Solving ${DATA[$i]} using ${NGPU[$j]} GPUs . . ."
+        mpirun -np ${NGPU[$j]} julia --project ./src/launch_mpi.jl "./data/${DATA[$i]}" ${PQ[$i]} ${VA[$i]} ${ITER[$i]} true > output_gpu${NGPU[$j]}_${DATA[$i]}.txt 2>&1
+        mv br_time_gpu.txt br_time_gpu${NGPU[$j]}_${DATA[$i]}.txt
 	done
 done
