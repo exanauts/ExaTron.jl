@@ -14,18 +14,34 @@ This package can be installed by cloning this repository:
 
 ## How to run
 
-We note that the following is for illustration purposes only.
-If you want to run it on a HPC cluster, you may want to follow instructions specific to the HPC software.
+We describe how to run ExaTron on the [Summit](https://docs.olcf.ornl.gov/systems/summit_user_guide.html) cluster
+at Oak Ridge National Laboratory.
+
 
 ### Using a single GPU
 
 ```bash
-$ julia --project ./src/admm_standalone.jl ./data/casename pq_val va_val iterlim true
+#!/bin/bash
+#BSUB -P your_project_code
+#BSUB -W 0:30
+#BSUB -nnodes 1
+#BSUB -J ExaTron
+#BSUB -o ExaTron.%J
+
+cd $PROJWORK/your_ExaTron_directory
+date
+module load gcc/7.4.0
+module load cuda/10.2.89
+export JULIA_CUDA_VERBOSE=1
+export JULIA_DEPOT_PATH=your_julia_depot_path
+export JULIA_MPI_BINARY=system
+jsrun -n 1 -r 1 -a 1 -c 1 -g 1 julia --project ./src/admm_standalone.jl ./data/casename pq_val va_val iterlim true
 ```
 where `casename` is the filename of a power network, `pq_val` is an initial penalty value
 for power values, `va_val` an initial penalty value for voltage values, `iterlim` the
 maximum iteration limit, and `true|false` specifies whether to use GPU or CPU.
 Power network files are provided in the `data` directory.
+In the line starting with `jsrun`, you may want to replace `julia` with its absolute path.
 
 The following table shows what values need to be specified for parameters:
 
@@ -37,20 +53,20 @@ The following table shows what values need to be specified for parameters:
 | case13659pegase | 50.0 | 5000.0 | 45,000 |
 | case19402_goc | 500.0 | 50000.0 | 30,000 |
 
-For example, if you want to solve `case19402_goc` using a single GPU, you need to run
+For example, if you want to solve `case19402_goc` using a single GPU, replace the line starting
+with `jsrun` with the following
 ```bash
-$ julia --project ./src/admm_standalone.jl ./data/case19402_goc 500 50000 30000 true
+jsrun -n 1 -r 1 -a 1 -c 1 -g 1 julia --project ./src/admm_standalone.jl ./data/case19402_goc 500 50000 30000 true
 ```
 
 ### Using multiple GPUs
 
-If you want to use `N` GPUs, we launch `N` MPI processes and execute `launch_mpi.jl`.
+If you want to use `N` GPUs, replace the line starting with `jsrun` with the following:
 
 ```bash
-$ mpirun -np N julia --project ./src/launch_mpi.jl ./data/casename pq_val va_val iterlim true
+jsrun --smpiargs="-gpu" -n 1 -r 1 -a N -c N -g N -d packed julia --project ./src/launch_mpi.jl ./data/casename pq_val va_val iterlim true
 ```
 
-We assume that all of the MPI processes can see the `N` number of GPUs. Otherwise, it will generate an error.
 The parameter values are the same as the single GPU case, except that we use the following actual
 iteration limit for each case. If you see the logs, the total number of iterations is the same as single GPU case.
 | casename | iterlim |
@@ -64,8 +80,7 @@ iteration limit for each case. If you see the logs, the total number of iteratio
 ## Reproducing experiments
 
 We describe how to reproduce experiments in Section 6 of our manuscript.
-For each figure or table, we provide a corresponding script to reproduce results.
-Note that the following table shows correspondence between the casename and the size of batch.
+Note that the following table shows correspondence between the casename and the size of a batch.
 | casename | batch size |
 | -------: | ---------: |
 | case2868rte | 3.8K |
@@ -76,12 +91,9 @@ Note that the following table shows correspondence between the casename and the 
 
 ### Figure 5
 
-```bash
-$ ./figure5.sh
-```
-
-It will generate `output_gpu1_casename.txt` file for each `casename`. Near the end of the file, you will see
-the timing results: `Branch/iter = %.2f (millisecs)` is the relevant result.
+To reproduce Figure 5, submit a job with each case file and its parameter values.
+For each case with name `casename`, it will generate `output_gpu1_casename.txt`. 
+Near the end of the file, you will see the timing results: `Branch/iter = %.2f (millisecs)` is the relevant result.
 For example, in order to obtain timing results for `case19402_goc`, we read the following line around the end of 
 the file
 ```bash
@@ -91,11 +103,10 @@ Here `3.94` miiliseconds will be the input for the `34K` batch size in Figure 5.
 
 ### Figure 6
 
-```bash
-$ ./figure6.sh
-```
-It will generate `output_gpu${j}_casename.txt` file for each `casename` where `j` represents the number of GPUs
-used. Near the end of the file, you will see the timing results: `[0] (Br+MPI)/iter = %.2f (millisecs)` is the relevant result,
+To reproduce Figure 6, submit a job with each case file, its parameter values, and different GPU number `N`.
+It will generate `output_gpu${N}_casename.txt` file for each `casename` where `N` represents the number of GPUs
+used. 
+Near the end of the file, you will see the timing results: `[0] (Br+MPI)/iter = %.2f (millisecs)` is the relevant result,
 where `[0]` represents the rank (the root in this case) of a process.
 For example, in order to obtain timing results for `case19402_goc` with 6 GPUs, we read the following line around the end of the file
 `output_gpu6_case19402_goc.txt`
@@ -135,21 +146,40 @@ To reproduce Figure 7, you need to use the file for `case13659pegase`:
 ```bash
 $ ./figure7.sh br_time_gpu6_case13659pegase.txt
 ```
-It will generate `br_time_gpu6_case13659pegase.pdf`. The file should be similar to Figure 7.
+It will generate `br_time_gpu6_case13659pegase.pdf`. The file should look similar to Figure 7.
 
 ### Figure 8
 
+To reproduce Figure 8, we need to execute ExaTron with 40 CPU cores. 
+For this, we replace the line starting with `jsrun` with the following:
 ```bash
-$ ./figure8.sh
+jsrun -n 1 -r 1 -a 40 -c 40 -g 0 -d packed julia --project ./src/launch_mpi.jl ./data/casename pq_val va_val iterlim false
 ```
 
-This script will run ExaTron.jl using 40 CPU cores. It will generate output files named `output_cpu40_casename.txt`.
+We use the following `iterlim` for CPU runs. We note that the value of `iterlim` is different than when we use `GPUs`.
+This is because float-point computations are performed on different hardware, leading to slightly different results.
+
+| casename | iterlim |
+| -------: | ------: |
+| case2868rte | 5718 |
+| case6515rte | 13640 |
+| case9241pegase | 30932 |
+| case13659pegase | 41140 |
+| case19402_goc | 28358 |
+
+It will generate output files named `output_cpu40_casename.txt`.
 Each file contains timing results for each case. For example, if you want to read the timing results for `case19402_goc`,
 we read the following line around the end of the file.
 ```bash
 [0] (Br+MPI)/iter = 30.03 (milliseconds)
 ```
 Here `30.03` will be the input for `case19402_goc` for CPUs in Figure 8. For 6 GPUs, we use the results from `figure6.sh`.
+
+### Running ExaTron directly on a non-cluster machine
+
+If you want to run ExaTron on a non-cluster, copy `julia --project ...` part in the line containing `jsrun`.
+For multiple GPUs, run with `mpirun -np N julia --project ..`
+Note that all of the MPI processes should be able to see the `N` number of GPUs. Otherwise, it will generate an error.
 
 ## Citing this package
 
