@@ -194,11 +194,12 @@ function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64
     @assert branch_arr[i,11] == 1  #should be on since we discarded all other
     lit += 1
     lines[lit] = Line(branch_arr[i, 1:13]...)
+	#=
     if (lines[lit].angmin != 0 || lines[lit].angmax != 0) && (lines[lit].angmin>-360 || lines[lit].angmax<360)
       println("Voltage bounds on line ", i, " with angmin ", lines[lit].angmin, " and angmax ", lines[lit].angmax)
       error("Bounds of voltage angles are still to be implemented.")
     end
-
+	=#
   end
   @assert lit == num_on
 
