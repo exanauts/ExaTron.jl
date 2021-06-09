@@ -15,11 +15,14 @@ This package can be installed by cloning this repository:
 
 ## Usage: solving ACOPF using ADMM and ExaTron.jl on single GPU.
 
-### On command line
-```bash
-$ julia --project examples/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
+### On REPL
+```julia
+julia> using ExaTron
+julia> env = ExaTron.admm_rect_gpu("./data/"*casename, T; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
+julia> ExaTron.admm_restart(env; iterlim=max_iter)
 ```
 where
+* `T`: Array type to use, `Array` for CPU or `CuArray` for GPU
 * `caename`: the name of the test file of type `string`
 * `rho_pq`: ADMM parameter for power flow of type `float`
 * `rho_va`: ADMM parameter for voltage and angle of type `float`
@@ -27,18 +30,14 @@ where
 * `use_gpu`: indicates whether to use gpu or not, of type `bool`
 
 #### Example
-```bash
-$ julia --project examples/admm_standalone.jl case2868rte 10 1000 5000 true
-```
-
-### On REPL
 ```julia
 julia> using ExaTron
-julia> env = ExaTron.admm_rect_gpu("./data/"*casename; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
-julia> ExaTron.admm_restart(env; iterlim=max_iter)
+julia> using CUDA
+julia> env = ExaTron.admm_rect_gpu("./data/case9", CuArray; iterlim=2000, rho_pq=400.0, rho_va=40000.0, use_gpu=true)
 ```
 
 ## Usage: solving ACOPF using ADMM and ExaTron.jl on multiple GPUs.
+
 In order to employ multiple GPUs, `MPI.jl` should be configured to work with `CuArray`.
 We recommend to configure `Spack` for this.
 ```bash
@@ -50,14 +49,10 @@ $ spack load openmpi
 $ julia --project -e 'ENV["JULIA_MPI_BINARY"]="system"; using Pkg; Pkg.build("MPI"; verbose=true)'
 ```
 
-Once `MPI.jl` is configured, run `launch_mpi.jl` to use MPI:
-```bash
-$ mpiexec -n num julia --project launch_mpi.jl casename rho_pq rho_va max_iter use_gpu
-```
-
 ## Data and parameter values
 | Data | # Generators | # Branches | # Buses | rho_pq | rho_va | max_iter |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| case9 | 3 | 9 | 9 | 400.0 | 40000.0 | 2,000
 | case2868rte | 600 | 3,808 | 2,868 | 10.0 | 1000.0 | 5,000
 | case6515rte | 1,389 | 9,037 | 6,515 | 20.0 | 2000.0 | 15,000
 | case9241pegase | 1,445 | 16,049 | 9,241 | 50.0 | 5000.0 | 35,000
