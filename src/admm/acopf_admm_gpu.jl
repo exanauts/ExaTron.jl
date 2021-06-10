@@ -133,7 +133,7 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
     YtfR = ybus.YtfR; YtfI = ybus.YtfI
 
     for g=1:ngen
-        pg_idx = model.gen_start + 2*(g-1)
+        pg_idx = model.gen_mod.gen_start + 2*(g-1)
         #u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
         #u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
         sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
@@ -273,7 +273,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
     shift_lines = 0
     shmem_size = sizeof(Float64)*(14*mod.n+3*mod.n^2) + sizeof(Int)*(4*mod.n)
 
-    nblk_gen = div(mod.ngen, 32, RoundUp)
+    nblk_gen = div(mod.gen_mod.ngen, 32, RoundUp)
     nblk_br = mod.nline
     nblk_bus = div(mod.nbus, 32, RoundUp)
 
@@ -289,8 +289,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             sol.v_prev .= sol.v_curr
             sol.l_prev .= sol.l_curr
 
-            tcpu = @timed generator_kernel_cpu(data.baseMVA, mod.ngen, mod.gen_start, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                               mod.pgmin, mod.pgmax, mod.qgmin, mod.qgmax, mod.c2, mod.c1)
+            tcpu = generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho)
             time_gen += tcpu.time
 
             if env.use_polar
@@ -306,7 +305,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             end
             time_br += tcpu.time
 
-            tcpu = @timed bus_kernel_cpu(data.baseMVA, mod.nbus, mod.gen_start, mod.line_start,
+            tcpu = @timed bus_kernel_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start,
                                          mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart,
                                          mod.GenIdx, mod.Pd, mod.Qd, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho, mod.YshR, mod.YshI)
             time_bus += tcpu.time
@@ -334,9 +333,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, sol.l_prev, sol.l_curr)
             CUDA.synchronize()
 
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel(data.baseMVA, mod.ngen, mod.gen_start,
-                                                                                 sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                                                 mod.pgmin, mod.pgmax, mod.qgmin, mod.qgmax, mod.c2, mod.c1)
+            tgpu = generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho)
 
             time_gen += tgpu.time
             if env.use_polar
@@ -351,7 +348,7 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
                                                                                                   mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
             end
             time_br += tgpu.time
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(data.baseMVA, mod.nbus, mod.gen_start, mod.line_start,
+            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start,
                                                                            mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart,
                                                                            mod.GenIdx, mod.Pd, mod.Qd, sol.u_curr, sol.v_curr, sol.l_curr,
                                                                            sol.rho, mod.YshR, mod.YshI)
@@ -379,10 +376,10 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
 
     u_curr = zeros(mod.nvar)
     copyto!(u_curr, sol.u_curr)
-    objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
-                 data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
+    objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[mod.gen_mod.gen_start+2*(g-1)])^2 +
+                 data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[mod.gen_mod.gen_start+2*(g-1)]) +
                  data.generators[g].coeff[data.generators[g].n]
-                 for g in 1:mod.ngen)::Float64
+                 for g in 1:mod.gen_mod.ngen)::Float64
     sol.objval = objval
 
 

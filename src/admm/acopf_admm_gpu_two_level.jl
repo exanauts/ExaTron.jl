@@ -1,6 +1,6 @@
 function check_generator_bounds(env::AdmmEnv, xbar)
     generators = env.data.generators
-    gen_start = env.model.gen_start
+    gen_start = env.model.gen_mod.gen_start
 
     ngen = length(generators)
 
@@ -62,7 +62,7 @@ end
 function check_power_balance_violation(env::AdmmEnv, xbar)
     data = env.data
     model = env.model
-    gen_start, line_start, bus_start, YshR, YshI = model.gen_start, model.line_start, model.bus_start, model.YshR, model.YshI
+    gen_start, line_start, bus_start, YshR, YshI = model.gen_mod.gen_start, model.line_start, model.bus_start, model.YshR, model.YshI
 
     baseMVA = data.baseMVA
     nbus = length(data.buses)
@@ -118,7 +118,7 @@ end
 
 function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq, rho_va)
     data, model = env.data, env.model
-    gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
+    gen_start, line_start, bus_start = model.gen_mod.gen_start, model.line_start, model.bus_start
 
     lines = data.lines
     buses = data.buses
@@ -186,7 +186,7 @@ function update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     nbus = length(data.buses)
 
     model = env.model
-    gen_start = model.gen_start
+    gen_start = model.gen_mod.gen_start
     line_start = model.line_start
     bus_start = model.bus_start
     FrStart = model.FrStart
@@ -351,7 +351,7 @@ function update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
     nline = length(data.lines)
 
     model = env.model
-    gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
+    gen_start, line_start, bus_start = model.gen_mod.gen_start, model.line_start, model.bus_start
 
     gen_end = gen_start + 2*ngen - 1
     z[gen_start:gen_end] .= (-(lz[gen_start:gen_end] .+ l[gen_start:gen_end] .+ rho[gen_start:gen_end].*(u[gen_start:gen_end] .- xbar[gen_start:gen_end]))) ./ (beta .+ rho[gen_start:gen_end])
@@ -443,7 +443,7 @@ function compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
     nline = length(data.lines)
 
     model = env.model
-    gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
+    gen_start, line_start, bus_start = model.gen_mod.gen_start, model.line_start, model.bus_start
 
     gen_end = gen_start + 2*ngen - 1
     rp_u[gen_start:gen_end] .= u[gen_start:gen_end] .- xbar[gen_start:gen_end] .+ z[gen_start:gen_end]
@@ -585,7 +585,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
     rp_u = view(rp, 1:mod.nvar_u)
     rp_v = view(rp, mod.nvar_u+1:mod.nvar)
 
-    nblk_gen = div(mod.ngen, 32, RoundUp)
+    nblk_gen = div(mod.gen_mod.ngen, 32, RoundUp)
     nblk_br = mod.nline
     nblk_bus = div(mod.nbus, 32, RoundUp)
 
@@ -627,8 +627,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 z_prev .= z_curr
                 rp_old .= rp
 
-                tcpu = @timed generator_kernel_two_level_cpu(data.baseMVA, mod.ngen, mod.gen_start, u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                                                             mod.pgmin, mod.pgmax, mod.qgmin, mod.qgmax, mod.c2, mod.c1)
+                tcpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
                 time_gen += tcpu.time
 
                 #scale = min(scale, (2*1e4) / maximum(abs.(rho_u)))
@@ -645,7 +644,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 end
                 time_br += tcpu.time
 
-                tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_start, mod.line_start, mod.bus_start,
+                tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
                                                       mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
                                                       mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
                 time_bus += tcpu.time
@@ -693,9 +692,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, rp_old, rp)
                 CUDA.synchronize()
 
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen generator_kernel_two_level(data.baseMVA, mod.ngen, mod.gen_start,
-                                                              u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                                                              mod.pgmin, mod.pgmax, mod.qgmin, mod.qgmax, mod.c2, mod.c1)
+                tgpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
                 # MPI routines to be implemented:
                 #  - Broadcast v_curr and l_curr to GPUs.
                 #  - Collect u_curr.
@@ -714,14 +711,14 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                                                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
                 end
                 time_br += tgpu.time
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(data.baseMVA, mod.nbus, mod.gen_start, mod.line_start, mod.bus_start,
+                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
                                                                      mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
                                                                      mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
                                                                      rho_v, mod.YshR, mod.YshI)
                 time_bus += tgpu.time
 
                 # Update xbar.
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_xbar_generator_kernel(mod.ngen, mod.gen_start, u_curr, v_curr,
+                @cuda threads=64 blocks=(div(mod.gen_mod.ngen-1, 64)+1) update_xbar_generator_kernel(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
                 @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_xbar_branch_kernel(mod.nline, mod.line_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
@@ -729,7 +726,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 CUDA.synchronize()
 
                 # Update z.
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) update_zu_generator_kernel(mod.ngen, mod.gen_start, u_curr,
+                @cuda threads=64 blocks=(div(mod.gen_mod.ngen-1, 64)+1) update_zu_generator_kernel(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr,
                                                xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
                 @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_zu_branch_kernel(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
                 @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) update_zv_kernel(mod.nvar_v, v_curr, xbar_curr, zv_curr,
@@ -738,7 +735,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
 
                 # Update multiiplier and residuals.
                 @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod.nvar, l_curr, z_curr, lz, beta)
-                @cuda threads=64 blocks=(div(mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.ngen, mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
+                @cuda threads=64 blocks=(div(mod.gen_mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.gen_mod.ngen, mod.gen_mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
                 @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr)
                 @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr)
                 @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, rd, z_curr, z_prev)
@@ -810,10 +807,10 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
         @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
     end
 
-    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
-                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
+    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*u_curr[mod.gen_mod.gen_start+2*(g-1)])^2 +
+                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*u_curr[mod.gen_mod.gen_start+2*(g-1)]) +
                 data.generators[g].coeff[data.generators[g].n]
-                for g in 1:mod.ngen)
+                for g in 1:mod.gen_mod.ngen)
     @printf("Objective value = %.6e\n", sol.objval)
 
     return
