@@ -77,8 +77,11 @@ function check_power_balance_violation(env::AdmmEnv, xbar)
             reactive_err += xbar[gen_start + 2*(g-1)+1]
         end
 
-        real_err -= (data.buses[b].Pd / baseMVA)
-        reactive_err -= (data.buses[b].Qd / baseMVA)
+        real_err -= (env.model.Pd[b] / baseMVA)
+        reactive_err -= (env.model.Qd[b] / baseMVA)
+
+        #real_err -= (data.buses[b].Pd / baseMVA)
+        #reactive_err -= (data.buses[b].Qd / baseMVA)
 
         for l in data.FromLines[b]
             real_err -= xbar[line_start + 4*(l-1)]

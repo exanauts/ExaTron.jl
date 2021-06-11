@@ -73,7 +73,7 @@ function generator_kernel_two_level_proxal_between(
                           (-(orig_b + prox_b) / (2*c2[I]*(baseMVA)^2 + rho[pg_idx] + tau_prox + 2*rho_prox))))
         lg_val3 = l_prev_prox[I] + rho_prox*(pg_prev_prox[I] - pg_val3 + s_val3)
 
-        if smin[I] <= s_val1 && s_val1 >= smax[I]
+        if smin[I] <= s_val1 && s_val1 <= smax[I]
             u[pg_idx] = pg_val1
             s[I] = s_val1
         elseif lg_val2 <= 0
@@ -134,7 +134,7 @@ function generator_kernel_two_level_proxal_last(
                           (-(orig_b + prox_b) / (2*c2[I]*(baseMVA)^2 + rho[pg_idx] + tau_prox + rho_prox))))
         lg_val3 = l_prev_prox[I] + rho_prox*(pg_prev_prox[I] - pg_val3 + s_val3)
 
-        if smin[I] <= s_val1 && s_val1 >= smax[I]
+        if smin[I] <= s_val1 && s_val1 <= smax[I]
             u[pg_idx] = pg_val1
             s[I] = s_val1
         elseif lg_val2 <= 0
@@ -235,7 +235,7 @@ function generator_kernel_two_level_proxal_between(
                           (-(orig_b + prox_b) / (2*c2[I]*(baseMVA)^2 + rho[pg_idx] + tau_prox + 2*rho_prox))))
         lg_val3 = l_prev_prox[I] + rho_prox*(pg_prev_prox[I] - pg_val3 + s_val3)
 
-        if smin_prox[I] <= s_val1 && s_val1 >= smax_prox[I]
+        if smin_prox[I] <= s_val1 && s_val1 <= smax_prox[I]
             u[pg_idx] = pg_val1
             s[I] = s_val1
         elseif lg_val2 <= 0
@@ -245,6 +245,10 @@ function generator_kernel_two_level_proxal_between(
             u[pg_idx] = pg_val3
             s[I] = s_val3
         else
+            @printf("[%d] ERROR! Couldn't find a solution for generator at 1<t<T.\n", I)
+            @printf("  pg_val1 = %.6e    s_val1 = %.6e\n", pg_val1, s_val1)
+            @printf("  pg_val2 = %.6e    s_val2 = %.6e\n", pg_val2, s_val2)
+            @printf("  pg_val3 = %.6e    s_val3 = %.6e\n", pg_val3, s_val3)
             # ERROR!
         end
     end
@@ -290,7 +294,7 @@ function generator_kernel_two_level_proxal_last(
                           (-(orig_b + prox_b) / (2*c2[I]*(baseMVA)^2 + rho[pg_idx] + tau_prox + rho_prox))))
         lg_val3 = l_prev_prox[I] + rho_prox*(pg_prev_prox[I] - pg_val3 + s_val3)
 
-        if smin_prox[I] <= s_val1 && s_val1 >= smax_prox[I]
+        if smin_prox[I] <= s_val1 && s_val1 <= smax_prox[I]
             u[pg_idx] = pg_val1
             s[I] = s_val1
         elseif lg_val2 <= 0
@@ -300,8 +304,14 @@ function generator_kernel_two_level_proxal_last(
             u[pg_idx] = pg_val3
             s[I] = s_val3
         else
+            @printf("[%d] ERROR! Couldn't find a solution for generator at t=T.\n", I)
+            @printf("  pg_val1 = %.6e    s_val1 = %.6e\n", pg_val1, s_val1)
+            @printf("  pg_val2 = %.6e    s_val2 = %.6e\n", pg_val2, s_val2)
+            @printf("  pg_val3 = %.6e    s_val3 = %.6e\n", pg_val3, s_val3)
             # ERROR!
         end
+
+#        @printf("[%d]: PG[t-1] = %.6e PG = %.6e QG = %.6e s = %.e\n", I, pg_prev_prox[I], u[pg_idx], u[qg_idx], s[I])
     end
 end
 
