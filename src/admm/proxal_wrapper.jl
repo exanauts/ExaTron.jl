@@ -24,14 +24,14 @@ mutable struct ProxALGeneratorModel{TD} <: AbstractGeneratorModel
     smax::TD         # slack's upper bound
 end
 function ProxALGeneratorModel(modelgen::GeneratorModel{TD}, t::Int, T::Int) where TD
-    pg_ref = TD(undef, modelgen.ngen)
-    pg_next = TD(undef, modelgen.ngen)
-    l_next = TD(undef, modelgen.ngen)
-    pg_prev = TD(undef, modelgen.ngen)
-    l_prev = TD(undef, modelgen.ngen)
-    s_curr = TD(undef, modelgen.ngen)
-    s_min = TD(undef, modelgen.ngen)
-    s_max = TD(undef, modelgen.ngen)
+    pg_ref  = TD(undef, modelgen.ngen)  ; fill!(pg_ref, 0.0)
+    pg_next = TD(undef, modelgen.ngen)  ; fill!(pg_next, 0.0)
+    l_next  = TD(undef, modelgen.ngen)  ; fill!(l_next, 0.0)
+    pg_prev = TD(undef, modelgen.ngen)  ; fill!(pg_prev, 0.0)
+    l_prev  = TD(undef, modelgen.ngen)  ; fill!(l_prev, 0.0)
+    s_curr  = TD(undef, modelgen.ngen)  ; fill!(s_curr, 0.0)
+    s_min   = TD(undef, modelgen.ngen)  ; fill!(s_min, 0.0)
+    s_max   = TD(undef, modelgen.ngen)  ; fill!(s_max, 0.0)
     return ProxALGeneratorModel{TD}(
         modelgen.ngen, modelgen.gen_start,
         modelgen.pgmin, modelgen.pgmax, modelgen.qgmin, modelgen.qgmax, modelgen.c2, modelgen.c1, modelgen.c0,

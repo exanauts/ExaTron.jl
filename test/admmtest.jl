@@ -96,11 +96,3 @@ end
     # Test restart API
     ExaTron.admm_restart!(env)
 end
-
-@testset "ProxAL wrapper" begin
-    data = ExaTron.opf_loaddata(CASE)
-    t, T = 1, 2
-    rho_pq, rho_va = 1000.0, 1000.0
-    env = ExaTron.ProxALAdmmEnv(data, Array, t, T, rho_pq, rho_va)
-    @test isa(env, ExaTron.AdmmEnv)
-end
