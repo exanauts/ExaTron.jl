@@ -73,7 +73,7 @@ end
     # than the one level algorithm.
     env = ExaTron.admm_rect_gpu_two_level(
         CASE;
-        verbose=1, rho_pq=1000.0, rho_va=1000.0, inner_iterlim=2000, outer_iterlim=1500, outer_eps=1e-6
+        verbose=0, rho_pq=1000.0, rho_va=1000.0, inner_iterlim=2000, outer_iterlim=1500, outer_eps=1e-6
     )
     @test isa(env, ExaTron.AdmmEnv)
 
@@ -97,3 +97,10 @@ end
     ExaTron.admm_restart!(env)
 end
 
+@testset "ProxAL wrapper" begin
+    data = ExaTron.opf_loaddata(CASE)
+    t, T = 1, 2
+    rho_pq, rho_va = 1000.0, 1000.0
+    env = ExaTron.ProxALAdmmEnv(data, Array, t, T, rho_pq, rho_va)
+    @test isa(env, ExaTron.AdmmEnv)
+end

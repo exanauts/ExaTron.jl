@@ -70,33 +70,6 @@ struct GeneratorModel{TD} <: AbstractGeneratorModel
     c0::TD
 end
 
-struct ProxALGeneratorModel{TD} <: AbstractGeneratorModel
-    ngen::Int
-    gen_start::Int
-    pgmin::TD
-    pgmax::TD
-    qgmin::TD
-    qgmax::TD
-    c2::TD
-    c1::TD
-    c0::TD
-
-    t_curr::Int      # current time period
-    T::Int           # size of time horizon
-    tau::Float64     # penalty for proximal term
-    rho::Float64     # penalty for ramping equality
-    pg_ref::TD       # proximal term
-    pg_next::TD      # primal value for (t+1) time period
-    l_next::TD       # dual (for ramping) value for (t-1) time period
-    pg_prev::TD      # primal value for (t+1) time period
-    l_prev::TD       # dual (for ramping) value for (t-1) time period
-    s_curr::TD       # slack for ramping
-
-    function ProxALGeneratorModel{TD}() where {TD}
-        return new{TD}()
-    end
-end
-
 """
     Model{T,TD,TI}
 
@@ -412,13 +385,9 @@ mutable struct AdmmEnv{T,TD,TI,TM}
 end
 
 function AdmmEnv(case::String, ::Type{VT}, rho_pq, rho_va; options...) where VT
-    use_gpu = VT <: CuArray
     opfdata = opf_loaddata(case)
-    env =  AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
-        opfdata, rho_pq, rho_va; use_gpu=use_gpu, options...
-    )
+    env = AdmmEnv(opfdata, VT, rho_pq, rho_va; options...)
     env.case = case
-
     return env
 end
 
@@ -429,6 +398,7 @@ function AdmmEnv(opfdata::OPFData, ::Type{VT}, rho_pq, rho_va; options...) where
     )
 end
 
+# Getters / setters
 active_power_generation(env::AdmmEnv) = active_power_generation(env.model, env.solution)
 reactive_power_generation(env::AdmmEnv) = reactive_power_generation(env.model, env.solution)
 

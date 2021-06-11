@@ -46,6 +46,7 @@ include("driver.jl")
 
 include("admm/opfdata.jl")
 include("admm/environment.jl")
+include("admm/proxal_wrapper.jl")
 include("admm/bus_kernel.jl")
 include("admm/generator_kernel.jl")
 include("admm/generator_kernel_proxal.jl")
