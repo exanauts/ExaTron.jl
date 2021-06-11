@@ -56,21 +56,11 @@ mutable struct Parameters
     end
 end
 
-"""
-    Model{T,TD,TI}
+abstract type AbstractGeneratorModel end
 
-This contains the parameters specific to ACOPF model instance.
-"""
-mutable struct Model{T,TD,TI}
-    n::Int
+struct GeneratorModel{TD} <: AbstractGeneratorModel
     ngen::Int
-    nline::Int
-    nbus::Int
-    nvar::Int
-
     gen_start::Int
-    line_start::Int
-
     pgmin::TD
     pgmax::TD
     qgmin::TD
@@ -78,6 +68,49 @@ mutable struct Model{T,TD,TI}
     c2::TD
     c1::TD
     c0::TD
+end
+
+struct ProxALGeneratorModel{TD} <: AbstractGeneratorModel
+    ngen::Int
+    gen_start::Int
+    pgmin::TD
+    pgmax::TD
+    qgmin::TD
+    qgmax::TD
+    c2::TD
+    c1::TD
+    c0::TD
+
+    t_curr::Int      # current time period
+    T::Int           # size of time horizon
+    tau::Float64     # penalty for proximal term
+    rho::Float64     # penalty for ramping equality
+    pg_ref::TD       # proximal term
+    pg_next::TD      # primal value for (t+1) time period
+    l_next::TD       # dual (for ramping) value for (t-1) time period
+    pg_prev::TD      # primal value for (t+1) time period
+    l_prev::TD       # dual (for ramping) value for (t-1) time period
+    s_curr::TD       # slack for ramping
+
+    function ProxALGeneratorModel{TD}() where {TD}
+        return new{TD}()
+    end
+end
+
+"""
+    Model{T,TD,TI}
+
+This contains the parameters specific to ACOPF model instance.
+"""
+mutable struct Model{T,TD,TI}
+    n::Int
+    nline::Int
+    nbus::Int
+    nvar::Int
+
+    line_start::Int
+
+    gen_mod::AbstractGeneratorModel
     YshR::TD
     YshI::TD
     YffR::TD
@@ -108,21 +141,23 @@ mutable struct Model{T,TD,TI}
     function Model{T,TD,TI}(data::OPFData, use_gpu::Bool, use_polar::Bool, use_twolevel::Bool) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
         model = new{T,TD,TI}()
 
+        ngen = length(data.generators)
+        gen_start = 1
+        pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data; use_gpu=use_gpu)
+        model.gen_mod = GeneratorModel{TD}(ngen, gen_start, pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
+
         model.n = (use_polar == true) ? 4 : 10
-        model.ngen = length(data.generators)
         model.nline = length(data.lines)
         model.nbus = length(data.buses)
-        model.nvar = 2*model.ngen + 8*model.nline
-        model.gen_start = 1
-        model.line_start = 2*model.ngen + 1
-        model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1, model.c0 = get_generator_data(data; use_gpu=use_gpu)
+        model.nvar = 2*ngen + 8*model.nline
+        model.line_start = 2*ngen + 1
         model.YshR, model.YshI, model.YffR, model.YffI, model.YftR, model.YftI, model.YttR, model.YttI, model.YtfR, model.YtfI, model.FrBound, model.ToBound = get_branch_data(data; use_gpu=use_gpu)
         model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd = get_bus_data(data; use_gpu=use_gpu)
 
         # These are only for two-level ADMM.
-        model.nvar_u = 2*model.ngen + 8*model.nline
-        model.nvar_v = 2*model.ngen + 4*model.nline + 2*model.nbus
-        model.bus_start = 2*model.ngen + 4*model.nline + 1
+        model.nvar_u = 2*ngen + 8*model.nline
+        model.nvar_v = 2*ngen + 4*model.nline + 2*model.nbus
+        model.bus_start = 2*ngen + 4*model.nline + 1
         if use_twolevel
             model.nvar = model.nvar_u + model.nvar_v
             model.brBusIdx = get_branch_bus_index(data; use_gpu=use_gpu)
@@ -153,7 +188,7 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
     objval::T
 
     function SolutionOneLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
-        return new{T,TD}(
+        sol = new{T,TD}(
             INITIAL,
             TD(undef, model.nvar),
             TD(undef, model.nvar),
@@ -166,6 +201,18 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
             TD(undef, model.nvar),
             Inf,
         )
+
+        sol.u_curr .= 0.0
+        sol.v_curr .= 0.0
+        sol.l_curr .= 0.0
+        sol.u_prev .= 0.0
+        sol.v_prev .= 0.0
+        sol.l_prev .= 0.0
+        sol.rho .= 0.0
+        sol.rd .= 0.0
+        sol.rp .= 0.0
+
+        return sol
     end
 end
 
@@ -231,7 +278,7 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
     objval::T
 
     function SolutionTwoLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
-        return new{T,TD}(
+        sol = new{T,TD}(
             INITIAL,
             TD(undef, model.nvar),      # x_curr
             TD(undef, model.nvar_v),    # xbar_curr
@@ -248,6 +295,21 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
             TD(undef, 2*model.nline),   # wRIij
             Inf,
         )
+        sol.x_curr .= 0.0
+        sol.xbar_curr .= 0.0
+        sol.z_outer .= 0.0
+        sol.z_curr .= 0.0
+        sol.z_prev .= 0.0
+        sol.l_curr .= 0.0
+        sol.lz .= 0.0
+        sol.rho .= 0.0
+        sol.rp .= 0.0
+        sol.rd .= 0.0
+        sol.rp_old .= 0.0
+        sol.Ax_plus_By .= 0.0
+        sol.wRIij .= 0.0
+
+        return sol
     end
 end
 
