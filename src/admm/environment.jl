@@ -217,11 +217,11 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
 end
 
 function active_power_generation(model::Model, sol::SolutionOneLevel)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     return sol.u_curr[1:2:2*ngen]
 end
 function reactive_power_generation(model::Model, sol::SolutionOneLevel)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     return sol.u_curr[2:2:2*ngen]
 end
 function voltage_magnitude(model::Model, sol::SolutionOneLevel)
@@ -234,16 +234,16 @@ function voltage_angle(model::Model, sol::SolutionOneLevel)
 end
 
 function set_active_power_generation!(model::Model, sol::SolutionOneLevel, val)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     for g in 1:ngen
-        pg_idx = model.gen_start + 2 * (g-1)
+        pg_idx = model.gen_mod.gen_start + 2 * (g-1)
         @inbounds sol.v_curr[pg_idx] = val[g]
     end
 end
 function set_reactive_power_generation!(model::Model, sol::SolutionOneLevel, val)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     for g in 1:ngen
-        pg_idx = model.gen_start + 2 * (g-1)
+        pg_idx = model.gen_mod.gen_start + 2 * (g-1)
         @inbounds sol.v_curr[pg_idx+1] = val[g]
     end
 end
@@ -314,11 +314,11 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
 end
 
 function active_power_generation(model::Model, sol::SolutionTwoLevel)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     return sol.xbar_curr[1:2:2*ngen]
 end
 function reactive_power_generation(model::Model, sol::SolutionTwoLevel)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     return sol.xbar_curr[2:2:2*ngen]
 end
 function voltage_magnitude(model::Model, sol::SolutionTwoLevel)
@@ -332,16 +332,16 @@ function voltage_angle(model::Model, sol::SolutionTwoLevel)
 end
 
 function set_active_power_generation!(model::Model, sol::SolutionTwoLevel, val)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     for g in 1:ngen
-        pg_idx = model.gen_start + 2 * (g-1)
+        pg_idx = model.gen_mod.gen_start + 2 * (g-1)
         @inbounds sol.xbar_curr[pg_idx] = val[g]
     end
 end
 function set_reactive_power_generation!(model::Model, sol::SolutionTwoLevel, val)
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
     for g in 1:ngen
-        pg_idx = model.gen_start + 2 * (g-1)
+        pg_idx = model.gen_mod.gen_start + 2 * (g-1)
         @inbounds sol.xbar_curr[pg_idx+1] = val[g]
     end
 end

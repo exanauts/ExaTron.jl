@@ -798,8 +798,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
     end
     end
 
-    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*xbar_curr[mod.gen_start+2*(g-1)])^2 +
-                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*xbar_curr[mod.gen_start+2*(g-1)]) +
+    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*xbar_curr[mod.gen_mod.gen_start+2*(g-1)])^2 +
+                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*xbar_curr[mod.gen_mod.gen_start+2*(g-1)]) +
                 data.generators[g].coeff[data.generators[g].n]
                 for g in 1:mod.gen_mod.ngen)
 
@@ -839,7 +839,6 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
     return
 end
 
-
 function admm_rect_gpu_two_level(
     case::String;
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
@@ -847,15 +846,13 @@ function admm_rect_gpu_two_level(
 )
     if use_gpu
         CUDA.device!(gpu_no)
-
-        env = AdmmEnv{Float64, CuArray{Float64, 1}, CuArray{Int, 1}, CuArray{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
-        )
+        VT = CuArray
     else
-        env = AdmmEnv{Float64, Array{Float64, 1}, Array{Int, 1}, Array{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
-        )
+        VT = Array
     end
+    env = AdmmEnv(
+        case, VT, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+    )
     admm_restart!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
 end

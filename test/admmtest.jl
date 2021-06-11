@@ -24,9 +24,10 @@ end
 
     @testset "AdmmEnv.Model" begin
         model = env.model
-        ngen = model.ngen
-        @test length(model.pgmin) == length(model.pgmax) == length(model.qgmin) == length(model.qgmax) == ngen
-        @test length(model.c2) == length(model.c1) == length(model.c0) == ngen
+        gen_model = model.gen_mod
+        ngen = gen_model.ngen
+        @test length(gen_model.pgmin) == length(gen_model.pgmax) == length(gen_model.qgmin) == length(gen_model.qgmax) == ngen
+        @test length(gen_model.c2) == length(gen_model.c1) == length(gen_model.c0) == ngen
 
         nlines = model.nline
         @test length(model.FrBound) == length(model.ToBound) == 2 * nlines
@@ -43,11 +44,11 @@ end
 @testset "One-level ADMM algorithm" begin
     # NB: Need to run almost 2,000 iterations to reach convergence with this
     # set of parameters.
-    env = ExaTron.admm_rect_gpu(CASE, Array; verbose=0, iterlim=2000, rho_pq=400.0, rho_va=40000.0)
+    env = ExaTron.admm_rect_gpu(CASE; verbose=0, iterlim=2000, rho_pq=400.0, rho_va=40000.0)
     @test isa(env, ExaTron.AdmmEnv)
 
     model = env.model
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
 
     par = env.params
     sol = env.solution
@@ -71,13 +72,13 @@ end
     # than the one-level algorithm, so it is expected to be less accurate
     # than the one level algorithm.
     env = ExaTron.admm_rect_gpu_two_level(
-        CASE, Array;
+        CASE;
         verbose=1, rho_pq=1000.0, rho_va=1000.0, inner_iterlim=2000, outer_iterlim=1500, outer_eps=1e-6
     )
     @test isa(env, ExaTron.AdmmEnv)
 
     model = env.model
-    ngen = model.ngen
+    ngen = model.gen_mod.ngen
 
     par = env.params
     sol = env.solution

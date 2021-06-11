@@ -411,16 +411,12 @@ function admm_rect_gpu(case::String; iterlim=800, rho_pq=400.0, rho_va=40000.0, 
                        use_gpu=false, use_polar=true, gpu_no=0, verbose=1)
     if use_gpu
         CUDA.device!(gpu_no)
-
-        env = AdmmEnv{Float64, CuArray{Float64, 1}, CuArray{Int, 1}, CuArray{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
-        )
+        VT = CuArray
     else
-        env = AdmmEnv{Float64, Array{Float64, 1}, Array{Int, 1}, Array{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
-        )
+        VT = Array
     end
 
+    env = AdmmEnv(case, VT, rho_pq, rho_va; use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,)
     admm_restart!(env, iterlim=iterlim, scale=scale)
     return env
 end
