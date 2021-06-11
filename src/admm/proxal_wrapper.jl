@@ -47,6 +47,10 @@ function ProxALAdmmEnv(opfdata::OPFData, ::Type{VT}, t, T, rho_pq, rho_va; optio
     return env
 end
 
+# GETTERS
+slack_values(env::AdmmEnv) = env.model.gen_mod.s_curr
+
+# SETTERS
 macro define_setter_array(function_name, attribute)
     fname = Symbol(function_name)
     quote
