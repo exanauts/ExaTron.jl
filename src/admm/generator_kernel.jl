@@ -46,21 +46,21 @@ function generator_kernel(
 end
 
 function generator_kernel(
-    gen_mod::GeneratorModel{CuArray{Float64,1}},
+    model::Model{Float64,CuArray{Float64,1},CuArray{Int,1}},
     baseMVA::Float64, u, v, l, rho
 )
-    nblk = div(gen_mod.ngen, 32, RoundUp)
-    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk generator_kernel(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
+    nblk = div(model.ngen, 32, RoundUp)
+    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk generator_kernel(baseMVA, model.ngen, model.gen_start,
+                u, v, l, rho, model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1)
     return tgpu
 end
 
 function generator_kernel(
-    gen_mod::GeneratorModel{Array{Float64,1}},
+    model::Model{Float64,Array{Float64,1},Array{Int,1}},
     baseMVA::Float64, u, v, l, rho
 )
-    tcpu = @timed generator_kernel(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
+    tcpu = @timed generator_kernel(baseMVA, model.ngen, model.gen_start,
+                u, v, l, rho, model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1)
     return tcpu
 end
 
@@ -110,21 +110,21 @@ function generator_kernel_two_level(
 end
 
 function generator_kernel_two_level(
-    gen_mod::GeneratorModel{CuArray{Float64,1}},
+    model::Model{Float64,CuArray{Float64,1},CuArray{Int,1}},
     baseMVA::Float64, u::CuArray{Float64,1}, xbar::CuArray{Float64,1},
     zu::CuArray{Float64,1}, lu::CuArray{Float64,1}, rho_u::CuArray{Float64,1}
 )
-    nblk = div(gen_mod.ngen, 32, RoundUp)
-    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk generator_kernel_two_level(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
+    nblk = div(model.ngen, 32, RoundUp)
+    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk generator_kernel_two_level(baseMVA, model.ngen, model.gen_start,
+                u, xbar, zu, lu, rho_u, model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1)
     return tgpu
 end
 
 function generator_kernel_two_level(
-    gen_mod::GeneratorModel{Array{Float64,1}},
+    model::Model{Float64,Array{Float64,1},Array{Int,1}},
     baseMVA::Float64, u, xbar, zu, lu, rho_u
 )
-    tcpu = @timed generator_kernel_two_level(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
+    tcpu = @timed generator_kernel_two_level(baseMVA, model.ngen, model.gen_start,
+                u, xbar, zu, lu, rho_u, model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1)
     return tcpu
 end

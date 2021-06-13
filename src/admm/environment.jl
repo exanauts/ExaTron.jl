@@ -50,21 +50,9 @@ mutable struct Parameters
     end
 end
 
-abstract type AbstractGeneratorModel end
-
-struct GeneratorModel{TD} <: AbstractGeneratorModel
-    ngen::Int
-    gen_start::Int
-    pgmin::TD
-    pgmax::TD
-    qgmin::TD
-    qgmax::TD
-    c2::TD
-    c1::TD
-    c0::TD
-end
-
+#=
 struct ProxALGeneratorModel{TD} <: AbstractGeneratorModel
+    model::AbstractOPFModel
     ngen::Int
     gen_start::Int
     pgmin::TD
@@ -90,76 +78,7 @@ struct ProxALGeneratorModel{TD} <: AbstractGeneratorModel
         return new{TD}()
     end
 end
-
-"""
-    Model{T,TD,TI}
-
-This contains the parameters specific to ACOPF model instance.
-"""
-mutable struct Model{T,TD,TI}
-    n::Int
-    nline::Int
-    nbus::Int
-    nvar::Int
-
-    line_start::Int
-
-    gen_mod::AbstractGeneratorModel
-    YshR::TD
-    YshI::TD
-    YffR::TD
-    YffI::TD
-    YftR::TD
-    YftI::TD
-    YttR::TD
-    YttI::TD
-    YtfR::TD
-    YtfI::TD
-    FrBound::TD
-    ToBound::TD
-    FrStart::TI
-    FrIdx::TI
-    ToStart::TI
-    ToIdx::TI
-    GenStart::TI
-    GenIdx::TI
-    Pd::TD
-    Qd::TD
-
-    # Two-Level ADMM
-    nvar_u::Int
-    nvar_v::Int
-    bus_start::Int # this is for varibles of type v.
-    brBusIdx::TI
-
-    function Model{T,TD,TI}(data::OPFData, use_gpu::Bool, use_polar::Bool, use_twolevel::Bool) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
-        model = new{T,TD,TI}()
-
-        ngen = length(data.generators)
-        gen_start = 1
-        pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data; use_gpu=use_gpu)
-        model.gen_mod = GeneratorModel{TD}(ngen, gen_start, pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
-
-        model.n = (use_polar == true) ? 4 : 10
-        model.nline = length(data.lines)
-        model.nbus = length(data.buses)
-        model.nvar = 2*ngen + 8*model.nline
-        model.line_start = 2*ngen + 1
-        model.YshR, model.YshI, model.YffR, model.YffI, model.YftR, model.YftI, model.YttR, model.YttI, model.YtfR, model.YtfI, model.FrBound, model.ToBound = get_branch_data(data; use_gpu=use_gpu)
-        model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd = get_bus_data(data; use_gpu=use_gpu)
-
-        # These are only for two-level ADMM.
-        model.nvar_u = 2*ngen + 8*model.nline
-        model.nvar_v = 2*ngen + 4*model.nline + 2*model.nbus
-        model.bus_start = 2*ngen + 4*model.nline + 1
-        if use_twolevel
-            model.nvar = model.nvar_u + model.nvar_v
-            model.brBusIdx = get_branch_bus_index(data; use_gpu=use_gpu)
-        end
-
-        return model
-    end
-end
+=#
 
 abstract type AbstractSolution{T,TD} end
 
@@ -180,17 +99,17 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
     rp::TD
     objval::T
 
-    function SolutionOneLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
+    function SolutionOneLevel{T,TD}(nvar::Int) where {T, TD<:AbstractArray{T}}
         sol = new{T,TD}(
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
             Inf,
         )
 
@@ -230,21 +149,21 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
     wRIij::TD
     objval::T
 
-    function SolutionTwoLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
+    function SolutionTwoLevel{T,TD}(nvar::Int, nvar_v::Int, nline::Int) where {T, TD<:AbstractArray{T}}
         sol = new{T,TD}(
-            TD(undef, model.nvar),      # x_curr
-            TD(undef, model.nvar_v),    # xbar_curr
-            TD(undef, model.nvar),      # z_outer
-            TD(undef, model.nvar),      # z_curr
-            TD(undef, model.nvar),      # z_prev
-            TD(undef, model.nvar),      # l_curr
-            TD(undef, model.nvar),      # lz
-            TD(undef, model.nvar),      # rho
-            TD(undef, model.nvar),      # rp
-            TD(undef, model.nvar),      # rd
-            TD(undef, model.nvar),      # rp_old
-            TD(undef, model.nvar),      # Ax_plus_By
-            TD(undef, 2*model.nline),   # wRIij
+            TD(undef, nvar),      # x_curr
+            TD(undef, nvar_v),    # xbar_curr
+            TD(undef, nvar),      # z_outer
+            TD(undef, nvar),      # z_curr
+            TD(undef, nvar),      # z_prev
+            TD(undef, nvar),      # l_curr
+            TD(undef, nvar),      # lz
+            TD(undef, nvar),      # rho
+            TD(undef, nvar),      # rp
+            TD(undef, nvar),      # rd
+            TD(undef, nvar),      # rp_old
+            TD(undef, nvar),      # Ax_plus_By
+            TD(undef, 2*nline),   # wRIij
             Inf,
         )
         sol.x_curr .= 0.0
@@ -265,12 +184,100 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
     end
 end
 
+abstract type AbstractOPFModel{T,TD,TI} end
+
+"""
+    Model{T,TD,TI}
+
+This contains the parameters specific to ACOPF model instance.
+"""
+mutable struct Model{T,TD,TI} <: AbstractOPFModel{T,TD,TI}
+    solution::AbstractSolution{T,TD}
+
+    n::Int
+    ngen::Int
+    nline::Int
+    nbus::Int
+    nvar::Int
+
+    gen_start::Int
+    line_start::Int
+
+    baseMVA::T
+    pgmin::TD
+    pgmax::TD
+    qgmin::TD
+    qgmax::TD
+    c2::TD
+    c1::TD
+    c0::TD
+    YshR::TD
+    YshI::TD
+    YffR::TD
+    YffI::TD
+    YftR::TD
+    YftI::TD
+    YttR::TD
+    YttI::TD
+    YtfR::TD
+    YtfI::TD
+    FrBound::TD
+    ToBound::TD
+    FrStart::TI
+    FrIdx::TI
+    ToStart::TI
+    ToIdx::TI
+    GenStart::TI
+    GenIdx::TI
+    Pd::TD
+    Qd::TD
+
+    # Two-Level ADMM
+    nvar_u::Int
+    nvar_v::Int
+    bus_start::Int # this is for varibles of type v.
+    brBusIdx::TI
+
+    function Model{T,TD,TI}(data::OPFData, use_gpu::Bool, use_polar::Bool, use_twolevel::Bool) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
+        model = new{T,TD,TI}()
+
+        model.baseMVA = data.baseMVA
+        model.n = (use_polar == true) ? 4 : 10
+        model.ngen = length(data.generators)
+        model.nline = length(data.lines)
+        model.nbus = length(data.buses)
+        model.nvar = 2*model.ngen + 8*model.nline
+        model.gen_start = 1
+        model.line_start = 2*model.ngen + 1
+        model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1, model.c0 = get_generator_data(data; use_gpu=use_gpu)
+        model.YshR, model.YshI, model.YffR, model.YffI, model.YftR, model.YftI, model.YttR, model.YttI, model.YtfR, model.YtfI, model.FrBound, model.ToBound = get_branch_data(data; use_gpu=use_gpu)
+        model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd = get_bus_data(data; use_gpu=use_gpu)
+
+        # These are only for two-level ADMM.
+        model.nvar_u = 2*model.ngen + 8*model.nline
+        model.nvar_v = 2*model.ngen + 4*model.nline + 2*model.nbus
+        model.bus_start = 2*model.ngen + 4*model.nline + 1
+        if use_twolevel
+            model.nvar = model.nvar_u + model.nvar_v
+            model.brBusIdx = get_branch_bus_index(data; use_gpu=use_gpu)
+        end
+
+        model.solution = ifelse(use_twolevel,
+            SolutionTwoLevel{T,TD}(model.nvar, model.nvar_v, model.nline),
+            SolutionOneLevel{T,TD}(model.nvar))
+
+        return model
+    end
+end
+
+abstract type AbstractAdmmEnv{T,TD,TI,TM} end
+
 """
     AdmmEnv{T,TD,TI}
 
 This structure carries everything required to run ADMM from a given solution.
 """
-mutable struct AdmmEnv{T,TD,TI,TM}
+mutable struct AdmmEnv{T,TD,TI,TM} <: AbstractAdmmEnv{T,TD,TI,TM}
     case::String
     data::OPFData
     use_gpu::Bool
@@ -279,9 +286,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     gpu_no::Int
 
     params::Parameters
-    model::Model{T,TD,TI}
-    solution::AbstractSolution{T,TD}
-
+    model::AbstractOPFModel{T,TD,TI}
     membuf::TM # was param
 
     function AdmmEnv{T,TD,TI,TM}(
@@ -294,6 +299,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         env.use_gpu = use_gpu
         env.use_polar = use_polar
         env.gpu_no = gpu_no
+        env.use_twolevel = use_twolevel
 
         env.params = Parameters()
         env.params.verbose = verbose
@@ -302,10 +308,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         ybus = Ybus{Array{T}}(computeAdmitances(
             env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
-        env.solution = ifelse(use_twolevel,
-            SolutionTwoLevel{T,TD}(env.model),
-            SolutionOneLevel{T,TD}(env.model))
-        init_solution!(env, env.solution, ybus, rho_pq, rho_va)
+        init_solution!(env, env.model.solution, ybus, rho_pq, rho_va)
 
         env.membuf = TM(undef, (31, env.model.nline))
         fill!(env.membuf, 0.0)
