@@ -11,13 +11,10 @@ CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
 end
 
 @testset "AdmmEnv" begin
+    use_gpu = false
     rho_pq = 1.0
     rho_va = 1.0
-    T = Float64
-    VI = Vector{Int}
-    VT = Vector{Float64}
-    MT = Matrix{Float64}
-    env = ExaTron.AdmmEnv(CASE, Array, rho_pq, rho_va)
+    env = ExaTron.AdmmEnv(CASE, use_gpu, rho_pq, rho_va)
 
     @test env.case == CASE
     @test env.solution.status == ExaTron.INITIAL

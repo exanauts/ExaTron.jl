@@ -384,11 +384,18 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     end
 end
 
-function AdmmEnv(case::String, ::Type{VT}, rho_pq, rho_va; options...) where VT
+function AdmmEnv(case::String, use_gpu::Bool, rho_pq, rho_va; options...)
     opfdata = opf_loaddata(case)
-    env = AdmmEnv(opfdata, VT, rho_pq, rho_va; options...)
+    env = AdmmEnv(opfdata, use_gpu, rho_pq, rho_va; options...)
     env.case = case
     return env
+end
+
+function AdmmEnv(opfdata::OPFData, use_gpu::Bool, rho_pq, rho_va; options...)
+    VT = use_gpu ? CuArray : Array
+    return AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
+        opfdata, rho_pq, rho_va; use_gpu=use_gpu, options...
+    )
 end
 
 function AdmmEnv(opfdata::OPFData, ::Type{VT}, rho_pq, rho_va; options...) where VT

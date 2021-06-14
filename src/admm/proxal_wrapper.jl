@@ -39,8 +39,8 @@ function ProxALGeneratorModel(modelgen::GeneratorModel{TD}, t::Int, T::Int) wher
     )
 end
 
-function ProxALAdmmEnv(opfdata::OPFData, ::Type{VT}, t, T, rho_pq, rho_va; options...) where VT
-    env = AdmmEnv(opfdata, VT, rho_pq, rho_va; options...)
+function ProxALAdmmEnv(opfdata::OPFData, use_gpu::Bool, t, T, rho_pq, rho_va; options...)
+    env = AdmmEnv(opfdata, use_gpu, rho_pq, rho_va; options...)
     model = env.model
     # Replace generator's model by ProxAL model
     env.model.gen_mod = ProxALGeneratorModel(env.model.gen_mod, t, T)

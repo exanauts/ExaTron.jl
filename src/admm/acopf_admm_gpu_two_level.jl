@@ -625,7 +625,6 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
     # Return status
     status = INITIAL
 
-    @time begin
     while outer < outer_iterlim
         outer += 1
 
@@ -799,7 +798,6 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             beta = min(c*beta, 1e24)
         end
     end
-    end
 
     sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*xbar_curr[mod.gen_mod.gen_start+2*(g-1)])^2 +
                 data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*xbar_curr[mod.gen_mod.gen_start+2*(g-1)]) +
@@ -847,14 +845,8 @@ function admm_rect_gpu_two_level(
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
     use_gpu=false, use_polar=true, gpu_no=0, verbose=1, outer_eps=2e-4
 )
-    if use_gpu
-        CUDA.device!(gpu_no)
-        VT = CuArray
-    else
-        VT = Array
-    end
     env = AdmmEnv(
-        case, VT, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+        case, use_gpu, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
     )
     admm_restart!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
