@@ -24,6 +24,7 @@ function generator_kernel_two_level_proxal_first(
                         min(qgmax[I],
                             (-(l[qg_idx] + rho[qg_idx]*(-x[qg_idx] + z[qg_idx]))) / rho[qg_idx]))
     end
+    return
 end
 
 function generator_kernel_two_level_proxal_between(
@@ -73,7 +74,7 @@ function generator_kernel_two_level_proxal_between(
                           (-(orig_b + prox_b) / (2*c2[I]*(baseMVA)^2 + rho[pg_idx] + tau_prox + 2*rho_prox))))
         lg_val3 = l_prev_prox[I] + rho_prox*(pg_prev_prox[I] - pg_val3 + s_val3)
 
-        if smin[I] <= s_val1 && s_val1 <= smax[I]
+        if smin_prox[I] <= s_val1 && s_val1 <= smax_prox[I]
             u[pg_idx] = pg_val1
             s[I] = s_val1
         elseif lg_val2 <= 0
@@ -86,6 +87,7 @@ function generator_kernel_two_level_proxal_between(
             # ERROR!
         end
     end
+    return
 end
 
 function generator_kernel_two_level_proxal_last(
@@ -134,7 +136,7 @@ function generator_kernel_two_level_proxal_last(
                           (-(orig_b + prox_b) / (2*c2[I]*(baseMVA)^2 + rho[pg_idx] + tau_prox + rho_prox))))
         lg_val3 = l_prev_prox[I] + rho_prox*(pg_prev_prox[I] - pg_val3 + s_val3)
 
-        if smin[I] <= s_val1 && s_val1 <= smax[I]
+        if smin_prox[I] <= s_val1 && s_val1 <= smax_prox[I]
             u[pg_idx] = pg_val1
             s[I] = s_val1
         elseif lg_val2 <= 0
@@ -147,6 +149,7 @@ function generator_kernel_two_level_proxal_last(
             # ERROR!
         end
     end
+    return
 end
 
 function generator_kernel_two_level(

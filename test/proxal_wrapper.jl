@@ -1,4 +1,5 @@
 
+using CUDA
 using Test
 using LinearAlgebra
 
@@ -17,12 +18,14 @@ LOADS = Dict(
     )
 )
 
-@testset "ProxAL wrapper" begin
-    use_gpu = false
+USE_GPUS = [false]
+has_cuda_gpu() && push!(USE_GPUS, true)
+
+@testset "ProxAL wrapper (CUDA=$use_gpu)" for use_gpu in USE_GPUS
     data = ExaTron.opf_loaddata(CASE)
     t, T = 2, 2
     rho_pq, rho_va = 400.0, 40000.0
-    env = ExaTron.ProxALAdmmEnv(data, use_gpu, t, T, rho_pq, rho_va; use_twolevel=true)
+    env = ExaTron.ProxALAdmmEnv(data, use_gpu, t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
     @test isa(env, ExaTron.AdmmEnv)
     @test isa(env.model.gen_mod, ExaTron.ProxALGeneratorModel)
 
