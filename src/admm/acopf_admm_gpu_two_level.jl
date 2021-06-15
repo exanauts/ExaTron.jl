@@ -557,10 +557,6 @@ function update_rho(rho, rp, rp_old, theta, gamma)
 end
 
 function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
-    if env.use_gpu
-        CUDA.device!(env.gpu_no)
-    end
-
     data, par, mod = env.data, env.params, env.model
 
     # -------------------------------------------------------------------

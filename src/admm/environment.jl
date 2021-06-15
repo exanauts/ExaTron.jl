@@ -354,9 +354,12 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     membuf::TM # was param
 
     function AdmmEnv{T,TD,TI,TM}(
-        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=1, verbose=1,
+        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=-1, verbose=1,
         outer_eps=2e-4,
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
+        if use_gpu && gpu_no > 0
+            CUDA.device!(gpu_no)
+        end
         env = new{T,TD,TI,TM}()
 
         env.data = opfdata
