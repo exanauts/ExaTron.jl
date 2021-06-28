@@ -795,8 +795,10 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
         end
     end
 
-    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*xbar_curr[mod.gen_mod.gen_start+2*(g-1)])^2 +
-                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*xbar_curr[mod.gen_mod.gen_start+2*(g-1)]) +
+    # Move x onto host
+    hxbar_curr = Vector(xbar_curr)
+    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(data.baseMVA*hxbar_curr[mod.gen_mod.gen_start+2*(g-1)])^2 +
+                data.generators[g].coeff[data.generators[g].n-1]*(data.baseMVA*hxbar_curr[mod.gen_mod.gen_start+2*(g-1)]) +
                 data.generators[g].coeff[data.generators[g].n]
                 for g in 1:mod.gen_mod.ngen)
 
