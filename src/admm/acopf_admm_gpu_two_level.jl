@@ -161,8 +161,8 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
 
     for g=1:ngen
         pg_idx = gen_start + 2*(g-1)
-        sol.xbar_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
-        sol.xbar_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
+        CUDA.@allowscalar sol.xbar_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
+        CUDA.@allowscalar sol.xbar_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
     end
 
     fill!(sol.wRIij, 0.0)
@@ -176,20 +176,20 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
 
         u_pij_idx = line_start + 8*(l-1)
         v_pij_idx = line_start + 4*(l-1)
-        v_curr[v_pij_idx] = u_curr[u_pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
-        v_curr[v_pij_idx+1] = u_curr[u_pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
-        v_curr[v_pij_idx+2] = u_curr[u_pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
-        v_curr[v_pij_idx+3] = u_curr[u_pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        CUDA.@allowscalar v_curr[v_pij_idx] = u_curr[u_pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        CUDA.@allowscalar v_curr[v_pij_idx+1] = u_curr[u_pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        CUDA.@allowscalar v_curr[v_pij_idx+2] = u_curr[u_pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        CUDA.@allowscalar v_curr[v_pij_idx+3] = u_curr[u_pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
 
         rho_u[u_pij_idx+4:u_pij_idx+7] .= rho_va
 
-        sol.wRIij[2*(l-1)+1] = wR0
-        sol.wRIij[2*l] = 0.0
+        CUDA.@allowscalar sol.wRIij[2*(l-1)+1] = wR0
+        CUDA.@allowscalar sol.wRIij[2*l] = 0.0
     end
 
     for b=1:nbus
-        sol.xbar_curr[bus_start + 2*(b-1)] = (buses[b].Vmax^2 + buses[b].Vmin^2) / 2
-        sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
+        CUDA.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)] = (buses[b].Vmax^2 + buses[b].Vmin^2) / 2
+        CUDA.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
     end
 
     return
