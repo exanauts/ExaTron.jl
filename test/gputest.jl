@@ -90,7 +90,7 @@ Random.seed!(0)
             @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
         end
     end
-
+#=
     @testset "dicfs" begin
         function dicfs_test(n::Int, alpha::Float64,
                             dA::CuDeviceArray{Float64},
@@ -149,6 +149,7 @@ Random.seed!(0)
             @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
         end
     end
+=#
 
     @testset "dcauchy" begin
         function dcauchy_test(n::Int,dx::CuDeviceArray{Float64},
@@ -661,6 +662,7 @@ Random.seed!(0)
         end
     end
 
+#=
     @testset "dnrm2" begin
         function dnrm2_test(n::Int, d_in::CuDeviceArray{Float64},
                             d_out::CuDeviceArray{Float64})
@@ -693,7 +695,7 @@ Random.seed!(0)
             @test norm(xnorm .- h_out) <= 1e-10
         end
     end
-
+=#
     @testset "nrm2" begin
         function nrm2_test(n::Int, d_A::CuDeviceArray{Float64}, d_out::CuDeviceArray{Float64})
             tx = threadIdx().x
@@ -878,7 +880,7 @@ Random.seed!(0)
             @test norm(sigma .- d_out) <= 1e-10
         end
     end
-
+#=
     @testset "dspcg" begin
         function dspcg_test(n::Int, delta::Float64, rtol::Float64,
                             cg_itermax::Int, dx::CuDeviceArray{Float64},
@@ -979,6 +981,7 @@ Random.seed!(0)
             @test norm(x .- h_x) <= 1e-10
         end
     end
+=#
 
     @testset "dgpnorm" begin
         function dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
@@ -1030,7 +1033,7 @@ Random.seed!(0)
             @test norm(h_v .- v) <= 1e-10
         end
     end
-
+#=
     @testset "dtron" begin
         function dtron_test(n::Int, f::Float64, frtol::Float64, fatol::Float64, fmin::Float64,
                             cgtol::Float64, cg_itermax::Int, delta::Float64, task::Int,
@@ -1382,4 +1385,5 @@ Random.seed!(0)
             @test norm(h_x .- tron.x) <= 1e-10
         end
     end
+=#
 end
