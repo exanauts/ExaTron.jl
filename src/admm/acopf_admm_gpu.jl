@@ -49,6 +49,7 @@ function get_bus_data(data::OPFData; use_gpu=false)
 
     Pd = Float64[data.buses[i].Pd for i=1:nbus]
     Qd = Float64[data.buses[i].Qd for i=1:nbus]
+    bustype = Int[data.buses[i].bustype for i=1:nbus]
 
     if use_gpu
         cuFrIdx = CuArray{Int}(undef, length(FrIdx))
@@ -59,6 +60,7 @@ function get_bus_data(data::OPFData; use_gpu=false)
         cuGenStart = CuArray{Int}(undef, length(GenStart))
         cuPd = CuArray{Float64}(undef, nbus)
         cuQd = CuArray{Float64}(undef, nbus)
+        cuBustype = CuArray{Int}(undef, nbus)
 
         copyto!(cuFrIdx, FrIdx)
         copyto!(cuToIdx, ToIdx)
@@ -68,10 +70,11 @@ function get_bus_data(data::OPFData; use_gpu=false)
         copyto!(cuGenStart, GenStart)
         copyto!(cuPd, Pd)
         copyto!(cuQd, Qd)
+        copyto!(cuBustype, bustype)
 
-        return cuFrStart,cuFrIdx,cuToStart,cuToIdx,cuGenStart,cuGenIdx,cuPd,cuQd
+        return cuFrStart,cuFrIdx,cuToStart,cuToIdx,cuGenStart,cuGenIdx,cuPd,cuQd, cuBustype
     else
-        return FrStart,FrIdx,ToStart,ToIdx,GenStart,GenIdx,Pd,Qd
+        return FrStart,FrIdx,ToStart,ToIdx,GenStart,GenIdx,Pd,Qd, bustype
     end
 end
 

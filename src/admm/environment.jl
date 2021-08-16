@@ -104,6 +104,7 @@ mutable struct Model{T,TD,TI}
     GenIdx::TI
     Pd::TD
     Qd::TD
+    bustype::TI
 
     # Two-Level ADMM
     nvar_u::Int
@@ -125,7 +126,7 @@ mutable struct Model{T,TD,TI}
         model.nvar = 2*ngen + 8*model.nline
         model.line_start = 2*ngen + 1
         model.YshR, model.YshI, model.YffR, model.YffI, model.YftR, model.YftI, model.YttR, model.YttI, model.YtfR, model.YtfI, model.FrBound, model.ToBound = get_branch_data(data; use_gpu=use_gpu)
-        model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd = get_bus_data(data; use_gpu=use_gpu)
+        model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd, model.bustype = get_bus_data(data; use_gpu=use_gpu)
 
         # These are only for two-level ADMM.
         model.nvar_u = 2*ngen + 8*model.nline
@@ -286,19 +287,77 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
     end
 end
 
-function active_power_generation(model::Model, sol::SolutionTwoLevel)
+"""
+    SolutionPowerFlow{T,TD}
+
+This contains the solutions of power flow model instance for two-level ADMM algorithm,
+including the ADMM parameter rho.
+"""
+mutable struct SolutionPowerFlow{T,TD} <: AbstractSolution{T,TD}
+    status::Status
+    x_curr::TD
+    xbar_curr::TD
+    z_outer::TD
+    z_curr::TD
+    z_prev::TD
+    l_curr::TD
+    lz::TD
+    rho::TD
+    rp::TD
+    rd::TD
+    rp_old::TD
+    Ax_plus_By::TD
+    wRIij::TD
+
+    function SolutionPowerFlow{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
+        sol = new{T,TD}(
+            INITIAL,
+            TD(undef, model.nvar),      # x_curr
+            TD(undef, model.nvar_v),    # xbar_curr
+            TD(undef, model.nvar),      # z_outer
+            TD(undef, model.nvar),      # z_curr
+            TD(undef, model.nvar),      # z_prev
+            TD(undef, model.nvar),      # l_curr
+            TD(undef, model.nvar),      # lz
+            TD(undef, model.nvar),      # rho
+            TD(undef, model.nvar),      # rp
+            TD(undef, model.nvar),      # rd
+            TD(undef, model.nvar),      # rp_old
+            TD(undef, model.nvar),      # Ax_plus_By
+            TD(undef, 2*model.nline),   # wRIij
+        )
+        sol.x_curr .= 0.0
+        sol.xbar_curr .= 0.0
+        sol.z_outer .= 0.0
+        sol.z_curr .= 0.0
+        sol.z_prev .= 0.0
+        sol.l_curr .= 0.0
+        sol.lz .= 0.0
+        sol.rho .= 0.0
+        sol.rp .= 0.0
+        sol.rd .= 0.0
+        sol.rp_old .= 0.0
+        sol.Ax_plus_By .= 0.0
+        sol.wRIij .= 0.0
+
+        return sol
+    end
+end
+
+
+function active_power_generation(model::Model, sol::Union{SolutionTwoLevel, SolutionPowerFlow})
     ngen = model.gen_mod.ngen
     return sol.xbar_curr[1:2:2*ngen]
 end
-function reactive_power_generation(model::Model, sol::SolutionTwoLevel)
+function reactive_power_generation(model::Model, sol::Union{SolutionTwoLevel, SolutionPowerFlow})
     ngen = model.gen_mod.ngen
     return sol.xbar_curr[2:2:2*ngen]
 end
-function voltage_magnitude(model::Model, sol::SolutionTwoLevel)
+function voltage_magnitude(model::Model, sol::Union{SolutionTwoLevel, SolutionPowerFlow})
     bus_start = model.bus_start
     return sol.xbar_curr[bus_start:2:bus_start-1+2*model.nbus]
 end
-function voltage_angle(model::Model, sol::SolutionTwoLevel)
+function voltage_angle(model::Model, sol::Union{SolutionTwoLevel, SolutionPowerFlow})
     bus_start = model.bus_start
     nbus = model.nbus
     return sol.xbar_curr[bus_start+1:2:bus_start-1+2*model.nbus]
@@ -354,7 +413,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     membuf::TM # was param
 
     function AdmmEnv{T,TD,TI,TM}(
-        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=-1, verbose=1,
+        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, type=:opf_one_level, gpu_no=-1, verbose=1,
         outer_eps=2e-4,
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         if use_gpu && gpu_no > 0
@@ -371,13 +430,18 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         env.params.verbose = verbose
         env.params.outer_eps = outer_eps
 
-        env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar, use_twolevel)
+        use_two_level = (type == :opf_two_level) || (type == :power_flow)
+        env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar, use_two_level)
         ybus = Ybus{Array{T}}(computeAdmitances(
             env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
-        env.solution = ifelse(use_twolevel,
-            SolutionTwoLevel{T,TD}(env.model),
-            SolutionOneLevel{T,TD}(env.model))
+        env.solution = if type == :opf_one_level
+            SolutionOneLevel{T,TD}(env.model)
+        elseif type == :opf_two_level
+            SolutionTwoLevel{T,TD}(env.model)
+        elseif type == :power_flow
+            SolutionPowerFlow{T,TD}(env.model)
+        end
         init_solution!(env, env.solution, ybus, rho_pq, rho_va)
 
         env.membuf = TM(undef, (31, env.model.nline))
@@ -411,6 +475,8 @@ end
 # Getters / setters
 active_power_generation(env::AdmmEnv) = active_power_generation(env.model, env.solution)
 reactive_power_generation(env::AdmmEnv) = reactive_power_generation(env.model, env.solution)
+voltage_magnitude(env::AdmmEnv) = voltage_magnitude(env.model, env.solution)
+voltage_angle(env::AdmmEnv) = voltage_angle(env.model, env.solution)
 
 function set_active_load!(env::AdmmEnv, pd::AbstractArray)
     @assert length(pd) == env.model.nbus
