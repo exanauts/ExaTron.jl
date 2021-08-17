@@ -143,6 +143,54 @@ function pf_update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     end
 end
 
+function pf_update_xbar_bus_kernel(
+    n::Int, line_start::Int, bus_start::Int, FrStart, FrIdx, ToStart, ToIdx, bustype,
+    u, v, xbar, zu, zv, lu, lv, rho_u, rho_v
+)
+    b = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    if b <= n
+        wi_sum = 0.0
+        ti_sum = 0.0
+        rho_wi_sum = 0.0
+        rho_ti_sum = 0.0
+
+        @inbounds begin
+            for j=FrStart[b]:FrStart[b+1]-1
+                u_pij_idx = line_start + 8*(FrIdx[j]-1)
+                wi_sum += lu[u_pij_idx+4] + rho_u[u_pij_idx+4]*(u[u_pij_idx+4] + zu[u_pij_idx+4])
+                ti_sum += lu[u_pij_idx+6] + rho_u[u_pij_idx+6]*(u[u_pij_idx+6] + zu[u_pij_idx+6])
+                rho_wi_sum += rho_u[u_pij_idx+4]
+                rho_ti_sum += rho_u[u_pij_idx+6]
+            end
+            for j=ToStart[b]:ToStart[b+1]-1
+                u_pij_idx = line_start + 8*(ToIdx[j]-1)
+                wi_sum += lu[u_pij_idx+5] + rho_u[u_pij_idx+5]*(u[u_pij_idx+5] + zu[u_pij_idx+5])
+                ti_sum += lu[u_pij_idx+7] + rho_u[u_pij_idx+7]*(u[u_pij_idx+7] + zu[u_pij_idx+7])
+                rho_wi_sum += rho_u[u_pij_idx+5]
+                rho_ti_sum += rho_u[u_pij_idx+7]
+            end
+
+            bus_cur = bus_start + 2*(b-1)
+            # Voltage magnitude
+            if bustype[bus_cur] == 1
+                wi_sum += lv[bus_cur] + rho_v[bus_cur]*(v[bus_cur] + zv[bus_cur])
+                rho_wi_sum += rho_v[bus_cur]
+                xbar[bus_cur] = wi_sum / rho_wi_sum
+            end
+
+            # Voltage angle
+            if bustype[bus_cur] != 3
+                ti_sum += lv[bus_cur+1] + rho_v[bus_cur+1]*(v[bus_cur+1] + zv[bus_cur+1])
+                rho_ti_sum += rho_v[bus_cur+1]
+                xbar[bus_cur+1] = ti_sum / rho_ti_sum
+            end
+        end
+    end
+
+    return
+end
+
 function pf_update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
     data = env.data
     lines = data.lines
@@ -196,13 +244,13 @@ function pf_compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
     end
 end
 
-function _inner_iterations!(
+# Default code
+function _inner_iteration!(
     env::AdmmEnv, data::OPFData, mod::Model, outer, xbar_curr,
     u_curr, zu_curr, lz_u, lu_curr, rho_u, rp_u,
     v_curr, zv_curr, lz_v, lv_curr, rho_v, rp_v,
     rp, rd, rp_old, l_curr, z_curr, z_prev, lz, Ax_plus_By, beta, scale, shift_lines,
 )
-
     z_prev .= z_curr
     rp_old .= rp
     tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
@@ -241,6 +289,77 @@ function _inner_iterations!(
     return InnerIterationInfo(time_bus, 0.0, time_br, primres, dualres, z_curr_norm, mismatch, eps_pri)
 end
 
+# CUDA GPU code
+# Reuse the kernel functions implemented in src/admm/acopf_admm_gpu_two_level.jl
+function _inner_iteration!(
+    env::AdmmEnv{T, TD, TI, TM}, data::OPFData, mod::Model, outer, xbar_curr,
+    u_curr, zu_curr, lz_u, lu_curr, rho_u, rp_u,
+    v_curr, zv_curr, lz_v, lv_curr, rho_v, rp_v,
+    rp, rd, rp_old, l_curr, z_curr, z_prev, lz, Ax_plus_By, beta, scale, shift_lines,
+) where {T, TD<:CuVector{T}, TI<:CuVector{Int}, TM<:CuMatrix{T}}
+    @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, z_prev, z_curr)
+    @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, rp_old, rp)
+    CUDA.synchronize()
+
+    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel_two_level(
+        mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+        u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+        shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+        mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx
+    )
+    time_br = tgpu.time
+
+    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_powerflow_two_level(
+        data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
+        rho_v, mod.YshR, mod.YshI
+    )
+    time_bus = tgpu.time
+
+    # Update xbar.
+    @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_xbar_branch_kernel(
+        mod.nline, mod.line_start, u_curr, v_curr,
+        xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v
+    )
+    @cuda threads=64 blocks=(div(mod.nbus-1, 64)+1) pf_update_xbar_bus_kernel(
+        mod.nbus, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx,
+        mod.ToStart, mod.ToIdx, mod.bustype, u_curr, v_curr, xbar_curr, zu_curr, zv_curr,
+        lu_curr, lv_curr, rho_u, rho_v
+    )
+    CUDA.synchronize()
+
+    # Update z.
+    @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) update_zu_branch_kernel(
+        mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr,
+        xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta,
+    )
+    @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) update_zv_kernel(
+        mod.nvar_v, v_curr, xbar_curr, zv_curr,
+        lv_curr, rho_v, lz_v, beta,
+    )
+    CUDA.synchronize()
+
+    # Update multiplier and residuals.
+    @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod.nvar, l_curr, z_curr, lz, beta)
+    @cuda threads=64 blocks=(div(mod.gen_mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.gen_mod.ngen, mod.gen_mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
+    @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr)
+    @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr)
+    @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, rd, z_curr, z_prev)
+    CUDA.synchronize()
+
+    CUDA.@sync @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, Ax_plus_By, rp, z_curr)
+    mismatch = CUDA.norm(Ax_plus_By)
+
+    primres = CUDA.norm(rp)
+    dualres = CUDA.norm(rd)
+    z_curr_norm = CUDA.norm(z_curr)
+    eps_pri = sqrt_d / (2500*outer)
+
+    return InnerIterationInfo(time_bus, 0.0, time_br, primres, dualres, z_curr_norm, mismatch, eps_pri)
+end
+
+# ADMM algorithm
 function admm_solve!(
     env::AdmmEnv, sol::SolutionPowerFlow{T, VT};
     outer_iterlim=1, inner_iterlim=10, scale=1e-4,
@@ -319,7 +438,8 @@ function admm_solve!(
         inner = 0
         while inner < inner_iterlim
             inner += 1
-            it = _inner_iterations!(env, data, mod, outer, xbar_curr,
+
+            it = _inner_iteration!(env, data, mod, outer, xbar_curr,
                 u_curr, zu_curr, lz_u, lu_curr, rho_u, rp_u,
                 v_curr, zv_curr, lz_v, lv_curr, rho_v, rp_v,
                 rp, rd, rp_old, l_curr, z_curr, z_prev, lz, Ax_plus_By, beta, scale, shift_lines,
