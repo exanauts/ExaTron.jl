@@ -196,7 +196,55 @@ function pf_compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
     end
 end
 
-function admm_solve!(env::AdmmEnv, sol::SolutionPowerFlow; outer_iterlim=1, inner_iterlim=10, scale=1e-4)
+function _inner_iterations!(
+    env::AdmmEnv, data::OPFData, mod::Model, outer, xbar_curr,
+    u_curr, zu_curr, lz_u, lu_curr, rho_u, rp_u,
+    v_curr, zv_curr, lz_v, lv_curr, rho_v, rp_v,
+    rp, rd, rp_old, l_curr, z_curr, z_prev, lz, Ax_plus_By, beta, scale, shift_lines,
+)
+
+    z_prev .= z_curr
+    rp_old .= rp
+    tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+        u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+        shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+        mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx
+    )
+    time_br = tcpu.time
+
+    tcpu = @timed bus_kernel_powerflow_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                            mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                            mod.Pd, mod.Qd, mod.bustype,
+                                            v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
+    time_bus = tcpu.time
+
+    pf_update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+
+    pf_update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+    zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
+
+    l_curr .= -(lz .+ beta.*z_curr)
+
+    pf_compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
+    rp_v .= v_curr .- xbar_curr .+ zv_curr
+
+    rd .= z_curr .- z_prev
+    Ax_plus_By .= rp .- z_curr
+
+    sqrt_d = sqrt(mod.nvar_u + mod.nvar_v)
+    primres = norm(rp)
+    dualres = norm(rd)
+    z_curr_norm = norm(z_curr)
+    mismatch = norm(Ax_plus_By)
+    eps_pri = sqrt_d / (2500*outer)
+
+    return InnerIterationInfo(time_bus, 0.0, time_br, primres, dualres, z_curr_norm, mismatch, eps_pri)
+end
+
+function admm_solve!(
+    env::AdmmEnv, sol::SolutionPowerFlow{T, VT};
+    outer_iterlim=1, inner_iterlim=10, scale=1e-4,
+) where {T, VT<:Array{T}}
     data, par, mod = env.data, env.params, env.model
 
     # -------------------------------------------------------------------
@@ -260,6 +308,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionPowerFlow; outer_iterlim=1, inne
     # Return status
     status = INITIAL
 
+    local it
+
     while outer < outer_iterlim
         outer += 1
 
@@ -269,42 +319,14 @@ function admm_solve!(env::AdmmEnv, sol::SolutionPowerFlow; outer_iterlim=1, inne
         inner = 0
         while inner < inner_iterlim
             inner += 1
-
-            z_prev .= z_curr
-            rp_old .= rp
-
-            tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
-                u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx
+            it = _inner_iterations!(env, data, mod, outer, xbar_curr,
+                u_curr, zu_curr, lz_u, lu_curr, rho_u, rp_u,
+                v_curr, zv_curr, lz_v, lv_curr, rho_v, rp_v,
+                rp, rd, rp_old, l_curr, z_curr, z_prev, lz, Ax_plus_By, beta, scale, shift_lines,
             )
-            time_br += tcpu.time
 
-
-            tcpu = @timed bus_kernel_powerflow_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-                                                   mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-                                                   mod.Pd, mod.Qd, mod.bustype,
-                                                   v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
-            time_bus += tcpu.time
-
-            pf_update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
-
-            pf_update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-            zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
-
-            l_curr .= -(lz .+ beta.*z_curr)
-
-            pf_compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
-            rp_v .= v_curr .- xbar_curr .+ zv_curr
-
-            rd .= z_curr .- z_prev
-            Ax_plus_By .= rp .- z_curr
-
-            primres = norm(rp)
-            dualres = norm(rd)
-            z_curr_norm = norm(z_curr)
-            mismatch = norm(Ax_plus_By)
-            eps_pri = sqrt_d / (2500*outer)
+            time_bus += it.bus_time
+            time_br += it.branch_time
 
             if par.verbose > 0
                 if inner == 1 || (inner % 50) == 0
@@ -313,15 +335,15 @@ function admm_solve!(env::AdmmEnv, sol::SolutionPowerFlow; outer_iterlim=1, inne
                 end
 
                 @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
-                        outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
+                        outer, inner, it.primal_resid, it.eps_primal, it.dual_resid, it.z_norm, it.mismatch, beta)
             end
 
-            if primres <= eps_pri || dualres <= par.DUAL_TOL
+            if it.primal_resid <= it.eps_primal || it.dual_resid <= par.DUAL_TOL
                 break
             end
         end
 
-        if mismatch <= OUTER_TOL
+        if it.mismatch <= OUTER_TOL
             status = HAS_CONVERGED
             break
         end
@@ -342,17 +364,19 @@ function admm_solve!(env::AdmmEnv, sol::SolutionPowerFlow; outer_iterlim=1, inne
 
     if par.verbose > 0
         @printf(" ** Time\n")
-        @printf("Generator = %.2f\n", time_gen)
         @printf("Branch    = %.2f\n", time_br)
         @printf("Bus       = %.2f\n", time_bus)
-        @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
+        @printf("Total     = %.2f\n", time_br + time_bus)
     end
 
     return
 end
 
-function runpf(case::String; outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-               use_gpu=false, use_polar=true, gpu_no=0, verbose=1)
+function runpf(
+    case::String; outer_iterlim=10, inner_iterlim=800,
+    rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+    use_gpu=false, use_polar=true, gpu_no=0, verbose=1
+)
     env = AdmmEnv(case, use_gpu, rho_pq, rho_va; use_polar=use_polar, gpu_no=gpu_no, verbose=verbose, type=:power_flow)
     sol = env.solution
     admm_solve!(env, sol; outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)

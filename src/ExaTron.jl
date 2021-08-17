@@ -45,6 +45,7 @@ include("dtron.jl")
 include("driver.jl")
 
 include("admm/opfdata.jl")
+include("admm/common.jl")
 include("admm/environment.jl")
 include("admm/proxal_wrapper.jl")
 include("admm/bus_kernel.jl")
