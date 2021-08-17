@@ -173,14 +173,14 @@ function pf_update_xbar_bus_kernel(
 
             bus_cur = bus_start + 2*(b-1)
             # Voltage magnitude
-            if bustype[bus_cur] == 1
+            if bustype[b] == 1
                 wi_sum += lv[bus_cur] + rho_v[bus_cur]*(v[bus_cur] + zv[bus_cur])
                 rho_wi_sum += rho_v[bus_cur]
                 xbar[bus_cur] = wi_sum / rho_wi_sum
             end
 
             # Voltage angle
-            if bustype[bus_cur] != 3
+            if bustype[b] != 3
                 ti_sum += lv[bus_cur+1] + rho_v[bus_cur+1]*(v[bus_cur+1] + zv[bus_cur+1])
                 rho_ti_sum += rho_v[bus_cur+1]
                 xbar[bus_cur+1] = ti_sum / rho_ti_sum
@@ -297,6 +297,10 @@ function _inner_iteration!(
     v_curr, zv_curr, lz_v, lv_curr, rho_v, rp_v,
     rp, rd, rp_old, l_curr, z_curr, z_prev, lz, Ax_plus_By, beta, scale, shift_lines,
 ) where {T, TD<:CuVector{T}, TI<:CuVector{Int}, TM<:CuMatrix{T}}
+    nblk_br = mod.nline
+    nblk_bus = div(mod.nbus, 32, RoundUp)
+    shmem_size = sizeof(Float64)*(14*mod.n+3*mod.n^2) + sizeof(Int)*(4*mod.n)
+
     @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, z_prev, z_curr)
     @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, rp_old, rp)
     CUDA.synchronize()
@@ -312,7 +316,7 @@ function _inner_iteration!(
     tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_powerflow_two_level(
         data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
         mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
+        mod.Pd, mod.Qd, mod.bustype, v_curr, xbar_curr, zv_curr, lv_curr,
         rho_v, mod.YshR, mod.YshI
     )
     time_bus = tgpu.time
@@ -342,7 +346,6 @@ function _inner_iteration!(
 
     # Update multiplier and residuals.
     @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_l_kernel(mod.nvar, l_curr, z_curr, lz, beta)
-    @cuda threads=64 blocks=(div(mod.gen_mod.ngen-1, 64)+1) compute_primal_residual_u_generator_kernel(mod.gen_mod.ngen, mod.gen_mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr)
     @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) compute_primal_residual_u_branch_kernel(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr)
     @cuda threads=64 blocks=(div(mod.nvar_v-1, 64)+1) compute_primal_residual_v_kernel(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr)
     @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, rd, z_curr, z_prev)
@@ -351,6 +354,7 @@ function _inner_iteration!(
     CUDA.@sync @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) vector_difference(mod.nvar, Ax_plus_By, rp, z_curr)
     mismatch = CUDA.norm(Ax_plus_By)
 
+    sqrt_d = sqrt(mod.nvar_u + mod.nvar_v)
     primres = CUDA.norm(rp)
     dualres = CUDA.norm(rd)
     z_curr_norm = CUDA.norm(z_curr)
@@ -361,9 +365,9 @@ end
 
 # ADMM algorithm
 function admm_solve!(
-    env::AdmmEnv, sol::SolutionPowerFlow{T, VT};
+    env::AdmmEnv, sol::SolutionPowerFlow;
     outer_iterlim=1, inner_iterlim=10, scale=1e-4,
-) where {T, VT<:Array{T}}
+)
     data, par, mod = env.data, env.params, env.model
 
     # -------------------------------------------------------------------

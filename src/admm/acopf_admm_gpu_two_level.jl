@@ -841,7 +841,7 @@ function admm_rect_gpu_two_level(
     use_gpu=false, use_polar=true, gpu_no=0, verbose=1, outer_eps=2e-4
 )
     env = AdmmEnv(
-        case, use_gpu, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+        case, use_gpu, rho_pq, rho_va; use_polar=use_polar, type=:opf_two_level, gpu_no=gpu_no, verbose=verbose,
     )
     admm_restart!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
