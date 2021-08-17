@@ -73,6 +73,8 @@ function init_solution!(env::AdmmEnv, sol::SolutionPowerFlow, ybus::Ybus, rho_pq
     for b=1:nbus
         sol.xbar_curr[bus_start + 2*(b-1)] = buses[b].Vm
         sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
+        v_curr[bus_start + 2*(b-1)] = buses[b].Vm
+        v_curr[bus_start + 2*(b-1)+1] = 0.0
         if model.bustype[b] != 1
             rho_v[bus_start + 2*(b-1)] = 0.0
         end
@@ -132,8 +134,12 @@ function pf_update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
         rho_wi_sum += rho_v[bus_cur]
         ti_sum += lv[bus_cur+1] + rho_v[bus_cur+1]*(v[bus_cur+1] + zv[bus_cur+1])
         rho_ti_sum += rho_v[bus_cur+1]
-        xbar[bus_cur] = wi_sum / rho_wi_sum
-        xbar[bus_cur+1] = ti_sum / rho_ti_sum
+        if model.bustype[b] == 1 # update voltage magnitude only if PQ node
+            xbar[bus_cur] = wi_sum / rho_wi_sum
+        end
+        if model.bustype[b] != 3 # update voltage angle only if PV or PQ node
+            xbar[bus_cur+1] = ti_sum / rho_ti_sum
+        end
     end
 end
 
@@ -344,3 +350,12 @@ function admm_solve!(env::AdmmEnv, sol::SolutionPowerFlow; outer_iterlim=1, inne
 
     return
 end
+
+function runpf(case::String; outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+               use_gpu=false, use_polar=true, gpu_no=0, verbose=1)
+    env = AdmmEnv(case, use_gpu, rho_pq, rho_va; use_polar=use_polar, gpu_no=gpu_no, verbose=verbose, type=:power_flow)
+    sol = env.solution
+    admm_solve!(env, sol; outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
+    return env
+end
+
