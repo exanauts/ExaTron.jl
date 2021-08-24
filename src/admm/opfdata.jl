@@ -144,6 +144,36 @@ mutable struct Ybus{VD}
   Ybus{VD}(YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI) where {VD} = new(YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI)
 end
 
+mutable struct Load{TM}
+  pd::TM
+  qd::TM
+
+  function Load{TM}(pd_mat, qd_mat) where {TM}
+    m, n = size(pd_mat)
+    mq, nq = size(qd_mat)
+    @assert m == mq && n == nq
+
+    load = new{TM}()
+    load.pd = TM(undef, (m,n))
+    load.qd = TM(undef, (m,n))
+    copyto!(load.pd, pd_mat)
+    copyto!(load.qd, qd_mat)
+
+    return load
+  end
+end
+
+function get_load(name::String; load_scale=1.0, use_gpu=false)
+  pd_mat = readdlm(name*".Pd")
+  qd_mat = readdlm(name*".Qd")
+  if use_gpu
+    load = Load{CuArray{Float64,2}}(pd_mat.*load_scale, qd_mat.*load_scale)
+  else
+    load = Load{Array{Float64,2}}(pd_mat.*load_scale, qd_mat.*load_scale)
+  end
+  return load
+end
+
 function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64})
   #
   # load buses
@@ -391,4 +421,3 @@ function mapGenersToBuses(buses, generators,busDict)
   end
   return gen2bus
 end
-

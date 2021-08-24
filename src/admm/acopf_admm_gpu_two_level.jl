@@ -1,29 +1,9 @@
-function check_generator_bounds(env::AdmmEnv, xbar)
-    generators = env.data.generators
-    gen_start = env.model.gen_start
+function check_generator_bounds(model::Model, xbar)
+    ngen = model.ngen
+    gen_start = model.gen_start
 
-    ngen = length(generators)
-
-    if env.use_gpu
-        pgmin = CuArray{Float64}(undef, ngen)
-        pgmax = CuArray{Float64}(undef, ngen)
-        qgmin = CuArray{Float64}(undef, ngen)
-        qgmax = CuArray{Float64}(undef, ngen)
-    else
-        pgmin = Array{Float64}(undef, ngen)
-        pgmax = Array{Float64}(undef, ngen)
-        qgmin = Array{Float64}(undef, ngen)
-        qgmax = Array{Float64}(undef, ngen)
-    end
-
-    Pmin = Float64[generators[g].Pmin for g in 1:ngen]
-    Pmax = Float64[generators[g].Pmax for g in 1:ngen]
-    Qmin = Float64[generators[g].Qmin for g in 1:ngen]
-    Qmax = Float64[generators[g].Qmax for g in 1:ngen]
-    copyto!(pgmin, Pmin)
-    copyto!(pgmax, Pmax)
-    copyto!(qgmin, Qmin)
-    copyto!(qgmax, Qmax)
+    pgmax = model.pgmax; pgmin = model.pgmin
+    qgmax = model.qgmax; qgmin = model.qgmin
 
     max_viol_real = 0.0
     max_viol_reactive = 0.0
@@ -42,50 +22,50 @@ function check_generator_bounds(env::AdmmEnv, xbar)
     return max_viol_real, max_viol_reactive
 end
 
-function check_voltage_bounds(env::AdmmEnv, xbar)
-
-    buses = env.data.buses
-    nbus = length(buses)
-    bus_start = env.model.bus_start
+function check_voltage_bounds(model::Model, xbar)
+    nbus = model.nbus
+    bus_start = model.bus_start
 
     max_viol = 0.0
 
     for b=1:nbus
         bidx = bus_start + 2*(b-1)
-        err = max(max(0.0, xbar[bidx] - buses[b].Vmax^2), max(0.0, buses[b].Vmin^2 - xbar[bidx]))
+        err = max(max(0.0, xbar[bidx] - model.Vmax[b]^2), max(0.0, model.Vmin[b]^2 - xbar[bidx]))
         max_viol = (max_viol < err) ? err : max_viol
     end
 
     return max_viol
 end
 
-function check_power_balance_violation(env::AdmmEnv, xbar)
-    data = env.data
-    model = env.model
+function check_power_balance_violation(model::Model, xbar)
+    baseMVA = model.baseMVA
+    nbus = model.nbus
     gen_start, line_start, bus_start, YshR, YshI = model.gen_start, model.line_start, model.bus_start, model.YshR, model.YshI
-
-    baseMVA = data.baseMVA
-    nbus = length(data.buses)
 
     max_viol_real = 0.0
     max_viol_reactive = 0.0
     for b=1:nbus
         real_err = 0.0
         reactive_err = 0.0
-        for g in data.BusGenerators[b]
+        for k=model.GenStart[b]:model.GenStart[b+1]-1
+            g = model.GenIdx[k]
             real_err += xbar[gen_start + 2*(g-1)]
             reactive_err += xbar[gen_start + 2*(g-1)+1]
         end
 
-        real_err -= (data.buses[b].Pd / baseMVA)
-        reactive_err -= (data.buses[b].Qd / baseMVA)
+        real_err -= (model.Pd[b] / baseMVA)
+        reactive_err -= (model.Qd[b] / baseMVA)
+        #real_err -= (data.buses[b].Pd / baseMVA)
+        #reactive_err -= (data.buses[b].Qd / baseMVA)
 
-        for l in data.FromLines[b]
+        for k=model.FrStart[b]:model.FrStart[b+1]-1
+            l = model.FrIdx[k]
             real_err -= xbar[line_start + 4*(l-1)]
             reactive_err -= xbar[line_start + 4*(l-1) + 1]
         end
 
-        for l in data.ToLines[b]
+        for k=model.ToStart[b]:model.ToStart[b+1]-1
+            l = model.ToIdx[k]
             real_err -= xbar[line_start + 4*(l-1) + 2]
             reactive_err -= xbar[line_start + 4*(l-1) + 3]
         end
@@ -116,10 +96,155 @@ function get_branch_bus_index(data::OPFData; use_gpu=false)
     end
 end
 
-function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq, rho_va)
-    data, model = env.data, env.model
+function init_solution!(model::Model{Float64,Array{Float64,1},Array{Int,1},Array{Float64,2}},
+                        sol::SolutionTwoLevel{Float64,Array{Float64,1}}, rho_pq, rho_va)
     gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
 
+    u_curr = view(sol.x_curr, 1:model.nvar_u)
+    v_curr = view(sol.x_curr, model.nvar_u+1:model.nvar)
+    rho_u = view(sol.rho, 1:model.nvar_u)
+    rho_v = view(sol.rho, model.nvar_u+1:model.nvar)
+
+    rho_u .= rho_pq
+    rho_v .= rho_pq
+    rho_v[bus_start:end] .= rho_va
+
+    for g=1:model.ngen
+        pg_idx = gen_start + 2*(g-1)
+        sol.xbar_curr[pg_idx] = 0.5*(model.pgmin[g] + model.pgmax[g])
+        sol.xbar_curr[pg_idx+1] = 0.5*(model.qgmin[g] + model.qgmax[g])
+    end
+
+    fill!(sol.wRIij, 0.0)
+    for l=1:model.nline
+        fr_idx = model.brBusIdx[2*(l-1)+1]
+        to_idx = model.brBusIdx[2*l]
+
+        wij0 = (model.Vmax[fr_idx]^2 + model.Vmin[fr_idx]^2) / 2
+        wji0 = (model.Vmax[to_idx]^2 + model.Vmin[to_idx]^2) / 2
+        wR0 = sqrt(wij0 * wji0)
+
+        u_pij_idx = line_start + 8*(l-1)
+        v_pij_idx = line_start + 4*(l-1)
+        v_curr[v_pij_idx] = u_curr[u_pij_idx] = model.YffR[l] * wij0 + model.YftR[l] * wR0
+        v_curr[v_pij_idx+1] = u_curr[u_pij_idx+1] = -model.YffI[l] * wij0 - model.YftI[l] * wR0
+        v_curr[v_pij_idx+2] = u_curr[u_pij_idx+2] = model.YttR[l] * wji0 + model.YtfR[l] * wR0
+        v_curr[v_pij_idx+3] = u_curr[u_pij_idx+3] = -model.YttI[l] * wji0 - model.YtfI[l] * wR0
+
+        rho_u[u_pij_idx+4:u_pij_idx+7] .= rho_va
+
+        sol.wRIij[2*(l-1)+1] = wR0
+        sol.wRIij[2*l] = 0.0
+    end
+
+    for b=1:model.nbus
+        sol.xbar_curr[bus_start + 2*(b-1)] = (model.Vmax[b]^2 + model.Vmin[b]^2) / 2
+        sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
+    end
+
+    sol.l_curr .= 0.0
+
+    return
+end
+
+function init_generator_kernel_two_level(n::Int, gen_start::Int,
+    pgmax::CuDeviceArray{Float64,1}, pgmin::CuDeviceArray{Float64,1},
+    qgmax::CuDeviceArray{Float64,1}, qgmin::CuDeviceArray{Float64,1},
+    xbar::CuDeviceArray{Float64,1})
+
+    g = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    if g <= n
+        xbar[gen_start + 2*(g-1)] = 0.5*(pgmin[g] + pgmax[g])
+        xbar[gen_start + 2*(g-1)+1] = 0.5*(qgmin[g] + qgmax[g])
+    end
+
+    return
+end
+
+function init_branch_kernel_two_level(n::Int, line_start::Int, rho_va::Float64,
+    u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
+    rho_u::CuDeviceArray{Float64,1}, wRIij::CuDeviceArray{Float64,1},
+    brBusIdx::CuDeviceArray{Int,1},
+    Vmax::CuDeviceArray{Float64,1}, Vmin::CuDeviceArray{Float64,1},
+    YffR::CuDeviceArray{Float64,1}, YffI::CuDeviceArray{Float64,1},
+    YftR::CuDeviceArray{Float64,1}, YftI::CuDeviceArray{Float64,1},
+    YtfR::CuDeviceArray{Float64,1}, YtfI::CuDeviceArray{Float64,1},
+    YttR::CuDeviceArray{Float64,1}, YttI::CuDeviceArray{Float64,1})
+
+    l = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    if l <= n
+        fr_idx = brBusIdx[2*(l-1)+1]
+        to_idx = brBusIdx[2*l]
+
+        wij0 = (Vmax[fr_idx]^2 + Vmin[fr_idx]^2) / 2
+        wji0 = (Vmax[to_idx]^2 + Vmin[to_idx]^2) / 2
+        wR0 = sqrt(wij0 * wji0)
+
+        u_pij_idx = line_start + 8*(l-1)
+        v_pij_idx = line_start + 4*(l-1)
+        v_curr[v_pij_idx] = u_curr[u_pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        v_curr[v_pij_idx+1] = u_curr[u_pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        v_curr[v_pij_idx+2] = u_curr[u_pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        v_curr[v_pij_idx+3] = u_curr[u_pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+
+        rho_u[u_pij_idx+4:u_pij_idx+7] .= rho_va
+
+        wRIij[2*(l-1)+1] = wR0
+        wRIij[2*l] = 0.0
+    end
+
+    return
+end
+
+function init_bus_kernel_two_level(n::Int, bus_start::Int,
+    Vmax::CuDeviceArray{Float64,1}, Vmin::CuDeviceArray{Float64,1}, xbar::CuDeviceArray{Float64,1})
+    b = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    if b <= n
+        xbar[bus_start + 2*(b-1)] = (Vmax[b]^2 + Vmin[b]^2) / 2
+        xbar[bus_start + 2*(b-1)+1] = 0.0
+    end
+
+    return
+end
+
+function init_solution!(model::Model{Float64,CuArray{Float64,1},CuArray{Int,1},CuArray{Float64,2}},
+                        sol::SolutionTwoLevel{Float64,CuArray{Float64,1}}, rho_pq, rho_va)
+    gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
+
+    u_curr = view(sol.x_curr, 1:model.nvar_u)
+    v_curr = view(sol.x_curr, model.nvar_u+1:model.nvar)
+    rho_u = view(sol.rho, 1:model.nvar_u)
+    rho_v = view(sol.rho, model.nvar_u+1:model.nvar)
+
+    rho_u .= rho_pq
+    rho_v .= rho_pq
+    rho_v[bus_start:end] .= rho_va
+
+    fill!(sol.wRIij, 0.0)
+    sol.l_curr .= 0.0
+
+    @cuda threads=64 blocks=(div(model.ngen-1,64)+1) init_generator_kernel_two_level(model.ngen, gen_start,
+                    model.pgmax, model.pgmin, model.qgmax, model.qgmin, sol.xbar_curr)
+    @cuda threads=64 blocks=(div(model.nline-1,64)+1) init_branch_kernel_two_level(model.nline, line_start,
+                    rho_va, u_curr, v_curr, rho_u, sol.wRIij,
+                    model.brBusIdx, model.Vmax, model.Vmin, model.YffR, model.YffI,
+                    model.YftR, model.YftI, model.YtfR, model.YtfI, model.YttR, model.YttI)
+    @cuda threads=64 blocks=(div(model.nbus-1,64)+1) init_bus_kernel_two_level(model.nbus, bus_start,
+                    model.Vmax, model.Vmin, sol.xbar_curr)
+    CUDA.synchronize()
+
+    return
+end
+
+#=
+function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq, rho_va)
+    if env.is_multiperiod
+        data, model = env.data, env.model.single_period
+    else
+        data, model = env.data, env.model
+    end
+
+    gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
     lines = data.lines
     buses = data.buses
     BusIdx = data.BusIdx
@@ -178,14 +303,13 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
 
     return
 end
+=#
 
-function update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    data = env.data
-    ngen = length(data.generators)
-    nline = length(data.lines)
-    nbus = length(data.buses)
+function update_xbar(model::Model, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
+    ngen = model.ngen
+    nline = model.nline
+    nbus = model.nbus
 
-    model = env.model
     gen_start = model.gen_start
     line_start = model.line_start
     bus_start = model.bus_start
@@ -343,14 +467,10 @@ function update_lu(data::OPFData, gen_start, line_start, bus_start, u, xbar, zu,
     end
 end
 
-function update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
-    data = env.data
-    lines = data.lines
-    BusIdx = data.BusIdx
-    ngen = length(data.generators)
-    nline = length(data.lines)
-
-    model = env.model
+function update_zu(model::Model, u, xbar, z, l, rho, lz, beta)
+    ngen = model.ngen
+    nline = model.nline
+    brBusIdx = model.brBusIdx
     gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
 
     gen_end = gen_start + 2*ngen - 1
@@ -359,8 +479,8 @@ function update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
     ul_cur = line_start
     xl_cur = line_start
     for j=1:nline
-        fr_idx = bus_start + 2*(BusIdx[lines[j].from]-1)
-        to_idx = bus_start + 2*(BusIdx[lines[j].to]-1)
+        fr_idx = bus_start + 2*(brBusIdx[2*(j-1)+1]-1)
+        to_idx = bus_start + 2*(brBusIdx[2*j]-1)
 
         z[ul_cur:ul_cur+3] .= (-(lz[ul_cur:ul_cur+3] .+ l[ul_cur:ul_cur+3] .+ rho[ul_cur:ul_cur+3].*(u[ul_cur:ul_cur+3] .- xbar[xl_cur:xl_cur+3]))) ./ (beta .+ rho[ul_cur:ul_cur+3])
         z[ul_cur+4] = (-(lz[ul_cur+4] + l[ul_cur+4] + rho[ul_cur+4]*(u[ul_cur+4] - xbar[fr_idx]))) / (beta + rho[ul_cur+4])
@@ -435,14 +555,10 @@ function update_l_kernel(n::Int, l, z, lz, beta)
     return
 end
 
-function compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
-    data = env.data
-    lines = data.lines
-    BusIdx = data.BusIdx
-    ngen = length(data.generators)
-    nline = length(data.lines)
-
-    model = env.model
+function compute_primal_residual_u(model::Model, rp_u, u, xbar, z)
+    ngen = model.ngen
+    nline = model.nline
+    brBusIdx = model.brBusIdx
     gen_start, line_start, bus_start = model.gen_start, model.line_start, model.bus_start
 
     gen_end = gen_start + 2*ngen - 1
@@ -451,8 +567,8 @@ function compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
     ul_cur = line_start
     xl_cur = line_start
     for j=1:nline
-        fr_idx = bus_start + 2*(BusIdx[lines[j].from]-1)
-        to_idx = bus_start + 2*(BusIdx[lines[j].to]-1)
+        fr_idx = bus_start + 2*(brBusIdx[2*(j-1)+1]-1)
+        to_idx = bus_start + 2*(brBusIdx[2*j]-1)
 
         rp_u[ul_cur:ul_cur+3] .= u[ul_cur:ul_cur+3] .- xbar[xl_cur:xl_cur+3] .+ z[ul_cur:ul_cur+3]
         rp_u[ul_cur+4] = u[ul_cur+4] - xbar[fr_idx] + z[ul_cur+4]
@@ -525,7 +641,7 @@ function update_lz_kernel(n::Int, max_limit::Float64, z, lz, beta)
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= n
-        lz[tx] += max(-max_limit, min(max_limit, beta*z[tx]))
+        lz[tx] = max(-max_limit, min(max_limit, lz[tx] + beta*z[tx]))
     end
 
     return
@@ -540,12 +656,19 @@ function update_rho(rho, rp, rp_old, theta, gamma)
     end
 end
 
-function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
-    if env.use_gpu
-        CUDA.device!(env.gpu_no)
+function set_rateA_kernel(nline::Int, param::CuDeviceArray{Float64,2}, rateA::CuDeviceArray{Float64,1})
+    tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    if tx <= nline
+        param[29,tx] = (rateA[tx] == 0.0) ? Inf : rateA[tx]
     end
 
-    data, par, mod, sol = env.data, env.params, env.model, env.model.solution
+    return
+end
+
+function admm_restart_two_level(env::AdmmEnv, mod::Model; outer_iterlim=10, inner_iterlim=800, scale=1e-4)
+    data, par = env.data, env.params
+    sol = mod.solution
 
     # -------------------------------------------------------------------
     # Variables are of two types: u and v
@@ -606,7 +729,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
     mismatch = Inf
     z_prev_norm = z_curr_norm = Inf
 
-    @time begin
+    overall_time = @timed begin
     while outer < outer_iterlim
         outer += 1
 
@@ -631,16 +754,18 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 time_gen += tcpu.time
 
                 #scale = min(scale, (2*1e4) / maximum(abs.(rho_u)))
-                if env.use_polar
+                if !env.use_linelimit
                     tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                                                 u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                                                                                shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                                shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                                                 mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
                 else
-                    tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, inner, par.max_auglag, mod.line_start, par.mu_max,
-                                                                        u_curr, v_curr, l_curr, rho,
-                                                                        wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                        mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                    tcpu = @timed auglag_it, tron_it = auglag_linelimit_kernel_two_level_cpu(
+                                                mod.n, mod.nline, mod.line_start, mod.bus_start,
+                                                inner, par.max_auglag, par.mu_max, scale,
+                                                u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+                                                shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
                 end
                 time_br += tcpu.time
 
@@ -649,14 +774,14 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                                                       mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
                 time_bus += tcpu.time
 
-                update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+                update_xbar(mod, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
 
-                update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+                update_zu(mod, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
                 zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
 
                 l_curr .= -(lz .+ beta.*z_curr)
 
-                compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
+                compute_primal_residual_u(mod, rp_u, u_curr, xbar_curr, zu_curr)
                 rp_v .= v_curr .- xbar_curr .+ zv_curr
 
                 #=
@@ -699,16 +824,18 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
                 #  - div(nblk_br / number of GPUs, RoundUp)
 
                 time_gen += tgpu.time
-                if env.use_polar
+                if !env.use_linelimit
                     tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel_two_level(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                                                              shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                              shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                               mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
                 else
-                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, inner, par.max_auglag, mod.line_start, scale, par.mu_max,
-                                                                                                    u_curr, v_curr, l_curr, rho,
-                                                                                                    wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                                                    mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_linelimit_kernel_two_level(
+                                                              mod.n, mod.nline, mod.line_start, mod.bus_start,
+                                                              inner, par.max_auglag, par.mu_max, scale,
+                                                              u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+                                                              shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                              mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
                 end
                 time_br += tgpu.time
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(mod.baseMVA, mod.nbus, mod.gen_start, mod.line_start, mod.bus_start,
@@ -770,7 +897,7 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
         end
 
         if !env.use_gpu
-            lz .+= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, beta .* z_curr))
+            lz .= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, lz .+ (beta .* z_curr)))
         else
             CUDA.@sync @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_lz_kernel(mod.nvar, par.MAX_MULTIPLIER, z_curr, lz, beta)
         end
@@ -781,11 +908,16 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
     end
     end
 
+    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(mod.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
+                data.generators[g].coeff[data.generators[g].n-1]*(mod.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
+                data.generators[g].coeff[data.generators[g].n]
+                for g in 1:mod.ngen)
+
     if par.verbose > 0
         # Test feasibility of global variable xbar:
-        pg_err, qg_err = check_generator_bounds(env, xbar_curr)
-        vm_err = check_voltage_bounds(env, xbar_curr)
-        real_err, reactive_err = check_power_balance_violation(env, xbar_curr)
+        pg_err, qg_err = check_generator_bounds(mod, xbar_curr)
+        vm_err = check_voltage_bounds(mod, xbar_curr)
+        real_err, reactive_err = check_power_balance_violation(mod, xbar_curr)
         @printf(" ** Violations of global variable xbar\n")
         @printf("Real power generator bounds     = %.6e\n", pg_err)
         @printf("Reactive power generator bounds = %.6e\n", qg_err)
@@ -801,37 +933,46 @@ function admm_restart_two_level(env::AdmmEnv; outer_iterlim=10, inner_iterlim=80
         @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
 
         @printf(" ** Time\n")
-        @printf("Generator = %.2f\n", time_gen)
-        @printf("Branch    = %.2f\n", time_br)
-        @printf("Bus       = %.2f\n", time_bus)
-        @printf("Total     = %.2f\n", time_gen + time_br + time_bus)
+        @printf("Overall time    = %.2f\n", overall_time.time)
+        @printf("Generator       = %.2f\n", time_gen)
+        @printf("Branch          = %.2f\n", time_br)
+        @printf("Bus             = %.2f\n", time_bus)
+        @printf("Total(G+B+Br)   = %.2f\n", time_gen + time_br + time_bus)
+        @printf("Objective value = %.6e\n", sol.objval)
     end
 
-    sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(mod.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
-                data.generators[g].coeff[data.generators[g].n-1]*(mod.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
-                data.generators[g].coeff[data.generators[g].n]
-                for g in 1:mod.ngen)
-    @printf("Objective value = %.6e\n", sol.objval)
-
-    return
+    return mismatch <= OUTER_TOL
 end
 
 function admm_rect_gpu_two_level(case::String;
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-    use_gpu=false, use_polar=true, gpu_no=0, verbose=1)
+    use_gpu=false, use_linelimit=false, outer_eps=2*1e-4, solve_pf=false, gpu_no=0, verbose=1)
 
     if use_gpu
         CUDA.device!(gpu_no)
 
-        env = AdmmEnv{Float64, CuArray{Float64, 1}, CuArray{Int, 1}, CuArray{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+        env = AdmmEnv{Float64, CuArray{Float64,1}, CuArray{Int,1}, CuArray{Float64,2}}(
+            case, rho_pq, rho_va; use_gpu=use_gpu, use_linelimit=use_linelimit, use_twolevel=true,
+            solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose,
         )
+        env.params.outer_eps = outer_eps
+        mod = Model{Float64, CuArray{Float64,1}, CuArray{Int,1}, CuArray{Float64,2}}(env)
+        if use_linelimit
+            # Set rateA in membuf.
+            @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) set_rateA_kernel(mod.nline, mod.membuf, mod.rateA)
+        end
     else
-        env = AdmmEnv{Float64, Array{Float64, 1}, Array{Int, 1}, Array{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+        env = AdmmEnv{Float64, Array{Float64,1}, Array{Int,1}, Array{Float64,2}}(
+            case, rho_pq, rho_va; use_gpu=use_gpu, use_linelimit=use_linelimit, use_twolevel=true,
+            solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose,
         )
+        env.params.outer_eps = outer_eps
+        mod = Model{Float64, Array{Float64,1}, Array{Int,1}, Array{Float64,2}}(env)
+        if use_linelimit
+            mod.membuf[29,:] .= mod.rateA
+        end
     end
 
-    admm_restart_two_level(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
-    return env
+    admm_restart_two_level(env, mod; outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
+    return env, mod
 end

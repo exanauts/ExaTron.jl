@@ -49,6 +49,8 @@ function get_bus_data(data::OPFData; use_gpu=false)
 
     Pd = Float64[data.buses[i].Pd for i=1:nbus]
     Qd = Float64[data.buses[i].Qd for i=1:nbus]
+    Vmin = Float64[data.buses[i].Vmin for i=1:nbus]
+    Vmax = Float64[data.buses[i].Vmax for i=1:nbus]
 
     if use_gpu
         cuFrIdx = CuArray{Int}(undef, length(FrIdx))
@@ -59,6 +61,8 @@ function get_bus_data(data::OPFData; use_gpu=false)
         cuGenStart = CuArray{Int}(undef, length(GenStart))
         cuPd = CuArray{Float64}(undef, nbus)
         cuQd = CuArray{Float64}(undef, nbus)
+        cuVmax = CuArray{Float64}(undef, nbus)
+        cuVmin = CuArray{Float64}(undef, nbus)
 
         copyto!(cuFrIdx, FrIdx)
         copyto!(cuToIdx, ToIdx)
@@ -68,10 +72,12 @@ function get_bus_data(data::OPFData; use_gpu=false)
         copyto!(cuGenStart, GenStart)
         copyto!(cuPd, Pd)
         copyto!(cuQd, Qd)
+        copyto!(cuVmax, Vmax)
+        copyto!(cuVmin, Vmin)
 
-        return cuFrStart,cuFrIdx,cuToStart,cuToIdx,cuGenStart,cuGenIdx,cuPd,cuQd
+        return cuFrStart,cuFrIdx,cuToStart,cuToIdx,cuGenStart,cuGenIdx,cuPd,cuQd,cuVmin,cuVmax
     else
-        return FrStart,FrIdx,ToStart,ToIdx,GenStart,GenIdx,Pd,Qd
+        return FrStart,FrIdx,ToStart,ToIdx,GenStart,GenIdx,Pd,Qd,Vmin,Vmax
     end
 end
 
@@ -83,6 +89,7 @@ function get_branch_data(data::OPFData; use_gpu=false)
     ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
     frBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
     toBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
+    rateA = [ (data.lines[l].rateA / data.baseMVA)^2 for l=1:nline ]
 
     if use_gpu
         cuYshR = CuArray{Float64}(undef, length(ybus.YshR))
@@ -97,6 +104,7 @@ function get_branch_data(data::OPFData; use_gpu=false)
         cuYtfI = CuArray{Float64}(undef, nline)
         cuFrBound = CuArray{Float64}(undef, 2*nline)
         cuToBound = CuArray{Float64}(undef, 2*nline)
+        cuRateA = CuArray{Float64}(undef, nline)
         copyto!(cuYshR, ybus.YshR)
         copyto!(cuYshI, ybus.YshI)
         copyto!(cuYffR, ybus.YffR)
@@ -109,15 +117,73 @@ function get_branch_data(data::OPFData; use_gpu=false)
         copyto!(cuYtfI, ybus.YtfI)
         copyto!(cuFrBound, frBound)
         copyto!(cuToBound, toBound)
+        copyto!(cuRateA, rateA)
 
         return cuYshR, cuYshI, cuYffR, cuYffI, cuYftR, cuYftI,
-               cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound
+               cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound, cuRateA
     else
         return ybus.YshR, ybus.YshI, ybus.YffR, ybus.YffI, ybus.YftR, ybus.YftI,
-               ybus.YttR, ybus.YttI, ybus.YtfR, ybus.YtfI, frBound, toBound
+               ybus.YttR, ybus.YttI, ybus.YtfR, ybus.YtfI, frBound, toBound, rateA
     end
 end
 
+function init_solution!(model::Model{Float64,Array{Float64,1},Array{Int,1},Array{Float64,2}},
+    sol::SolutionOneLevel{Float64,Array{Float64,1}}, rho_pq::Float64, rho_va::Float64)
+
+    ngen = model.ngen
+    nline = model.nline
+
+    brBusIdx = model.brBusIdx
+    Vmax = model.Vmax; Vmin = model.Vmin
+    YffR = model.YffR; YffI = model.YffI
+    YttR = model.YttR; YttI = model.YttI
+    YftR = model.YftR; YftI = model.YftI
+    YtfR = model.YtfR; YtfI = model.YtfI
+
+    for g=1:ngen
+        pg_idx = model.gen_start + 2*(g-1)
+        #u_curr[pg_idx] = 0.5*(data.genvec.Pmin[g] + data.genvec.Pmax[g])
+        #u_curr[pg_idx+1] = 0.5*(data.genvec.Qmin[g] + data.genvec.Qmax[g])
+        sol.v_curr[pg_idx] = 0.5*(model.pgmin[g] + model.pgmax[g])
+        sol.v_curr[pg_idx+1] = 0.5*(model.qgmin[g] + model.qgmax[g])
+    end
+
+    sol.rho .= rho_pq
+    fill!(sol.u_curr, 0.0)
+    fill!(sol.v_curr, 0.0)
+
+    for l=1:nline
+        wij0 = (Vmax[brBusIdx[2*(l-1)+1]]^2 + Vmin[brBusIdx[2*(l-1)+1]]^2) / 2
+        wji0 = (Vmax[brBusIdx[2*l]]^2 + Vmin[brBusIdx[2*l]]^2) / 2
+        wR0 = sqrt(wij0 * wji0)
+
+        pij_idx = model.line_start + 8*(l-1)
+        sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        sol.u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        #=
+        u_curr[pij_idx+4] = wij0
+        u_curr[pij_idx+5] = wji0
+        u_curr[pij_idx+6] = 0.0
+        u_curr[pij_idx+7] = 0.0
+        =#
+        # wRIij[2*(l-1)+1] = wR0
+        # wRIij[2*l] = 0.0
+
+        sol.v_curr[pij_idx+4] = wij0
+        sol.v_curr[pij_idx+5] = wji0
+        sol.v_curr[pij_idx+6] = 0.0
+        sol.v_curr[pij_idx+7] = 0.0
+
+        sol.rho[pij_idx+4:pij_idx+7] .= rho_va
+    end
+
+    sol.l_curr .= 0
+    return
+end
+
+#=
 function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq, rho_va)
     data, model = env.data, env.model
 
@@ -174,6 +240,7 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
     sol.l_curr .= 0
     return
 end
+=#
 
 function copy_data_kernel(n::Int, dest::CuDeviceArray{Float64,1}, src::CuDeviceArray{Float64,1})
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
@@ -263,12 +330,13 @@ end
 
 This function restarts the ADMM with a given `env::AdmmEnv` containing solutions and all the other parameters.
 """
-function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
+function admm_restart(env::AdmmEnv, mod::Model; iterlim=800, scale=1e-4)
     if env.use_gpu
         CUDA.device!(env.gpu_no)
     end
 
-    data, par, mod, sol = env.data, env.params, env.model, env.model.solution
+    data, par, = env.data, env.params
+    sol = mod.solution
 
     shift_lines = 0
     shmem_size = sizeof(Float64)*(14*mod.n+3*mod.n^2) + sizeof(Int)*(4*mod.n)
@@ -292,17 +360,17 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             tcpu = generator_kernel(mod, mod.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho)
             time_gen += tcpu.time
 
-            if env.use_polar
+#            if env.use_polar
                 tcpu = @timed auglag_it, tron_it = polar_kernel_cpu(mod.n, mod.nline, mod.line_start, scale,
                                                                     sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                                    shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                    shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
-            else
-                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, it, par.max_auglag, mod.line_start, par.mu_max,
-                                                                     sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                                     shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
-            end
+#            else
+#                tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, it, par.max_auglag, mod.line_start, par.mu_max,
+#                                                                     sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
+#                                                                     shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+#                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+#            end
             time_br += tcpu.time
 
             tcpu = @timed bus_kernel_cpu(mod.baseMVA, mod.nbus, mod.gen_start, mod.line_start,
@@ -339,12 +407,12 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             if env.use_polar
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(mod.n, mod.nline, mod.line_start, scale,
                                                                                                  sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                                                                 shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                                                 shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                                                                  mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
             else
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, it, par.max_auglag, mod.line_start, scale, par.mu_max,
                                                                                                   sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                                                                  shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                                                  shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                                                                   mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
             end
             time_br += tgpu.time
@@ -403,21 +471,23 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
 end
 
 function admm_rect_gpu(case::String; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                       use_gpu=false, use_polar=true, gpu_no=0, verbose=1)
+                       use_gpu=false, solve_pf=false, gpu_no=0, verbose=1)
     if use_gpu
         CUDA.device!(gpu_no)
 
         env = AdmmEnv{Float64, CuArray{Float64, 1}, CuArray{Int, 1}, CuArray{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
+            case, rho_pq, rho_va; use_gpu=use_gpu, use_twolevel=false, solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose,
         )
+        mod = Model{Float64, CuArray{Float64,1}, CuArray{Int,1}, CuArray{Float64,2}}(env)
     else
         env = AdmmEnv{Float64, Array{Float64, 1}, Array{Int, 1}, Array{Float64, 2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
+            case, rho_pq, rho_va; use_gpu=use_gpu, use_twolevel=false, solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose,
         )
+        mod = Model{Float64, Array{Float64,1}, Array{Int,1}, Array{Float64,2}}(env)
     end
 
-    admm_restart(env, iterlim=iterlim, scale=scale)
-    return env
+    admm_restart(env, mod, iterlim=iterlim, scale=scale)
+    return env, mod
 end
 
 # TODO: This needs revised to use AdmmEnv.
