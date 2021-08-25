@@ -12,6 +12,6 @@ catch e
     println(e)
 end
 
-include("qptest.jl")
+# include("qptest.jl")
 include("densetest.jl")
-include("admmtest.jl")
+# include("admmtest.jl")
