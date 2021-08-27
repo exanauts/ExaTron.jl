@@ -1,7 +1,13 @@
+
+using AMDGPU
 using CUDA
+using KernelAbstractions
+using CUDAKernels
+using ROCKernels
 using ExaTron
-using LazyArtifacts
+using Test
 using LinearAlgebra
+using LazyArtifacts
 using Test
 
 CASE = joinpath(artifact"ExaData", "ExaData", "matpower", "case9.m")
@@ -21,12 +27,13 @@ LOADS = Dict(
 
 USE_GPUS = [false]
 has_cuda_gpu() && push!(USE_GPUS, true)
+# AMDGPU.hsa_configured && push!(ARCHS, (ROCDevice(), ROCArray, ROCMatrix))
 
 @testset "ProxAL wrapper (CUDA=$use_gpu)" for use_gpu in USE_GPUS
     data = ExaTron.opf_loaddata(CASE)
     t, T = 1, 2
     rho_pq, rho_va = 400.0, 40000.0
-    env = ExaTron.ProxALAdmmEnv(data, use_gpu, t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
+    env = ExaTron.ProxALAdmmEnv(data, CPU(), t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
     @test isa(env, ExaTron.AdmmEnv)
     @test isa(env.model.gen_mod, ExaTron.ProxALGeneratorModel)
 
@@ -44,5 +51,6 @@ has_cuda_gpu() && push!(USE_GPUS, true)
     @test sol.status == ExaTron.HAS_CONVERGED
     @test pg |> Array ≈ [0.8965723471282547, 1.3381394570889165, 0.9386855347032877] rtol=1e-4
 end
+# end
 
 

@@ -189,31 +189,27 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int, scale::Float64,
     return 0, avg_minor_it / nline
 end
 
-function polar_kernel_two_level(
-    n::Int, nline::Int, line_start::Int, bus_start::Int, scale::Float64,
-    u::CuDeviceArray{Float64}, xbar::CuDeviceArray{Float64},
-    z::CuDeviceArray{Float64}, l::CuDeviceArray{Float64}, rho::CuDeviceArray{Float64},
-    shift_lines::Int, param::CuDeviceArray{Float64},
-    _YffR::CuDeviceArray{Float64}, _YffI::CuDeviceArray{Float64},
-    _YftR::CuDeviceArray{Float64}, _YftI::CuDeviceArray{Float64},
-    _YttR::CuDeviceArray{Float64}, _YttI::CuDeviceArray{Float64},
-    _YtfR::CuDeviceArray{Float64}, _YtfI::CuDeviceArray{Float64},
-    frBound::CuDeviceArray{Float64}, toBound::CuDeviceArray{Float64},
-    brBusIdx::CuDeviceArray{Int}
+@kernel function polar_kernel_two_level(
+    @Const(n::Int), nline::Int, line_start::Int, bus_start::Int, scale::Float64,
+    u, xbar,
+    z, l, rho,
+    shift_lines::Int, param,
+    _YffR, _YffI,
+    _YftR, _YftI,
+    _YttR, _YttI,
+    _YtfR, _YtfI,
+    frBound, toBound,
+    brBusIdx
 )
-    I = blockIdx().x
-    id_line = I + shift_lines
+    I = @index(Group, Linear)
+    J = @index(Local, Linear)
 
-    x = CuDynamicSharedArray(Float64, n)
-    xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
-    xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+    x = @localmem Float64 (4,)
+    xl = @localmem Float64 (4,)
+    xu = @localmem Float64 (4,)
 
     @inbounds begin
-        YffR = _YffR[id_line]; YffI = _YffI[id_line]
-        YftR = _YftR[id_line]; YftI = _YftI[id_line]
-        YttR = _YttR[id_line]; YttI = _YttI[id_line]
-        YtfR = _YtfR[id_line]; YtfI = _YtfI[id_line]
-
+        id_line = I + shift_lines
         pij_idx = line_start + 8*(I-1)
         xbar_pij_idx = line_start + 4*(I-1)
 
@@ -259,10 +255,22 @@ function polar_kernel_two_level(
         param[23,id_line] = xbar[fr_idx+1] - z[pij_idx+6]
         param[24,id_line] = xbar[to_idx+1] - z[pij_idx+7]
 
-        CUDA.sync_threads()
+        @synchronize
 
-        status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
-                                         param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+        # recompute indices
+        id_line = I + shift_lines
+        YffR = _YffR[id_line]; YffI = _YffI[id_line]
+        YftR = _YftR[id_line]; YftI = _YftI[id_line]
+        YttR = _YttR[id_line]; YttI = _YttI[id_line]
+        YtfR = _YtfR[id_line]; YtfI = _YtfI[id_line]
+
+        # status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
+        #                                  param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
+        #                                  I, J)
+
+        # recompute indices
+        id_line = I + shift_lines
+        pij_idx = line_start + 8*(I-1)
 
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
         vi_vj_sin = x[1]*x[2]*sin(x[3] - x[4])
@@ -276,8 +284,6 @@ function polar_kernel_two_level(
         u[pij_idx+6] = x[3]
         u[pij_idx+7] = x[4]
     end
-
-    return
 end
 
 function polar_kernel_two_level_cpu(

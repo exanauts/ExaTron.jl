@@ -2,33 +2,36 @@
 Driver to run TRON on GPU. This should be called from a kernel.
 """
 @inline function tron_kernel(n::Int, shift::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64, use_polar::Bool,
-                     x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-                     xu::CuDeviceArray{Float64,1},
-                     param::CuDeviceArray{Float64,2},
+                     x, xl,
+                     xu,
+                     param,
                      YffR::Float64, YffI::Float64,
                      YftR::Float64, YftI::Float64,
                      YttR::Float64, YttI::Float64,
-                     YtfR::Float64, YtfI::Float64)
-    tx = threadIdx().x
+                     YtfR::Float64, YtfI::Float64,
+                     I, J
+                     )
 
-    g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
-    xc = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
-    s = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
-    wa = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
-    wa1 = CuDynamicSharedArray(Float64, n, (7*n)*sizeof(Float64))
-    wa2 = CuDynamicSharedArray(Float64, n, (8*n)*sizeof(Float64))
-    wa3 = CuDynamicSharedArray(Float64, n, (9*n)*sizeof(Float64))
-    wa4 = CuDynamicSharedArray(Float64, n, (10*n)*sizeof(Float64))
-    wa5 = CuDynamicSharedArray(Float64, n, (11*n)*sizeof(Float64))
-    gfree = CuDynamicSharedArray(Float64, n, (12*n)*sizeof(Float64))
-    dsave = CuDynamicSharedArray(Float64, n, (13*n)*sizeof(Float64))
-    indfree = CuDynamicSharedArray(Int, n, (14*n)*sizeof(Float64))
-    iwa = CuDynamicSharedArray(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(Float64))
-    isave = CuDynamicSharedArray(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(Float64))
+    tx = J
+    g = @localmem Float64 (4,)
+    xc = @localmem Float64 (4,)
+    s = @localmem Float64 (4,)
+    wa = @localmem Float64 (4,)
+    wa1 = @localmem Float64 (4,)
+    wa2 = @localmem Float64 (4,)
+    wa3 = @localmem Float64 (4,)
+    wa4 = @localmem Float64 (4,)
+    wa5 = @localmem Float64 (4,)
+    wa = @localmem Float64 (4,)
+    gfree = @localmem Float64 (4,)
+    dsave = @localmem Float64 (4,)
+    indfree = @localmem Int (4,)
+    iwa = @localmem Int (4,)
+    isave = @localmem Int (4,)
 
-    A = CuDynamicSharedArray(Float64, (n,n), (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
-    B = CuDynamicSharedArray(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
-    L = CuDynamicSharedArray(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+    A = @localmem Float64 (4,4)
+    B = @localmem Float64 (4,4)
+    L = @localmem Float64 (4,4)
 
     if tx <= n
         @inbounds for j=1:n
@@ -37,7 +40,7 @@ Driver to run TRON on GPU. This should be called from a kernel.
             L[tx,j] = 0.0
         end
     end
-    CUDA.sync_threads()
+    @synchronize
 
     task = 0
     status = 0
@@ -58,13 +61,14 @@ Driver to run TRON on GPU. This should be called from a kernel.
 
     while search
 
+        @show search
         # [0|1]: Evaluate function.
 
         if task == 0 || task == 1
             if use_polar
-                f = eval_f_polar_kernel(n, shift, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                f = eval_f_polar_kernel(n, shift, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, I, J)
             else
-                f = eval_f_kernel(n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                f = eval_f_kernel(n, scale, x, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, I, J)
             end
             nfev += 1
             if nfev >= max_feval
@@ -77,11 +81,11 @@ Driver to run TRON on GPU. This should be called from a kernel.
 
         if task == 0 || task == 2
             if use_polar
-                eval_grad_f_polar_kernel(n, shift, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-                eval_h_polar_kernel(n, shift, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_grad_f_polar_kernel(n, shift, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, I, J)
+                eval_h_polar_kernel(n, shift, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, I, J)
             else
-                eval_grad_f_kernel(n, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
-                eval_h_kernel(n, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                eval_grad_f_kernel(n, scale, x, g, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, I, J)
+                eval_h_kernel(n, scale, x, A, param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI, I, J)
             end
             ngev += 1
             nhev += 1
@@ -91,7 +95,7 @@ Driver to run TRON on GPU. This should be called from a kernel.
         # Initialize the trust region bound.
 
         if task == 0
-            gnorm0 = dnrm2(n, g, 1)
+            gnorm0 = dnrm2(n, g, 1, I, J)
             delta = gnorm0
         end
 
@@ -100,13 +104,13 @@ Driver to run TRON on GPU. This should be called from a kernel.
         if search
             delta, task = dtron(n, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
                                 cg_itermax, delta, task, B, L, xc, s, indfree, gfree,
-                                isave, dsave, wa, iwa, wa1, wa2, wa3, wa4, wa5)
+                                isave, dsave, wa, iwa, wa1, wa2, wa3, wa4, wa5, I, J)
         end
 
         # [3] NEWX: a new point was computed.
 
         if task == 3
-            gnorm_inf = dgpnorm(n, x, xl, xu, g)
+            gnorm_inf = dgpnorm(n, x, xl, xu, g, I, J)
 
             if gnorm_inf <= gtol
                 task = 4
@@ -126,7 +130,7 @@ Driver to run TRON on GPU. This should be called from a kernel.
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     return status, minor_iter
 end
