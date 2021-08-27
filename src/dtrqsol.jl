@@ -38,14 +38,15 @@ function dtrqsol(n,x,p,delta)
     return sigma
 end
 
-@inline function dtrqsol(n::Int,x::CuDeviceArray{Float64,1},
-                         p::CuDeviceArray{Float64,1},delta::Float64)
+@inline function dtrqsol(n::Int,x,
+                         p,delta::Float64,
+                         I, J)
     zero = 0.0
     sigma = zero
 
-    ptx = ddot(n, p, 1, x, 1)
-    ptp = ddot(n, p, 1, p, 1)
-    xtx = ddot(n, x, 1, x, 1)
+    ptx = ddot(n, p, 1, x, 1, I, J)
+    ptp = ddot(n, p, 1, p, 1, I, J)
+    xtx = ddot(n, x, 1, x, 1, I, J)
     dsq = delta^2
 
     # Guard against abnormal cases.
@@ -59,7 +60,7 @@ end
     else
         sigma = zero
     end
-    CUDA.sync_threads()
+    @synchronize
 
     return sigma
 end

@@ -45,8 +45,9 @@ function dbreakpt(n,x,xl,xu,w)
     return nbrpt,brptmin,brptmax
 end
 
-@inline function dbreakpt(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-                          xu::CuDeviceArray{Float64,1}, w::CuDeviceArray{Float64,1})
+@inline function dbreakpt(n::Int, x, xl,
+                          xu, w,
+                          I, J)
     zero = 0.0
     nbrpt = 0
     brptmin = zero
@@ -82,7 +83,7 @@ end
         brptmin = zero
         brptmax = zero
     end
-    CUDA.sync_threads()
+    @synchronize
 
     return nbrpt,brptmin,brptmax
 end

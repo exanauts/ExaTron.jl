@@ -19,20 +19,21 @@ function dgpnorm(n::Int, x::Array{Float64}, xl::Array{Float64},
     return inf_norm
 end
 
-@inline function dgpnorm(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1})
-    tx = threadIdx().x
+@inline function dgpnorm(n::Int, x, xl,
+                         xu, g,
+                         I, J)
 
+    @synchronize
     v = 0.0
-    if tx <= n
+    for i in 1:n
         @inbounds begin
-            if xl[tx] != xu[tx]
-                if x[tx] == xl[tx]
-                    v = min(g[tx], 0.0)
-                elseif x[tx] == xu[tx]
-                    v = max(g[tx], 0.0)
+            if xl[i] != xu[i]
+                if x[i] == xl[i]
+                    v = min(g[i], 0.0)
+                elseif x[i] == xu[i]
+                    v = max(g[i], 0.0)
                 else
-                    v = g[tx]
+                    v = g[i]
                 end
 
                 v = abs(v)
@@ -40,14 +41,7 @@ end
         end
     end
 
-    # shfl_down_sync() will automatically sync threads in a warp.
-
-    offset = 16
-    while offset > 0
-        v = max(v, CUDA.shfl_down_sync(0xffffffff, v, offset))
-        offset >>= 1
-    end
-    v = CUDA.shfl_sync(0xffffffff, v, 1)
+    @synchronize
 
     return v
 end

@@ -52,8 +52,9 @@ else
     ddot(n,dx,incx,dy,incy) = tron_ddot(n,dx,incx,dy,incy)
 end
 
-@inline function ddot(n::Int,dx::CuDeviceArray{Float64,1},incx::Int,
-                      dy::CuDeviceArray{Float64,1},incy::Int)
+@inline function ddot(n::Int,dx,incx::Int,
+                      dy,incy::Int,
+                      I, J)
     # Currently, all threads compute the same dot product,
     # hence, no sync_threads() is needed.
     # For very small n, we may want to gauge how much gains
@@ -63,6 +64,6 @@ end
     @inbounds for i=1:n
         v += dx[i]*dy[i]
     end
-    CUDA.sync_threads()
+    @synchronize
     return v
 end
