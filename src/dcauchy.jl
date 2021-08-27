@@ -115,11 +115,12 @@ function dcauchy(n,x,xl,xu,A,
     return alpha
 end
 
-@inline function dcauchy(n::Int, x::CuDeviceArray{Float64,1},
-                         xl::CuDeviceArray{Float64}, xu::CuDeviceArray{Float64,1},
-                         A::CuDeviceArray{Float64,2}, g::CuDeviceArray{Float64,1},
-                         delta::Float64, alpha::Float64, s::CuDeviceArray{Float64,1},
-                         wa::CuDeviceArray{Float64,1})
+@inline function dcauchy(n::Int, x,
+                         xl, xu,
+                         A, g,
+                         delta::Float64, alpha::Float64, s,
+                         wa,
+                         I, J)
     p5 = 0.5
     one = 1.0
 
@@ -134,20 +135,20 @@ end
 
     # Find the minimal and maximal break-point on x - alpha*g.
 
-    dcopy(n,g,1,wa,1)
-    dscal(n,-one,wa,1)
-    nbrpt,brptmin,brptmax = dbreakpt(n,x,xl,xu,wa)
+    dcopy(n,g,1,wa,1,I,J)
+    dscal(n,-one,wa,1,I,J)
+    nbrpt,brptmin,brptmax = dbreakpt(n,x,xl,xu,wa,I,J)
 
     # Evaluate the initial alpha and decide if the algorithm
     # must interpolate or extrapolate.
 
-    dgpstep(n,x,xl,xu,-alpha,g,s) # s = P(x - alpha*g) - x
-    if dnrm2(n,s,1) > delta
+    dgpstep(n,x,xl,xu,-alpha,g,s,I,J) # s = P(x - alpha*g) - x
+    if dnrm2(n,s,1,I,J) > delta
         interp = true
     else
-        dssyax(n, A, s, wa)
-        gts = ddot(n,g,1,s,1)
-        q = p5*ddot(n,s,1,wa,1) + gts
+        dssyax(n, A, s, wa,I,J)
+        gts = ddot(n,g,1,s,1,I,J)
+        q = p5*ddot(n,s,1,wa,1,I,J) + gts
         interp = (q >= mu0*gts)
     end
 
@@ -164,11 +165,11 @@ end
             # will be replaced in future versions of the code.
 
             alpha = interpf*alpha
-            dgpstep(n,x,xl,xu,-alpha,g,s)
-            if dnrm2(n,s,1) <= delta
-                dssyax(n, A, s,wa)
-                gts = ddot(n,g,1,s,1)
-                q = p5*ddot(n,s,1,wa,1) + gts
+            dgpstep(n,x,xl,xu,-alpha,g,s,I,J)
+            if dnrm2(n,s,1,I,J) <= delta
+                dssyax(n, A, s,wa,I,J)
+                gts = ddot(n,g,1,s,1,I,J)
+                q = p5*ddot(n,s,1,wa,1,I,J) + gts
                 search = (q > mu0*gts)
             end
         end
@@ -185,11 +186,11 @@ end
             # will be replaced in future versions of the code.
 
             alpha = extrapf*alpha
-            dgpstep(n,x,xl,xu,-alpha,g,s)
-            if dnrm2(n,s,1) <= delta
-                dssyax(n, A, s, wa)
-                gts = ddot(n,g,1,s,1)
-                q = p5*ddot(n,s,1,wa,1) + gts
+            dgpstep(n,x,xl,xu,-alpha,g,s,I,J)
+            if dnrm2(n,s,1,I,J) <= delta
+                dssyax(n, A, s, wa,I,J)
+                gts = ddot(n,g,1,s,1,I,J)
+                q = p5*ddot(n,s,1,wa,1,I,J) + gts
                 if q < mu0*gts
                     search = true
                     alphas = alpha
@@ -202,7 +203,7 @@ end
         # Recover the last successful step.
 
         alpha = alphas
-        dgpstep(n,x,xl,xu,-alpha,g,s)
+        dgpstep(n,x,xl,xu,-alpha,g,s,I,J)
     end
 
     return alpha

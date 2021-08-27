@@ -24,11 +24,12 @@ function dgpstep(n,x,xl,xu,alpha,w,s)
     return
 end
 
-@inline function dgpstep(n::Int,x::CuDeviceArray{Float64,1},xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1},alpha,w::CuDeviceArray{Float64,1},
-                         s::CuDeviceArray{Float64,1})
-    tx = threadIdx().x
-    ty = threadIdx().y
+@inline function dgpstep(n::Int,x,xl,
+                         xu,alpha,w,
+                         s,
+                         I, J)
+    tx = J
+    ty = 1
 
     if tx <= n && ty == 1
         @inbounds begin
@@ -44,7 +45,7 @@ end
             end
         end
     end
-    CUDA.sync_threads()
+    @synchronize
 
     return
 end

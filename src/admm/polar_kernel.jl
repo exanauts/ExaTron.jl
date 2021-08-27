@@ -264,9 +264,9 @@ end
         YttR = _YttR[id_line]; YttI = _YttI[id_line]
         YtfR = _YtfR[id_line]; YtfI = _YtfI[id_line]
 
-        # status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
-        #                                  param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
-        #                                  I, J)
+        status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
+                                         param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
+                                         I, J)
 
         # recompute indices
         id_line = I + shift_lines

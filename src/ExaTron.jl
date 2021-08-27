@@ -2,12 +2,12 @@ module ExaTron
 
 using Libdl
 using LinearAlgebra
-using AMDGPU
+# using AMDGPU
 using CUDA
 using CUDA.CUBLAS
 using KernelAbstractions
 using CUDAKernels
-using ROCKernels
+# using ROCKernels
 const KA = KernelAbstractions
 
 using MPI

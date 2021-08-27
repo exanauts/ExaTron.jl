@@ -208,9 +208,9 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     end
 end
 
-@inline function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int)
-    tx = threadIdx().x
-    ty = threadIdx().y
+@inline function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int, I, J)
+    tx = J
+    ty = 1
 
     v = 0.0
     if tx <= n && ty == 1
@@ -237,7 +237,7 @@ end
         wa[ty] = sqrt(v)
     end
     =#
-    CUDA.sync_threads()
+    @synchronize
 
     return
 end
@@ -293,10 +293,11 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
 end
 
 @inline function dssyax(n::Int, A::CuDeviceArray{Float64,2},
-                        z::CuDeviceArray{Float64,1},
-                        q::CuDeviceArray{Float64,1})
-    tx = threadIdx().x
-    ty = threadIdx().y
+                        z,
+                        q,
+                        I, J)
+    tx = J
+    ty = 1
 
     v = 0.0
     if tx <= n && ty == 1
@@ -324,16 +325,17 @@ end
         q[ty] = v
     end
     =#
-    CUDA.sync_threads()
+    @synchronize
 
     return
 end
 
-@inline function reorder!(n::Int, nfree::Int, B::CuDeviceArray{Float64,2},
-                          A::CuDeviceArray{Float64,2}, indfree::CuDeviceArray{Int,1},
-                          iwa::CuDeviceArray{Int,1})
-    tx = threadIdx().x
-    ty = threadIdx().y
+@inline function reorder!(n::Int, nfree::Int, B,
+                          A, indfree,
+                          iwa,
+                          I, J)
+    tx = J
+    ty = 1
 
     #=
     if tx == 1 && ty == 1
@@ -362,7 +364,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     return
 end
