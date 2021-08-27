@@ -61,7 +61,6 @@ Driver to run TRON on GPU. This should be called from a kernel.
 
     while search
 
-        @show search
         # [0|1]: Evaluate function.
 
         if task == 0 || task == 1

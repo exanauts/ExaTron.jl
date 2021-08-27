@@ -536,8 +536,8 @@ end
                              YftR::Float64, YftI::Float64,
                              YttR::Float64, YttI::Float64,
                              YtfR::Float64, YtfI::Float64,
-                             lI, J)
-    I = lI + shift
+                             I_, J)
+    I = I_ + shift
     f = 0.0
 
     @inbounds begin
@@ -574,16 +574,17 @@ end
 end
 
 @inline function eval_grad_f_polar_kernel(n::Int, shift::Int, scale::Float64,
-                                  x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1},
-                                  param::CuDeviceArray{Float64,2},
+                                  x, g,
+                                  param,
                                   YffR::Float64, YffI::Float64,
                                   YftR::Float64, YftI::Float64,
                                   YttR::Float64, YttI::Float64,
-                                  YtfR::Float64, YtfI::Float64)
+                                  YtfR::Float64, YtfI::Float64,
+                                  I_, J)
 
-    tx = threadIdx().x
-    ty = threadIdx().y
-    I = blockIdx().x + shift
+    tx = J
+    ty = 1
+    I = I_ + shift
 
     @inbounds begin
         cos_ij = cos(x[3] - x[4])
@@ -667,22 +668,23 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     return
 end
 
 @inline function eval_h_polar_kernel(n::Int, shift::Int, scale::Float64,
-                             x::CuDeviceArray{Float64,1}, A::CuDeviceArray{Float64,2},
-                             param::CuDeviceArray{Float64,2},
+                             x, A,
+                             param,
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,
                              YttR::Float64, YttI::Float64,
-                             YtfR::Float64, YtfI::Float64)
+                             YtfR::Float64, YtfI::Float64,
+                             I_, J)
 
-    tx = threadIdx().x
-    ty = threadIdx().y
-    I = blockIdx().x + shift
+    tx = J
+    ty = 1
+    I = I_ + shift
 
     @inbounds begin
         cos_ij = cos(x[3] - x[4])
@@ -944,7 +946,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     return
 end

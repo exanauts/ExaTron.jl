@@ -128,12 +128,13 @@ function dicfs(n, nnz, A, L,
     return
 end
 
-@inline function dicfs(n::Int, alpha::Float64, A::CuDeviceArray{Float64,2},
-                       L::CuDeviceArray{Float64,2},
-                       wa1::CuDeviceArray{Float64,1},
-                       wa2::CuDeviceArray{Float64,1})
-    tx = threadIdx().x
-    ty = threadIdx().y
+@inline function dicfs(n::Int, alpha::Float64, A,
+                       L,
+                       wa1,
+                       wa2,
+                       I, J)
+    tx = J
+    ty = 1
 
     nbmax = 3
     alpham = 1.0e-3
@@ -144,13 +145,13 @@ end
     two = 2.0
 
     # Compute the l2 norms of the columns of A.
-    nrm2!(wa1, A, n)
+    nrm2!(wa1, A, n, I, J)
 
     # Compute the scaling matrix D.
     if tx <= n && ty == 1
         @inbounds wa2[tx] = (wa1[tx] > zero) ? one/sqrt(wa1[tx]) : one
     end
-    CUDA.sync_threads()
+    @synchronize
 
     # Determine a lower bound for the step.
 
@@ -163,25 +164,29 @@ end
     # Compute the initial shift.
 
     alpha = zero
-    if tx <= n  # No check on ty so that each warp has alpha.
-        @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
+    for i in 1:n
+        alpha = max(alpha, -A[i,i]*(wa2[i]^2))
     end
+    alpha = max(alpha,alphas)
+    # if tx <= n  # No check on ty so that each warp has alpha.
+    #     @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
+    # end
 
     # shfl_down_sync will automatically sync threads in a warp.
 
     # Find the maximum alpha in a warp and put it in the first thread.
     #offset = div(blockDim().x, 2)
-    offset = 16
-    while offset > 0
-        alpha = max(alpha, CUDA.shfl_down_sync(0xffffffff, alpha, offset))
-        offset >>= 1
-    end
-    # Broadcast it to the entire threads in a warp.
-    alpha = CUDA.shfl_sync(0xffffffff, alpha, 1)
+    # offset = 16
+    # while offset > 0
+    #     alpha = max(alpha, CUDA.shfl_down_sync(0xffffffff, alpha, offset))
+    #     offset >>= 1
+    # end
+    # # Broadcast it to the entire threads in a warp.
+    # alpha = CUDA.shfl_sync(0xffffffff, alpha, 1)
 
-    if alpha > 0
-        alpha = max(alpha,alphas)
-    end
+    # if alpha > 0
+    #     alpha = max(alpha,alphas)
+    # end
 
     # Search for an acceptable shift. During the search we decrease
     # the lower bound alphas until we determine a lower bound that
@@ -200,10 +205,10 @@ end
                 @inbounds L[tx,tx] += alpha
             end
         end
-        CUDA.sync_threads()
+        @synchronize
 
         # Attempt a Cholesky factorization.
-        info = dicf(n, L)
+        info = dicf(n, L, I, J)
 
         # If the factorization exists, then test for termination.
         # Otherwise increment the shift.
@@ -223,7 +228,7 @@ end
                         end
                     end
                 end
-                CUDA.sync_threads()
+                @synchronize
                 return
             end
         else
