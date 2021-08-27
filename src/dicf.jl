@@ -239,9 +239,9 @@ end
 =#
 
 # Left-looking Cholesky
-@inline function dicf(n::Int,L::CuDeviceArray{Float64,2})
-    tx = threadIdx().x
-    ty = threadIdx().y
+@inline function dicf(n::Int,L,I,J)
+    tx = J
+    ty = 1
 
     @inbounds for j=1:n
         # Apply the pending updates.
@@ -252,10 +252,10 @@ end
                 end
             end
         end
-        CUDA.sync_threads()
+        @synchronize
 
         if (L[j,j] <= 0)
-            CUDA.sync_threads()
+            @synchronize
             return -1
         end
 
@@ -263,7 +263,7 @@ end
         if tx >= j && tx <= n && ty == 1
             L[tx,j] /= Ljj
         end
-        CUDA.sync_threads()
+        @synchronize
     end
 
     if tx <= n && ty == 1
@@ -273,7 +273,7 @@ end
             end
         end
     end
-    CUDA.sync_threads()
+    @synchronize
 
     return 0
 end

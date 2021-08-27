@@ -88,14 +88,15 @@ function dprsrch(n,x,xl,xu,A,g,w,wa1,wa2)
     return
 end
 
-@inline function dprsrch(n::Int, x::CuDeviceArray{Float64,1},
-                         xl::CuDeviceArray{Float64,1},
-                         xu::CuDeviceArray{Float64,1},
-                         A::CuDeviceArray{Float64,2},
-                         g::CuDeviceArray{Float64,1},
-                         w::CuDeviceArray{Float64,1},
-                         wa1::CuDeviceArray{Float64,1},
-                         wa2::CuDeviceArray{Float64,1})
+@inline function dprsrch(n::Int, x,
+                         xl,
+                         xu,
+                         A,
+                         g,
+                         w,
+                         wa1,
+                         wa2,
+                         I, J)
     one = 1.0
     p5 = 0.5
 
@@ -113,7 +114,7 @@ end
     nsteps = 0
 
     # Find the smallest break-point on the ray x + alpha*w.
-    nbrpt,brptmin,brptmax = dbreakpt(n,x,xl,xu,w)
+    nbrpt,brptmin,brptmax = dbreakpt(n,x,xl,xu,w,I,J)
 
     search = true
     while (search && alpha > brptmin)
@@ -122,10 +123,10 @@ end
         # decrease condition.
 
         nsteps = nsteps + 1
-        dgpstep(n,x,xl,xu,alpha,w,wa1)
-        dssyax(n,A,wa1,wa2)
-        gts = ddot(n,g,1,wa1,1)
-        q = p5*ddot(n,wa1,1,wa2,1) + gts
+        dgpstep(n,x,xl,xu,alpha,w,wa1,I,J)
+        dssyax(n,A,wa1,wa2,I,J)
+        gts = ddot(n,g,1,wa1,1,I,J)
+        q = p5*ddot(n,wa1,1,wa2,1,I,J) + gts
         if q <= mu0*gts
             search = false
         else
@@ -148,10 +149,10 @@ end
 
     # Compute the final iterate and step.
 
-    dgpstep(n,x,xl,xu,alpha,w,wa1)
-    daxpy(n,alpha,w,1,x,1)
-    dmid(n,x,xl,xu)
-    dcopy(n,wa1,1,w,1)
+    dgpstep(n,x,xl,xu,alpha,w,wa1,I,J)
+    daxpy(n,alpha,w,1,x,1,I,J)
+    dmid(n,x,xl,xu,I,J)
+    dcopy(n,wa1,1,w,1,I,J)
 
     return
 end

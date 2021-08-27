@@ -15,7 +15,7 @@ end
     nested(v, I)
 end
 
-v = ones(10)
+v = ones(10) |> CuArray
 shift = 0
-ev = kernel2(CPU())(v, shift, ndrange = 10)
+ev = kernel2(CUDADevice())(v, shift, ndrange = 10)
 wait(ev)

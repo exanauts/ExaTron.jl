@@ -221,18 +221,19 @@ function dtron(n,x,xl,xu,f,g,A,
     return delta
 end
 
-@inline function dtron(n::Int, x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1},
-               xu::CuDeviceArray{Float64,1}, f::Float64, g::CuDeviceArray{Float64,1},
-               A::CuDeviceArray{Float64,2}, frtol::Float64, fatol::Float64,
+@inline function dtron(n::Int, x, xl,
+               xu, f::Float64, g,
+               A, frtol::Float64, fatol::Float64,
                fmin::Float64, cgtol::Float64, itermax::Int, delta::Float64, task::Int,
-               B::CuDeviceArray{Float64,2}, L::CuDeviceArray{Float64,2},
-               xc::CuDeviceArray{Float64,1}, s::CuDeviceArray{Float64,1},
-               indfree::CuDeviceArray{Int,1}, gfree::CuDeviceArray{Float64,1},
-               isave::CuDeviceArray{Int,1}, dsave::CuDeviceArray{Float64,1},
-               wa::CuDeviceArray{Float64,1}, iwa::CuDeviceArray{Int,1},
-               wa1::CuDeviceArray{Float64,1}, wa2::CuDeviceArray{Float64,1},
-               wa3::CuDeviceArray{Float64,1}, wa4::CuDeviceArray{Float64,1},
-               wa5::CuDeviceArray{Float64,1})
+               B, L,
+               xc, s,
+               indfree, gfree,
+               isave, dsave,
+               wa, iwa,
+               wa1, wa2,
+               wa3, wa4,
+               wa5,
+               I, J)
     zero = 0.0
     p5 = 0.5
     one = 1.0
@@ -276,7 +277,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     # Search for a lower function value.
 
@@ -290,12 +291,12 @@ end
             # Save the best function value, iterate, and gradient.
 
             fc = f
-            dcopy(n,x,1,xc,1)
+            dcopy(n,x,1,xc,1, I, J)
 
             # Compute the Cauchy step and store in s.
 
             alphac = dcauchy(n,x,xl,xu,A,g,delta,
-                             alphac,s,wa)
+                             alphac,s,wa, I, J)
 
             # Compute the projected Newton step.
 
@@ -303,12 +304,12 @@ end
                                x, xl, xu, A, g, s,
                                B, L,
                                indfree, gfree, wa, iwa,
-                               wa1, wa2, wa3, wa4, wa5)
+                               wa1, wa2, wa3, wa4, wa5, I, J)
 
             # Compute the predicted reduction.
 
-            dssyax(n, A, s, wa)
-            prered = -(ddot(n,s,1,g,1) + p5*ddot(n,s,1,wa,1))
+            dssyax(n, A, s, wa, I, J)
+            prered = -(ddot(n,s,1,g,1,I,J) + p5*ddot(n,s,1,wa,1,I,J))
             iterscg = iterscg + iters
 
             # Set task to compute the function.
@@ -326,14 +327,14 @@ end
 
             # On the first iteration, adjust the initial step bound.
 
-            snorm = dnrm2(n,s,1)
+            snorm = dnrm2(n,s,1,I,J)
             if iter == 1
                 delta = min(delta,snorm)
             end
 
             # Update the trust region bound.
 
-            g0 = ddot(n,g,1,s,1)
+            g0 = ddot(n,g,1,s,1,I,J)
             if f-fc-g0 <= zero
                 alpha = sigma3
             else
@@ -367,7 +368,7 @@ end
                 # Unsuccessful iterate.
 
                 task = 1 # 'F'
-                dcopy(n,xc,1,x,1)
+                dcopy(n,xc,1,x,1,I,J)
                 f = fc
 
             end
@@ -423,7 +424,7 @@ end
         dsave[3] = prered
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     return delta, task
 end

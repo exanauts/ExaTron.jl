@@ -24,23 +24,24 @@ function dnsol(n, L::TronDenseMatrix, r)
     end
 end
 
-@inline function dnsol(n::Int, L::CuDeviceArray{Float64,2},
-                       r::CuDeviceArray{Float64,1})
+@inline function dnsol(n::Int, L,
+                       r,
+                       I, J)
     # Solve L*x = r and store the result in r.
 
-    tx = threadIdx().x
-    ty = threadIdx().y
+    tx = J
+    ty = 1
 
     @inbounds for j=1:n
         if tx == 1 && ty == 1
             r[j] = r[j] / L[j,j]
         end
-        CUDA.sync_threads()
+        @synchronize
 
         if tx > j && tx <= n && ty == 1
             r[tx] = r[tx] - L[tx,j]*r[j]
         end
-        CUDA.sync_threads()
+        @synchronize
     end
 
     return
