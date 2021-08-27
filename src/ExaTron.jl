@@ -2,8 +2,13 @@ module ExaTron
 
 using Libdl
 using LinearAlgebra
+using AMDGPU
 using CUDA
 using CUDA.CUBLAS
+using KernelAbstractions
+using CUDAKernels
+using ROCKernels
+const KA = KernelAbstractions
 
 using MPI
 
@@ -43,6 +48,8 @@ include("dtrpcg.jl")
 include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
+
+include("architecture.jl")
 
 include("admm/opfdata.jl")
 include("admm/environment.jl")
