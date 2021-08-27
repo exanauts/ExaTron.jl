@@ -3,7 +3,8 @@
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
                        YttR::Float64, YttI::Float64,
-                       YtfR::Float64, YtfI::Float64)
+                       YtfR::Float64, YtfI::Float64,
+                       I, J)
                        #=
                        YffR::CuDeviceArray{Float64}, YffI::CuDeviceArray{Float64},
                        YftR::CuDeviceArray{Float64}, YftI::CuDeviceArray{Float64},
@@ -13,7 +14,6 @@
 
     # All threads execute the same code.
 
-    I = blockIdx().x
     f = 0.0
 
     @inbounds for i=1:6
@@ -50,7 +50,7 @@
     end
 
     f *= scale
-    CUDA.sync_threads()
+    @synchronize
     return f
 end
 
@@ -60,12 +60,11 @@ end
                             YffR::Float64, YffI::Float64,
                             YftR::Float64, YftI::Float64,
                             YttR::Float64, YttI::Float64,
-                            YtfR::Float64, YtfI::Float64)
+                            YtfR::Float64, YtfI::Float64,
+                            I, J)
 
     # All threads execute the same code.
-    tx = threadIdx().x
-    ty = threadIdx().y
-    I = blockIdx().x
+    tx = J
 
     @inbounds begin
         c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
@@ -123,7 +122,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
     return
 end
 
@@ -133,12 +132,12 @@ end
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
                        YttR::Float64, YttI::Float64,
-                       YtfR::Float64, YtfI::Float64)
+                       YtfR::Float64, YtfI::Float64,
+                       I, J)
 
     # All threads execute the same code.
-    tx = threadIdx().x
-    ty = threadIdx().y
-    I = blockIdx().x
+    tx = J
+    ty = 1
 
     @inbounds begin
         alrect = param[23,I]
@@ -212,7 +211,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     if tx <= n && ty == 1
         @inbounds for j=1:n
@@ -222,7 +221,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
     return
 end
 
@@ -536,8 +535,9 @@ end
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,
                              YttR::Float64, YttI::Float64,
-                             YtfR::Float64, YtfI::Float64)
-    I = blockIdx().x + shift
+                             YtfR::Float64, YtfI::Float64,
+                             lI, J)
+    I = lI + shift
     f = 0.0
 
     @inbounds begin
@@ -568,7 +568,7 @@ end
     end
 
     f *= scale
-    CUDA.sync_threads()
+    @synchronize
 
     return f
 end

@@ -111,12 +111,12 @@ mutable struct Model{T,TD,TI}
     bus_start::Int # this is for varibles of type v.
     brBusIdx::TI
 
-    function Model{T,TD,TI}(data::OPFData, use_gpu::Bool, use_polar::Bool, use_twolevel::Bool) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
+    function Model{T,TD,TI}(data::OPFData, device::KA.Device, use_polar::Bool, use_twolevel::Bool) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
         model = new{T,TD,TI}()
 
         ngen = length(data.generators)
         gen_start = 1
-        pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data; use_gpu=use_gpu)
+        pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data; device=device)
         model.gen_mod = GeneratorModel{TD}(ngen, gen_start, pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
 
         model.n = (use_polar == true) ? 4 : 10
@@ -124,8 +124,8 @@ mutable struct Model{T,TD,TI}
         model.nbus = length(data.buses)
         model.nvar = 2*ngen + 8*model.nline
         model.line_start = 2*ngen + 1
-        model.YshR, model.YshI, model.YffR, model.YffI, model.YftR, model.YftI, model.YttR, model.YttI, model.YtfR, model.YtfI, model.FrBound, model.ToBound = get_branch_data(data; use_gpu=use_gpu)
-        model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd = get_bus_data(data; use_gpu=use_gpu)
+        model.YshR, model.YshI, model.YffR, model.YffI, model.YftR, model.YftI, model.YttR, model.YttI, model.YtfR, model.YtfI, model.FrBound, model.ToBound = get_branch_data(data; device=device)
+        model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd = get_bus_data(data; device=device)
 
         # These are only for two-level ADMM.
         model.nvar_u = 2*ngen + 8*model.nline
@@ -133,7 +133,7 @@ mutable struct Model{T,TD,TI}
         model.bus_start = 2*ngen + 4*model.nline + 1
         if use_twolevel
             model.nvar = model.nvar_u + model.nvar_v
-            model.brBusIdx = get_branch_bus_index(data; use_gpu=use_gpu)
+            model.brBusIdx = get_branch_bus_index(data; device=device)
         end
 
         return model
@@ -342,7 +342,6 @@ This structure carries everything required to run ADMM from a given solution.
 mutable struct AdmmEnv{T,TD,TI,TM}
     case::String
     data::OPFData
-    use_gpu::Bool
     use_polar::Bool
     use_twolevel::Bool
     gpu_no::Int
@@ -352,18 +351,20 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     solution::AbstractSolution{T,TD}
 
     membuf::TM # was param
+    device::KA.Device
 
     function AdmmEnv{T,TD,TI,TM}(
-        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=-1, verbose=1,
-        outer_eps=2e-4,
+        opfdata, rho_pq, rho_va; use_polar=true, use_twolevel=false, gpu_no=-1, verbose=1,
+        outer_eps=2e-4, device=KA.CPU()
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
-        if use_gpu && gpu_no > 0
+        if isa(device, CUDADevice) && gpu_no > 0
             CUDA.device!(gpu_no)
         end
+
         env = new{T,TD,TI,TM}()
 
         env.data = opfdata
-        env.use_gpu = use_gpu
+        env.device = device
         env.use_polar = use_polar
         env.gpu_no = gpu_no
 
@@ -371,7 +372,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         env.params.verbose = verbose
         env.params.outer_eps = outer_eps
 
-        env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar, use_twolevel)
+        env.model = Model{T,TD,TI}(env.data, device, use_polar, use_twolevel)
         ybus = Ybus{Array{T}}(computeAdmitances(
             env.data.lines, env.data.buses, env.data.baseMVA; VI=Array{Int}, VD=Array{T})...)
 
@@ -387,17 +388,27 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     end
 end
 
-function AdmmEnv(case::String, use_gpu::Bool, rho_pq, rho_va; options...)
+function AdmmEnv(case::String, device::KA.Device, rho_pq, rho_va; options...)
     opfdata = opf_loaddata(case)
-    env = AdmmEnv(opfdata, use_gpu, rho_pq, rho_va; options...)
+    env = AdmmEnv(opfdata, device, rho_pq, rho_va; options...)
     env.case = case
     return env
 end
 
-function AdmmEnv(opfdata::OPFData, use_gpu::Bool, rho_pq, rho_va; options...)
-    VT = use_gpu ? CuArray : Array
+function AdmmEnv(opfdata::OPFData, device::KA.Device, rho_pq, rho_va; options...)
+    if isa(device, GPU)
+        if isa(device, CUDADevice)
+            VT = CuArray
+        elseif isa(device, ROCDevice)
+            VT = ROCArray
+        else
+            error("Unknown device.")
+        end
+    else
+        VT = Array
+    end
     return AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
-        opfdata, rho_pq, rho_va; use_gpu=use_gpu, options...
+        opfdata, rho_pq, rho_va; device=device, options...
     )
 end
 

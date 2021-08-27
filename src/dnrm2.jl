@@ -48,8 +48,8 @@ else
     dnrm2(n,x,incx) = tron_dnrm2(n, x, incx)
 end
 
-@inline function dnrm2(n::Int,x::CuDeviceArray{Float64,1},incx::Int)
-    tx = threadIdx().x
+@inline function dnrm2(n::Int,x,incx::Int, I, J, Jx, Jy)
+    tx = J
 
     v = 0.0
     if tx <= n  # No check on ty so that each warp has v.

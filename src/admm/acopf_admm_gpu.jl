@@ -1,14 +1,26 @@
-function get_generator_data(data::OPFData; use_gpu=false)
+function get_generator_data(data::OPFData; device = KA.CPU())
     ngen = length(data.generators)
 
-    if use_gpu
-        pgmin = CuArray{Float64}(undef, ngen)
-        pgmax = CuArray{Float64}(undef, ngen)
-        qgmin = CuArray{Float64}(undef, ngen)
-        qgmax = CuArray{Float64}(undef, ngen)
-        c2 = CuArray{Float64}(undef, ngen)
-        c1 = CuArray{Float64}(undef, ngen)
-        c0 = CuArray{Float64}(undef, ngen)
+    if isa(device, KA.GPU)
+        if isa(device, CUDADevice)
+            pgmin = CuArray{Float64}(undef, ngen)
+            pgmax = CuArray{Float64}(undef, ngen)
+            qgmin = CuArray{Float64}(undef, ngen)
+            qgmax = CuArray{Float64}(undef, ngen)
+            c2 = CuArray{Float64}(undef, ngen)
+            c1 = CuArray{Float64}(undef, ngen)
+            c0 = CuArray{Float64}(undef, ngen)
+        elseif isa(device, ROCDevice)
+            pgmin = ROCArray{Float64}(undef, ngen)
+            pgmax = ROCArray{Float64}(undef, ngen)
+            qgmin = ROCArray{Float64}(undef, ngen)
+            qgmax = ROCArray{Float64}(undef, ngen)
+            c2 = ROCArray{Float64}(undef, ngen)
+            c1 = ROCArray{Float64}(undef, ngen)
+            c0 = ROCArray{Float64}(undef, ngen)
+        else
+            error("Unknown device")
+        end
     else
         pgmin = Array{Float64}(undef, ngen)
         pgmax = Array{Float64}(undef, ngen)
@@ -37,7 +49,7 @@ function get_generator_data(data::OPFData; use_gpu=false)
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
 
-function get_bus_data(data::OPFData; use_gpu=false)
+function get_bus_data(data::OPFData; device = KA.CPU())
     nbus = length(data.buses)
 
     FrIdx = [l for b=1:nbus for l in data.FromLines[b]]
@@ -50,15 +62,28 @@ function get_bus_data(data::OPFData; use_gpu=false)
     Pd = Float64[data.buses[i].Pd for i=1:nbus]
     Qd = Float64[data.buses[i].Qd for i=1:nbus]
 
-    if use_gpu
-        cuFrIdx = CuArray{Int}(undef, length(FrIdx))
-        cuToIdx = CuArray{Int}(undef, length(ToIdx))
-        cuGenIdx = CuArray{Int}(undef, length(GenIdx))
-        cuFrStart = CuArray{Int}(undef, length(FrStart))
-        cuToStart = CuArray{Int}(undef, length(ToStart))
-        cuGenStart = CuArray{Int}(undef, length(GenStart))
-        cuPd = CuArray{Float64}(undef, nbus)
-        cuQd = CuArray{Float64}(undef, nbus)
+    if isa(device, KA.GPU)
+        if isa(device, CUDADevice)
+            cuFrIdx = CuArray{Int}(undef, length(FrIdx))
+            cuToIdx = CuArray{Int}(undef, length(ToIdx))
+            cuGenIdx = CuArray{Int}(undef, length(GenIdx))
+            cuFrStart = CuArray{Int}(undef, length(FrStart))
+            cuToStart = CuArray{Int}(undef, length(ToStart))
+            cuGenStart = CuArray{Int}(undef, length(GenStart))
+            cuPd = CuArray{Float64}(undef, nbus)
+            cuQd = CuArray{Float64}(undef, nbus)
+        elseif isa(device, ROCDevice)
+            cuFrIdx = ROCArray{Int}(undef, length(FrIdx))
+            cuToIdx = ROCArray{Int}(undef, length(ToIdx))
+            cuGenIdx = ROCArray{Int}(undef, length(GenIdx))
+            cuFrStart = ROCArray{Int}(undef, length(FrStart))
+            cuToStart = ROCArray{Int}(undef, length(ToStart))
+            cuGenStart = ROCArray{Int}(undef, length(GenStart))
+            cuPd = ROCArray{Float64}(undef, nbus)
+            cuQd = ROCArray{Float64}(undef, nbus)
+        else
+            error("Unknown device")
+        end
 
         copyto!(cuFrIdx, FrIdx)
         copyto!(cuToIdx, ToIdx)
@@ -75,7 +100,7 @@ function get_bus_data(data::OPFData; use_gpu=false)
     end
 end
 
-function get_branch_data(data::OPFData; use_gpu=false)
+function get_branch_data(data::OPFData; device = KA.CPU())
     buses = data.buses
     lines = data.lines
     BusIdx = data.BusIdx
@@ -84,19 +109,36 @@ function get_branch_data(data::OPFData; use_gpu=false)
     frBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
     toBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
 
-    if use_gpu
-        cuYshR = CuArray{Float64}(undef, length(ybus.YshR))
-        cuYshI = CuArray{Float64}(undef, length(ybus.YshI))
-        cuYffR = CuArray{Float64}(undef, nline)
-        cuYffI = CuArray{Float64}(undef, nline)
-        cuYftR = CuArray{Float64}(undef, nline)
-        cuYftI = CuArray{Float64}(undef, nline)
-        cuYttR = CuArray{Float64}(undef, nline)
-        cuYttI = CuArray{Float64}(undef, nline)
-        cuYtfR = CuArray{Float64}(undef, nline)
-        cuYtfI = CuArray{Float64}(undef, nline)
-        cuFrBound = CuArray{Float64}(undef, 2*nline)
-        cuToBound = CuArray{Float64}(undef, 2*nline)
+    if isa(device, KA.GPU)
+        if isa(device, CUDADevice)
+            cuYshR = CuArray{Float64}(undef, length(ybus.YshR))
+            cuYshI = CuArray{Float64}(undef, length(ybus.YshI))
+            cuYffR = CuArray{Float64}(undef, nline)
+            cuYffI = CuArray{Float64}(undef, nline)
+            cuYftR = CuArray{Float64}(undef, nline)
+            cuYftI = CuArray{Float64}(undef, nline)
+            cuYttR = CuArray{Float64}(undef, nline)
+            cuYttI = CuArray{Float64}(undef, nline)
+            cuYtfR = CuArray{Float64}(undef, nline)
+            cuYtfI = CuArray{Float64}(undef, nline)
+            cuFrBound = CuArray{Float64}(undef, 2*nline)
+            cuToBound = CuArray{Float64}(undef, 2*nline)
+        elseif isa(device, ROCDevice)
+            cuYshR = ROCArray{Float64}(undef, length(ybus.YshR))
+            cuYshI = ROCArray{Float64}(undef, length(ybus.YshI))
+            cuYffR = ROCArray{Float64}(undef, nline)
+            cuYffI = ROCArray{Float64}(undef, nline)
+            cuYftR = ROCArray{Float64}(undef, nline)
+            cuYftI = ROCArray{Float64}(undef, nline)
+            cuYttR = ROCArray{Float64}(undef, nline)
+            cuYttI = ROCArray{Float64}(undef, nline)
+            cuYtfR = ROCArray{Float64}(undef, nline)
+            cuYtfI = ROCArray{Float64}(undef, nline)
+            cuFrBound = ROCArray{Float64}(undef, 2*nline)
+            cuToBound = ROCArray{Float64}(undef, 2*nline)
+        else
+            error("Unknown device")
+        end
         copyto!(cuYshR, ybus.YshR)
         copyto!(cuYshI, ybus.YshI)
         copyto!(cuYffR, ybus.YffR)
@@ -173,13 +215,10 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
     return
 end
 
-function copy_data_kernel(n::Int, dest::CuDeviceArray{Float64,1}, src::CuDeviceArray{Float64,1})
-    tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+@kernel function copy_data_kernel(dest, @Const(src))
+    I = @index(Global)
+    dest[I] = src[I]
 
-    if tx <= n
-        dest[tx] = src[tx]
-    end
-    return
 end
 
 function update_multiplier_kernel(n::Int, l_curr::CuDeviceArray{Float64,1},

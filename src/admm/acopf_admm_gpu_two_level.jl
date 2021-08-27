@@ -103,15 +103,21 @@ function check_power_balance_violation(env::AdmmEnv, xbar)
     return max_viol_real, max_viol_reactive
 end
 
-function get_branch_bus_index(data::OPFData; use_gpu=false)
+function get_branch_bus_index(data::OPFData; device=KA.CPU())
     lines = data.lines
     BusIdx = data.BusIdx
     nline = length(lines)
 
     brBusIdx = [ x for l=1:nline for x in (BusIdx[lines[l].from], BusIdx[lines[l].to]) ]
 
-    if use_gpu
-        cu_brBusIdx = CuArray{Int}(undef, 2*nline)
+    if isa(device, KA.GPU)
+        if isa(device, CUDADevice)
+            cu_brBusIdx = CuArray{Int}(undef, 2*nline)
+        elseif isa(device, ROCDevice)
+            cu_brBusIdx = ROCArray{Int}(undef, 2*nline)
+        else
+            error("Unknown device")
+        end
         copyto!(cu_brBusIdx, brBusIdx)
         return cu_brBusIdx
     else
@@ -624,106 +630,123 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
     while outer < outer_iterlim
         outer += 1
 
-        if !env.use_gpu
+        if isa(env.device, KA.CPU)
             z_outer .= z_curr
             z_prev_norm = norm(z_outer)
         else
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, z_outer, z_curr)
-            z_prev_norm = CUDA.norm(z_curr)
-            CUDA.synchronize()
+            # synchronize(env.device)
+            ev = copy_data_kernel(env.device)(z_outer, z_curr, ndrange = mod.nvar)
+            # synchronize(env.device)
+            wait(ev)
+            z_prev_norm = norm(z_curr)
         end
 
         inner = 0
         while inner < inner_iterlim
             inner += 1
 
-            if !env.use_gpu
-                z_prev .= z_curr
-                rp_old .= rp
+            # if env.use_gpu
+            #     z_prev .= z_curr
+            #     rp_old .= rp
 
-                tcpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
-                time_gen += tcpu.time
+            #     tcpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
+            #     time_gen += tcpu.time
 
-                #scale = min(scale, (2*1e4) / maximum(abs.(rho_u)))
-                if env.use_polar
-                    tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
-                                                                                u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                                                                                shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
-                else
-                    tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, inner, par.max_auglag, mod.line_start, par.mu_max,
-                                                                        u_curr, v_curr, l_curr, rho,
-                                                                        wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                        mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
-                end
-                time_br += tcpu.time
+            #     #scale = min(scale, (2*1e4) / maximum(abs.(rho_u)))
+            #     if env.use_polar
+            #         tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+            #                                                                     u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+            #                                                                     shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+            #                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
+            #     else
+            #         tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, inner, par.max_auglag, mod.line_start, par.mu_max,
+            #                                                             u_curr, v_curr, l_curr, rho,
+            #                                                             wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+            #                                                             mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+            #     end
+            #     time_br += tcpu.time
 
-                tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-                                                      mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-                                                      mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
-                time_bus += tcpu.time
+            #     tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+            #                                           mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+            #                                           mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
+            #     time_bus += tcpu.time
 
-                update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+            #     update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
 
-                update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-                zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
+            #     update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+            #     zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
 
-                l_curr .= -(lz .+ beta.*z_curr)
+            #     l_curr .= -(lz .+ beta.*z_curr)
 
-                compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
-                rp_v .= v_curr .- xbar_curr .+ zv_curr
+            #     compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
+            #     rp_v .= v_curr .- xbar_curr .+ zv_curr
 
-                #=
-                if inner > 1
-                    update_rho(rho, rp, rp_old, theta, gamma)
-                end
-                =#
+            #     #=
+            #     if inner > 1
+            #         update_rho(rho, rp, rp_old, theta, gamma)
+            #     end
+            #     =#
 
-                rd .= z_curr .- z_prev
-                Ax_plus_By .= rp .- z_curr
+            #     rd .= z_curr .- z_prev
+            #     Ax_plus_By .= rp .- z_curr
 
-                primres = norm(rp)
-                dualres = norm(rd)
-                z_curr_norm = norm(z_curr)
-                mismatch = norm(Ax_plus_By)
-                eps_pri = sqrt_d / (2500*outer)
+            #     primres = norm(rp)
+            #     dualres = norm(rd)
+            #     z_curr_norm = norm(z_curr)
+            #     mismatch = norm(Ax_plus_By)
+            #     eps_pri = sqrt_d / (2500*outer)
 
-                if par.verbose > 0
-                    if inner == 1 || (inner % 50) == 0
-                        @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
-                                "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
-                    end
+            #     if par.verbose > 0
+            #         if inner == 1 || (inner % 50) == 0
+            #             @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
+            #                     "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
+            #         end
 
-                    @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
-                            outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
-                end
+            #         @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
+            #                 outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
+            #     end
 
-                if primres <= eps_pri || dualres <= par.DUAL_TOL
-                    break
-                end
-            else
-                @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, z_prev, z_curr)
-                @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, rp_old, rp)
-                CUDA.synchronize()
+            #     if primres <= eps_pri || dualres <= par.DUAL_TOL
+            #         break
+            #     end
+            # else
+                # synchronize(env.device)
+                ev = copy_data_kernel(env.device)(z_prev, z_curr, ndrange = mod.nvar)
+                # synchronize(env.device)
+                wait(ev)
+                ev = copy_data_kernel(env.device)(rp_old, rp, ndrange = mod.nvar)
+                # synchronize(env.device)
+                wait(ev)
 
-                tgpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
+                tgpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, env.device)
+                # synchronize(env.device)
+                wait(ev)
                 # MPI routines to be implemented:
                 #  - Broadcast v_curr and l_curr to GPUs.
                 #  - Collect u_curr.
                 #  - div(nblk_br / number of GPUs, RoundUp)
 
-                time_gen += tgpu.time
+                # time_gen += tgpu.time
                 if env.use_polar
-                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel_two_level(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                    # tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel_two_level(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                    #                                           u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+                    #                                           shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                    #                                           mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
+                    @show nblk_br
+                    ev = polar_kernel_two_level(env.device)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                                                               shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                              mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
+                                                              mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx, ndrange=nblk_br)
+                    wait(ev)
                 else
                     tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, inner, par.max_auglag, mod.line_start, scale, par.mu_max,
                                                                                                     u_curr, v_curr, l_curr, rho,
                                                                                                     wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
                 end
+                # synchronize(env.device)
+                # error("Stop")
+                exit(0)
                 time_br += tgpu.time
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
                                                                      mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
@@ -776,7 +799,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                 if primres <= eps_pri || dualres <= par.DUAL_TOL
                     break
                 end
-            end
+            # end
         end
 
         if mismatch <= OUTER_TOL
