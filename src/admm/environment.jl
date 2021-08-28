@@ -463,12 +463,11 @@ mutable struct ModelWithRamping{T,TD,TI,TM} <: AbstractOPFModel{T,TD,TI,TM}
         model.inner.Qd = env.load.qd[:,time_index]
         model.time_index = time_index
 
-        ramp_rate = [ramp_ratio*model.inner.pgmax[g] for g=1:model.inner.ngen]
         if env.use_gpu
             model.ramp_rate = TD(undef, model.inner.ngen)
-            copyto!(model.ramp_rate, ramp_rate)
+            model.ramp_rate .= ramp_ratio .* model.inner.pgmax
         else
-            model.ramp_rate = ramp_rate
+            model.ramp_rate = [ramp_ratio*model.inner.pgmax[g] for g=1:model.inner.ngen]
         end
 
         model.ramping_solution = SolutionRamping{T,TD}(model.inner.ngen)

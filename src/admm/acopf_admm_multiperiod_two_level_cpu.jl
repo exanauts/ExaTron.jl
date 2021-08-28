@@ -47,45 +47,43 @@ end
 
 function admm_multiperiod_solve_single_period(
     env::AdmmEnv{Float64,Array{Float64,1},Array{Int,1},Array{Float64,2}},
-    model::ModelWithRamping{Float64,Array{Float64,1},Array{Int,1},Array{Float64,2}}
+    ramp_model::ModelWithRamping{Float64,Array{Float64,1},Array{Int,1},Array{Float64,2}}
 )
     par = env.params
+    mod = ramp_model.inner
+    sol = mod.solution
+    ramp_sol = ramp_model.ramping_solution
 
-    ramp_mod = model
-    ramp_sol = ramp_mod.ramping_solution
-    inner_mod = model.inner
-    inner_sol = inner_mod.solution
+    x_curr = sol.x_curr
+    xbar_curr = sol.xbar_curr
+    z_outer = sol.z_outer
+    z_curr = sol.z_curr
+    z_prev = sol.z_prev
+    l_curr = sol.l_curr
+    lz = sol.lz
+    rho = sol.rho
+    rp = sol.rp
+    rd = sol.rd
+    rp_old = sol.rp_old
+    Ax_plus_By = sol.Ax_plus_By
 
-    x_curr = inner_sol.x_curr
-    xbar_curr = inner_sol.xbar_curr
-    z_outer = inner_sol.z_outer
-    z_curr = inner_sol.z_curr
-    z_prev = inner_sol.z_prev
-    l_curr = inner_sol.l_curr
-    lz = inner_sol.lz
-    rho = inner_sol.rho
-    rp = inner_sol.rp
-    rd = inner_sol.rd
-    rp_old = inner_sol.rp_old
-    Ax_plus_By = inner_sol.Ax_plus_By
-
-    u_curr = view(x_curr, 1:inner_mod.nvar_u)
-    v_curr = view(x_curr, inner_mod.nvar_u+1:inner_mod.nvar)
-    zu_curr = view(z_curr, 1:inner_mod.nvar_u)
-    zv_curr = view(z_curr, inner_mod.nvar_u+1:inner_mod.nvar)
-    lu_curr = view(l_curr, 1:inner_mod.nvar_u)
-    lv_curr = view(l_curr, inner_mod.nvar_u+1:inner_mod.nvar)
-    lz_u = view(lz, 1:inner_mod.nvar_u)
-    lz_v = view(lz, inner_mod.nvar_u+1:inner_mod.nvar)
-    rho_u = view(rho, 1:inner_mod.nvar_u)
-    rho_v = view(rho, inner_mod.nvar_u+1:inner_mod.nvar)
-    rp_u = view(rp, 1:inner_mod.nvar_u)
-    rp_v = view(rp, inner_mod.nvar_u+1:inner_mod.nvar)
+    u_curr = view(x_curr, 1:mod.nvar_u)
+    v_curr = view(x_curr, mod.nvar_u+1:mod.nvar)
+    zu_curr = view(z_curr, 1:mod.nvar_u)
+    zv_curr = view(z_curr, mod.nvar_u+1:mod.nvar)
+    lu_curr = view(l_curr, 1:mod.nvar_u)
+    lv_curr = view(l_curr, mod.nvar_u+1:mod.nvar)
+    lz_u = view(lz, 1:mod.nvar_u)
+    lz_v = view(lz, mod.nvar_u+1:mod.nvar)
+    rho_u = view(rho, 1:mod.nvar_u)
+    rho_v = view(rho, mod.nvar_u+1:mod.nvar)
+    rp_u = view(rp, 1:mod.nvar_u)
+    rp_v = view(rp, mod.nvar_u+1:mod.nvar)
 
     beta = 1e3
     c = 6.0
     theta = 0.8
-    sqrt_d = sqrt(inner_mod.nvar_u + inner_mod.nvar_v)
+    sqrt_d = sqrt(mod.nvar_u + mod.nvar_v)
     OUTER_TOL = sqrt_d*(par.outer_eps)
 
     shift_lines = 0
@@ -97,50 +95,52 @@ function admm_multiperiod_solve_single_period(
     while outer_iter < par.outer_iterlim
         outer_iter += 1
 
+        z_outer .= z_curr
+        z_prev_norm = norm(z_outer)
+
         inner_iter = 0
         while inner_iter < par.inner_iterlim
             inner_iter += 1
 
-            if model.time_index == 1
+            z_prev .= z_curr
+            rp_old .= rp
+
+            if ramp_model.time_index == 1
                 generator_kernel_multiperiod_first_cpu(
-                    inner_mod.baseMVA, inner_mod.ngen, inner_mod.gen_start,
+                    mod.baseMVA, mod.ngen, mod.gen_start,
                     u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                     ramp_sol.x_curr, ramp_sol.xbar_curr, ramp_sol.z_curr,
                     ramp_sol.l_curr, ramp_sol.rho,
-                    inner_mod.pgmin, inner_mod.pgmax, inner_mod.qgmin, inner_mod.qgmax,
-                    inner_mod.c2, inner_mod.c1
-                )
+                    mod.pgmin, mod.pgmax, mod.qgmin, mod.qgmax,
+                    mod.c2, mod.c1)
             else
                 generator_kernel_multiperiod_rest_cpu(
-                    inner_mod.baseMVA, inner_mod.ngen, inner_mod.gen_start,
+                    mod.baseMVA, mod.ngen, mod.gen_start,
                     u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                     ramp_sol.x_curr, ramp_sol.xbar_curr, ramp_sol.xbar_tm1_curr,
                     ramp_sol.z_curr, ramp_sol.l_curr, ramp_sol.rho,
-                    ramp_mod.gen_membuf,
-                    inner_mod.pgmin, inner_mod.pgmax, inner_mod.qgmin, inner_mod.qgmax,
-                    inner_mod.c2, inner_mod.c1,
-                    ramp_mod.ramp_rate
-                )
+                    ramp_model.gen_membuf,
+                    mod.pgmin, mod.pgmax, mod.qgmin, mod.qgmax,
+                    mod.c2, mod.c1,
+                    ramp_model.ramp_rate)
             end
 
-            polar_kernel_two_level_cpu(inner_mod.n, inner_mod.nline, inner_mod.line_start, inner_mod.bus_start, par.scale,
+            polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, par.scale,
                 u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-                shift_lines, inner_mod.membuf, inner_mod.YffR, inner_mod.YffI, inner_mod.YftR, inner_mod.YftI,
-                inner_mod.YttR, inner_mod.YttI, inner_mod.YtfR, inner_mod.YtfI, inner_mod.FrBound, inner_mod.ToBound, inner_mod.brBusIdx
-            )
+                shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
 
-            bus_kernel_two_level_cpu(inner_mod.baseMVA, inner_mod.nbus, inner_mod.gen_start, inner_mod.line_start, inner_mod.bus_start,
-                inner_mod.FrStart, inner_mod.FrIdx, inner_mod.ToStart, inner_mod.ToIdx, inner_mod.GenStart, inner_mod.GenIdx,
-                inner_mod.Pd, inner_mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, inner_mod.YshR, inner_mod.YshI
-            )
+            bus_kernel_two_level_cpu(mod.baseMVA, mod.nbus, mod.gen_start, mod.line_start, mod.bus_start,
+                mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
 
-            update_xbar(inner_mod, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
-            update_zu(inner_mod, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+            update_xbar(mod, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+            update_zu(mod, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
             zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
 
             l_curr .= -(lz .+ beta.*z_curr)
 
-            compute_primal_residual_u(inner_mod, rp_u, u_curr, xbar_curr, zu_curr)
+            compute_primal_residual_u(mod, rp_u, u_curr, xbar_curr, zu_curr)
             rp_v .= v_curr .- xbar_curr .+ zv_curr
 
             rd .= z_curr .- z_prev
@@ -157,14 +157,15 @@ function admm_multiperiod_solve_single_period(
                     @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
                             "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
                 end
+
                 @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
                         outer_iter, inner_iter, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
             end
 
-            if primres <= eps_pri #|| dualres <= par.DUAL_TOL
+            if primres <= eps_pri || dualres <= par.DUAL_TOL
                 break
             end
-        end # while inner loop
+        end # inner while loop
 
         if mismatch <= OUTER_TOL
             break
@@ -175,7 +176,7 @@ function admm_multiperiod_solve_single_period(
         if z_curr_norm > theta*z_prev_norm
             beta = min(c*beta, 1e24)
         end
-    end # while outer loop
+    end # outer while loop
 
     return
 end
@@ -227,6 +228,7 @@ function admm_multiperiod_restart_two_level(
                 sol.z_prev .= sol.z_curr
                 z_prev_norm += sum(sol.z_prev.^2)
             end
+            z_prev_norm = sqrt(z_prev_norm)
 
             for t=1:env.horizon_length
                 # Solve each single period problem.
@@ -388,6 +390,7 @@ function admm_multiperiod_restart_two_level(
     return
 end
 
+#=
 function admm_multiperiod_two_level_cpu(
     case_prefix::String, load_prefix::String, horizon_length::Int;
     outer_iterlim::Int=20, inner_iterlim::Int=800,
@@ -411,3 +414,4 @@ function admm_multiperiod_two_level_cpu(
 
     return env, models
 end
+=#

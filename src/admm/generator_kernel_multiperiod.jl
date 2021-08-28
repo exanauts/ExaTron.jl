@@ -127,6 +127,118 @@ function generator_kernel_multiperiod_rest_cpu(
     end
 end
 
+function generator_kernel_multiperiod_first_gpu(
+    baseMVA::Float64, ngen::Int, gen_start::Int,
+    u::CuDeviceArray{Float64,1}, x::CuDeviceArray{Float64,1},
+    z::CuDeviceArray{Float64,1}, l::CuDeviceArray{Float64,1},
+    rho::CuDeviceArray{Float64,1},
+    u_mp::CuDeviceArray{Float64,1}, x_mp::CuDeviceArray{Float64,1},
+    z_mp::CuDeviceArray{Float64,1}, l_mp::CuDeviceArray{Float64,1},
+    rho_mp::CuDeviceArray{Float64,1},
+    pgmin::CuDeviceArray{Float64,1}, pgmax::CuDeviceArray{Float64,1},
+    qgmin::CuDeviceArray{Float64,1}, qgmax::CuDeviceArray{Float64,1},
+    c2::CuDeviceArray{Float64,1}, c1::CuDeviceArray{Float64,1}
+)
+    I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    if I <= ngen
+        pg_idx = gen_start + 2*(I-1)
+        qg_idx = gen_start + 2*(I-1) + 1
+        pgtilde_idx = 3*I
+
+        u[pg_idx] = max(pgmin[I],
+                        min(pgmax[I],
+                            (-(c1[I]*baseMVA+l[pg_idx]+rho[pg_idx]*(-x[pg_idx]+z[pg_idx])+
+                               l_mp[pgtilde_idx]+rho_mp[pgtilde_idx]*(-x_mp[I]+z_mp[pgtilde_idx])
+                               )) / (2*c2[I]*(baseMVA^2)+rho[pg_idx]+rho_mp[pgtilde_idx])))
+        u[qg_idx] = max(qgmin[I],
+                        min(qgmax[I],
+                            (-(l[qg_idx]+rho[qg_idx]*(-x[qg_idx]+z[qg_idx]))) / rho[qg_idx]))
+    end
+
+    return
+end
+
+function generator_kernel_multiperiod_rest_gpu(
+    baseMVA::Float64, ngen::Int, gen_start::Int,
+    u::CuDeviceArray{Float64,1}, xbar::CuDeviceArray{Float64,1},
+    z::CuDeviceArray{Float64,1}, l::CuDeviceArray{Float64,1},
+    rho::CuDeviceArray{Float64,1},
+    u_mp::CuDeviceArray{Float64,1},
+    xbar_mp::CuDeviceArray{Float64,1}, xbar_tm1_mp::CuDeviceArray{Float64,1},
+    z_mp::CuDeviceArray{Float64,1}, l_mp::CuDeviceArray{Float64,1},
+    rho_mp::CuDeviceArray{Float64,1},
+    param::CuDeviceArray{Float64,2},
+    pgmin::CuDeviceArray{Float64,1}, pgmax::CuDeviceArray{Float64,1},
+    qgmin::CuDeviceArray{Float64,1}, qgmax::CuDeviceArray{Float64,1},
+    c2::CuDeviceArray{Float64,1}, c1::CuDeviceArray{Float64,1},
+    ramp_rate::CuDeviceArray{Float64,1}
+)
+    # x[1] = p_g    : original active power variable
+    # x[2] = phat_g : duplicated active power for decoupling ramping
+    # x[3] = s_g    : slack variable for ramping
+
+    # param[1,g] : lambda_{p_{t,g}}
+    # param[2,g] : lambda_{phat_{t,g}}
+    # param[3,g] : lambda_{s_{t,g}}
+    # param[4,g] : lambda_{ptilde_{t,g}}
+    # param[5,g] : rho_{p_{t,g}}
+    # param[6,g] : rho_{phat_{t,g}}
+    # param[7,g] : rho_{s_{t,g}}
+    # param[8,g] : rho_{ptilde_{t,g}}
+    # param[9,g] : -pbar_{t,g} + z_{p_{t,g}}
+    # param[10,g]: -ptilde_{t-1,g} + z_{phat_{t,g}}
+    # param[11,g]: z_{s_{t,g}}
+    # param[12,g]: -ptilde_{t,g} + z_{ptilde_{t,g}}
+
+    I = blockIdx().x
+    tx = threadIdx().x
+
+    x = @cuDynamicSharedMem(Float64, 3)
+    xl = @cuDynamicSharedMem(Float64, 3, 3*sizeof(Float64))
+    xu = @cuDynamicSharedMem(Float64, 3, 6*sizeof(Float64))
+
+    if I <= ngen
+        @inbounds begin
+            pg_idx = gen_start + 2*(I-1)
+            qg_idx = gen_start + 2*(I-1) + 1
+            pg_mp_idx = 3*I - 2
+
+            u[qg_idx] = max(qgmin[I],
+                            min(qgmax[I],
+                                (-(l[qg_idx]+rho[qg_idx]*(-xbar[qg_idx]+z[qg_idx]))) / rho[qg_idx]))
+
+            xl[1] = xl[2] = pgmin[I]; xu[1] = xu[2] = pgmax[I]
+            xl[3] = -ramp_rate[I]; xu[3] = ramp_rate[I]
+
+            x[1] = min(xu[1], max(xl[1], u[gen_start + 2*(I-1)])) # p_{t,g}
+            x[2] = min(xu[2], max(xl[2], u_mp[2*I-1]))            # phat_{t,g}
+            x[3] = min(xu[3], max(xl[3], u_mp[2*I]))              # s_{t,g}
+
+            param[1,I] = l[pg_idx]
+            param[2,I] = l_mp[pg_mp_idx]
+            param[3,I] = l_mp[pg_mp_idx+1]
+            param[4,I] = l_mp[pg_mp_idx+2]
+            param[5,I] = rho[pg_idx]
+            param[6,I] = rho_mp[pg_mp_idx]
+            param[7,I] = rho_mp[pg_mp_idx+1]
+            param[8,I] = rho_mp[pg_mp_idx+2]
+            param[9,I] = (-xbar[pg_idx] + z[pg_idx])
+            param[10,I] = (-xbar_tm1_mp[I] + z_mp[pg_mp_idx])
+            param[11,I] = z_mp[pg_mp_idx+1]
+            param[12,I] = (-xbar_mp[I] + z_mp[pg_mp_idx+2])
+
+            CUDA.sync_threads()
+
+            status, minor_iter = tron_generator_kernel(3, 500, 200, 1e-6, 1.0, x, xl, xu, param, c2[I], c1[I], baseMVA)
+            u[pg_idx] = x[1]
+            u_mp[2*I-1] = x[2]
+            u_mp[2*I] = x[3]
+        end
+    end
+
+    return
+end
+
 #=
 function generator_kernel_two_level_multiperiod(
     baseMVA::Float64, ngen::Int, gen_start::Int,

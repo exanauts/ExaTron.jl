@@ -61,6 +61,8 @@ include("admm/auglag_kernel.jl")
 include("admm/acopf_admm_gpu.jl")
 include("admm/acopf_admm_gpu_two_level.jl")
 include("admm/acopf_admm_multiperiod_two_level_cpu.jl")
+include("admm/acopf_admm_multiperiod_two_level_gpu.jl")
+include("admm/acopf_admm_multiperiod.jl")
 #include("admm/acopf_admm_gpu_multiperiod.jl")
 
 #include("admm/test_multiperiod.jl")
