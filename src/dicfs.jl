@@ -167,7 +167,9 @@ end
     for i in 1:n
         alpha = max(alpha, -A[i,i]*(wa2[i]^2))
     end
-    alpha = max(alpha,alphas)
+    if alpha > 0
+        alpha = max(alpha,alphas)
+    end
     # if tx <= n  # No check on ty so that each warp has alpha.
     #     @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
     # end
@@ -235,6 +237,7 @@ end
             alpha = max(two*alpha,alphas)
         end
     end
+    @synchronize
 
     return
 end
