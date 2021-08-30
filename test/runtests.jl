@@ -5,6 +5,9 @@ using LinearAlgebra
 using SparseArrays
 using StatsBase
 using CUDA
+using KernelAbstractions
+using CUDAKernels
+const KA = KernelAbstractions
 
 @testset "Test ExaTron" begin
     if has_cuda_gpu()
@@ -25,3 +28,7 @@ using CUDA
         include("admmtest.jl")
     end
 end
+
+# include("qptest.jl")
+# include("densetest.jl")
+# include("admmtest.jl")
