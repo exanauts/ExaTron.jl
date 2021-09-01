@@ -42,10 +42,10 @@ function init_solution!(env::AdmmEnv, sol::SolutionPowerFlow, ybus::Ybus, rho_pq
         pg_idx = gen_start + 2*(g-1)
         sol.xbar_curr[pg_idx] = data.generators[g].Pg
         sol.xbar_curr[pg_idx+1] = data.generators[g].Qg
-        rho_u[pg_idx] = 0.0
-        rho_u[pg_idx+1] = 0.0
-        rho_v[pg_idx] = 0.0
-        rho_v[pg_idx+1] = 0.0
+        u_curr[pg_idx] = data.generators[g].Pg
+        u_curr[pg_idx+1] = data.generators[g].Qg
+        v_curr[pg_idx] = data.generators[g].Pg
+        v_curr[pg_idx+1] = data.generators[g].Qg
     end
 
     fill!(sol.wRIij, 0.0)
@@ -75,9 +75,6 @@ function init_solution!(env::AdmmEnv, sol::SolutionPowerFlow, ybus::Ybus, rho_pq
         sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
         v_curr[bus_start + 2*(b-1)] = buses[b].Vm
         v_curr[bus_start + 2*(b-1)+1] = 0.0
-        if model.bustype[b] != 1
-            rho_v[bus_start + 2*(b-1)] = 0.0
-        end
     end
 
     return
@@ -98,6 +95,17 @@ function pf_update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
     FrIdx = model.FrIdx
     ToIdx = model.ToIdx
 
+    # Update generators
+    ## Active power at slack node
+    genref = model.gen_mod.gen_ref + gen_start - 1
+    xbar[genref] = (lu[genref] + rho_u[genref]*(u[genref] + zu[genref]) +
+        lv[genref] + rho_v[genref]*(v[genref] + zv[genref])) / (rho_u[genref] + rho_v[genref])
+    ## Reactive power
+    genind = 2:2:2*ngen
+    xbar[genind] .= (lu[genind] .+ rho_u[genind].*(u[genind] .+ zu[genind]) .+
+        lv[genind] .+ rho_v[genind].*(v[genind] .+ zv[genind])) ./ (rho_u[genind] .+ rho_v[genind])
+
+    # Update lines
     ul_cur = line_start
     vl_cur = line_start
     for j=1:nline
@@ -108,6 +116,7 @@ function pf_update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
         vl_cur += 4
     end
 
+    # Update buses
     for b=1:nbus
         wi_sum = 0.0
         ti_sum = 0.0
@@ -201,6 +210,13 @@ function pf_update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
     model = env.model
     line_start, bus_start = model.line_start, model.bus_start
 
+    ## Update active power at slack node
+    genref = model.gen_mod.gen_ref
+    z[genref] = (-(lz[genref] + l[genref] + rho[genref]*(u[genref] - xbar[genref]))) / (beta + rho[genref])
+    # Update reactive power
+    genind = 2:2:2*ngen
+    z[genind] .= (-(lz[genind] .+ l[genind] .+ rho[genind].*(u[genind] .- xbar[genind]))) ./ (beta .+ rho[genind])
+
     ul_cur = line_start
     xl_cur = line_start
     for j=1:nline
@@ -253,6 +269,10 @@ function _inner_iteration!(
 )
     z_prev .= z_curr
     rp_old .= rp
+    # Generators
+    tcpu = @timed generator_kernel_powerflow(env.model.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
+
+    # Branch
     tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
         u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
         shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
@@ -260,6 +280,7 @@ function _inner_iteration!(
     )
     time_br = tcpu.time
 
+    # Bus kernels
     tcpu = @timed bus_kernel_powerflow_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
                                             mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
                                             mod.Pd, mod.Qd, mod.bustype,
@@ -472,7 +493,8 @@ function admm_solve!(
             break
         end
 
-        lz .+= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, beta .* z_curr))
+        # lz .+= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, beta .* z_curr))
+        lz .= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, lz .+ beta .* z_curr))
 
         if z_curr_norm > theta*z_prev_norm
             beta = min(c*beta, 1e24)

@@ -316,7 +316,7 @@ end
 function bus_kernel_two_level_cpu(
     baseMVA, nbus, gen_start, line_start, bus_start,
     FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx,
-    Pd, Qd, v, xbar, z, l, rho, YshR, YshI
+    Pd, Qd, bustype, v, xbar, z, l, rho, YshR, YshI
 )
     Threads.@threads for I=1:nbus
         inv_rhosum_pij_ji = 0.0
@@ -406,7 +406,11 @@ function bus_kernel_two_level_cpu(
 
             vi_idx = bus_start + 2*(I-1)
             v[vi_idx] = xbar[vi_idx] - z[vi_idx] - ((l[vi_idx] - YshR[I]*mu1 + YshI[I]*mu2) / rho[vi_idx])
-            v[vi_idx+1] = xbar[vi_idx+1] - z[vi_idx+1] - (l[vi_idx+1] / rho[vi_idx+1])
+            if bustype[I] == 3
+                v[vi_idx+1] = 0.0 #xbar[vi_idx+1]
+            else
+                v[vi_idx+1] = xbar[vi_idx+1] - z[vi_idx+1] - (l[vi_idx+1] / rho[vi_idx+1])
+            end
         end
     end
 end
@@ -563,8 +567,10 @@ function bus_kernel_powerflow_cpu(
             if GenStart[I] < GenStart[I+1]
                 for g=GenStart[I]:GenStart[I+1]-1
                     pg_idx = gen_start + 2*(GenIdx[g]-1)
-                    rhs1 += xbar[pg_idx]
-                    rhs2 += xbar[pg_idx+1]
+                    rhs1 += xbar[pg_idx] - z[pg_idx] - (l[pg_idx] / rho[pg_idx])
+                    rhs2 += xbar[pg_idx+1] - z[pg_idx+1] - (l[pg_idx+1] / rho[pg_idx+1])
+                    inv_rhosum_pg += 1.0 / rho[pg_idx]
+                    inv_rhosum_qg += 1.0 / rho[pg_idx+1]
                 end
             end
 
@@ -591,15 +597,15 @@ function bus_kernel_powerflow_cpu(
             if bustype[I] == 1
                 common_wi = -xbar[vi_idx] + z[vi_idx] + (l[vi_idx] / rho[vi_idx])
             else
-                common_wi = xbar[vi_idx]
+                common_wi = -xbar[vi_idx]
             end
             rhs1 += YshR[I]*common_wi
             rhs2 -= YshI[I]*common_wi
 
-            A11 = inv_rhosum_pij_ji
-            A22 = inv_rhosum_qij_ji
+            A11 = inv_rhosum_pij_ji + inv_rhosum_pg
+            A22 = inv_rhosum_qij_ji + inv_rhosum_qg
             A12 = 0.0
-            if bustype[I] == 1
+            if bustype[I] == 1  # PQ node
                 A11 += (YshR[I]^2 / rho[vi_idx])
                 A12 += -YshR[I] * (YshI[I] / rho[vi_idx])
                 A22 += (YshI[I]^2 / rho[vi_idx])
@@ -612,8 +618,10 @@ function bus_kernel_powerflow_cpu(
 
             for k=GenStart[I]:GenStart[I+1]-1
                 pg_idx = gen_start + 2*(GenIdx[k]-1)
-                v[pg_idx] = xbar[pg_idx]
-                v[pg_idx+1] = xbar[pg_idx+1]
+                # Active power
+                v[pg_idx] = xbar[pg_idx] - z[pg_idx] - ((l[pg_idx] + mu1) / rho[pg_idx])
+                # Reactive power (constant)
+                v[pg_idx+1] = xbar[pg_idx+1] - z[pg_idx+1] - ((l[pg_idx+1] + mu2) / rho[pg_idx+1])
             end
             for j=FrStart[I]:FrStart[I+1]-1
                 pij_idx = line_start + 4*(FrIdx[j]-1)

@@ -60,6 +60,7 @@ abstract type AbstractGeneratorModel end
 
 struct GeneratorModel{TD} <: AbstractGeneratorModel
     ngen::Int
+    gen_ref::Int
     gen_start::Int
     pgmin::TD
     pgmax::TD
@@ -117,8 +118,8 @@ mutable struct Model{T,TD,TI}
 
         ngen = length(data.generators)
         gen_start = 1
-        pgmin, pgmax, qgmin, qgmax, c2, c1, c0 = get_generator_data(data; use_gpu=use_gpu)
-        model.gen_mod = GeneratorModel{TD}(ngen, gen_start, pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
+        pgmin, pgmax, qgmin, qgmax, c2, c1, c0, gen_ref = get_generator_data(data; use_gpu=use_gpu)
+        model.gen_mod = GeneratorModel{TD}(ngen, gen_ref, gen_start, pgmin, pgmax, qgmin, qgmax, c2, c1, c0)
 
         model.n = (use_polar == true) ? 4 : 10
         model.nline = length(data.lines)
@@ -355,7 +356,7 @@ function reactive_power_generation(model::Model, sol::Union{SolutionTwoLevel, So
 end
 function voltage_magnitude(model::Model, sol::Union{SolutionTwoLevel, SolutionPowerFlow})
     bus_start = model.bus_start
-    return sol.xbar_curr[bus_start:2:bus_start-1+2*model.nbus]
+    return sqrt.(sol.xbar_curr[bus_start:2:bus_start-1+2*model.nbus])
 end
 function voltage_angle(model::Model, sol::Union{SolutionTwoLevel, SolutionPowerFlow})
     bus_start = model.bus_start

@@ -158,8 +158,9 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
 
     for g=1:ngen
         pg_idx = gen_start + 2*(g-1)
-        CUDA.@allowscalar sol.xbar_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
-        CUDA.@allowscalar sol.xbar_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
+        gen = data.generators[g]
+        sol.xbar_curr[pg_idx] = gen.Pg
+        sol.xbar_curr[pg_idx+1] = gen.Qg
     end
 
     fill!(sol.wRIij, 0.0)
@@ -185,7 +186,7 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
     end
 
     for b=1:nbus
-        CUDA.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)] = (buses[b].Vmax^2 + buses[b].Vmin^2) / 2
+        CUDA.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)] = (buses[b].Vm^2)
         CUDA.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
     end
 
@@ -657,7 +658,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 
                 tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
                                                       mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-                                                      mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
+                                                      mod.Pd, mod.Qd, mod.bustype, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
                 time_bus += tcpu.time
 
                 update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
@@ -815,7 +816,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
         @printf("Reactive power generator bounds = %.6e\n", qg_err)
         @printf("Voltage bounds                  = %.6e\n", vm_err)
         @printf("Real power balance              = %.6e\n", real_err)
-        @printf("Reaactive power balance         = %.6e\n", reactive_err)
+        @printf("Reactive power balance         = %.6e\n", reactive_err)
 
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
         @printf(" ** Line limit violations\n")

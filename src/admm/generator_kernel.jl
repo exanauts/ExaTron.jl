@@ -128,3 +128,30 @@ function generator_kernel_two_level(
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
     return tcpu
 end
+
+function generator_kernel_powerflow(
+    baseMVA::Float64, ngen::Int, gen_start::Int, gen_ref::Int,
+    u, x, z, l, rho,
+)
+    for I=1:ngen
+        pg_idx = gen_start + 2*(I-1)
+        qg_idx = gen_start + 2*(I-1) + 1
+        # Update active power at slack node
+        if I == gen_ref
+            u[pg_idx] = -(l[pg_idx] + rho[pg_idx]*(-x[pg_idx] + z[pg_idx])) / rho[pg_idx]
+        end
+        # Update reactive power
+        u[qg_idx] = -(l[qg_idx] + rho[qg_idx]*(-x[qg_idx] + z[qg_idx])) / rho[qg_idx]
+    end
+
+    return
+end
+
+function generator_kernel_powerflow(
+    gen_mod::GeneratorModel{Array{Float64,1}},
+    baseMVA::Float64, u, xbar, zu, lu, rho_u
+)
+    tcpu = @timed generator_kernel_powerflow(baseMVA, gen_mod.ngen, gen_mod.gen_start, gen_mod.gen_ref,
+                u, xbar, zu, lu, rho_u)
+    return tcpu
+end

@@ -19,13 +19,51 @@ function get_generator_data(data::OPFData; use_gpu=false)
         c0 = Array{Float64}(undef, ngen)
     end
 
-    Pmin = Float64[data.generators[g].Pmin for g in 1:ngen]
-    Pmax = Float64[data.generators[g].Pmax for g in 1:ngen]
-    Qmin = Float64[data.generators[g].Qmin for g in 1:ngen]
-    Qmax = Float64[data.generators[g].Qmax for g in 1:ngen]
-    coeff0 = Float64[data.generators[g].coeff[3] for g in 1:ngen]
-    coeff1 = Float64[data.generators[g].coeff[2] for g in 1:ngen]
-    coeff2 = Float64[data.generators[g].coeff[1] for g in 1:ngen]
+    # Find id of generator at slack bus
+    bustype = Int[b.bustype for b in data.buses]
+    index_ref = findfirst(isequal(3), bustype)
+    # Build correspondence
+    id_matpower = Dict{Int, Int}()
+    for (i, b) in enumerate(data.buses )
+        id_matpower[b.bus_i] = i
+    end
+
+    gen_ref = -1
+    for (igen, gen) in enumerate(data.generators)
+        idbus = id_matpower[gen.bus]
+        if bustype[idbus] == 3
+            gen_ref = igen
+        end
+    end
+    @assert gen_ref > 0
+
+    Pmin = zeros(ngen)
+    Pmax = zeros(ngen)
+    for g in 1:ngen
+        gen = data.generators[g]
+        idbus = id_matpower[gen.bus]
+        if bustype[idbus] == 3 # Slack bus
+            Pmin[g] = -1000.0
+            Pmax[g] = 1000.0
+        elseif bustype[idbus] == 2 # PV bus
+            Pmin[g] = gen.Pg
+            Pmax[g] = gen.Pg
+        end
+    end
+
+    Qmin = Float64[-1000.0 for g in 1:ngen]
+    Qmax = Float64[1000.0 for g in 1:ngen]
+
+    # Pmin = Float64[data.generators[g].Pmin for g in 1:ngen]
+    # Pmax = Float64[data.generators[g].Pmax for g in 1:ngen]
+    # Qmin = Float64[data.generators[g].Qmin for g in 1:ngen]
+    # Qmax = Float64[data.generators[g].Qmax for g in 1:ngen]
+    coeff0 = Float64[0.0 for g in 1:ngen]
+    coeff1 = Float64[0.0 for g in 1:ngen]
+    coeff2 = Float64[0.0 for g in 1:ngen]
+    # coeff0 = Float64[data.generators[g].coeff[3] for g in 1:ngen]
+    # coeff1 = Float64[data.generators[g].coeff[2] for g in 1:ngen]
+    # coeff2 = Float64[data.generators[g].coeff[1] for g in 1:ngen]
     copyto!(pgmin, Pmin)
     copyto!(pgmax, Pmax)
     copyto!(qgmin, Qmin)
@@ -34,7 +72,7 @@ function get_generator_data(data::OPFData; use_gpu=false)
     copyto!(c1, coeff1)
     copyto!(c2, coeff2)
 
-    return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
+    return pgmin,pgmax,qgmin,qgmax,c2,c1,c0, gen_ref
 end
 
 function get_bus_data(data::OPFData; use_gpu=false)
@@ -84,8 +122,37 @@ function get_branch_data(data::OPFData; use_gpu=false)
     BusIdx = data.BusIdx
     nline = length(data.lines)
     ybus = Ybus{Array{Float64}}(computeAdmitances(data.lines, data.buses, data.baseMVA; VI=Array{Int}, VD=Array{Float64})...)
-    frBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
-    toBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
+    frBound = zeros(2*nline)
+    toBound = zeros(2*nline)
+    for l in 1:nline
+        frBus = buses[BusIdx[lines[l].from]]
+        if frBus.bustype == 1
+            VminFr = frBus.Vmin^2
+            VmaxFr = frBus.Vmax^2
+        else
+            VminFr = frBus.Vm^2
+            VmaxFr = frBus.Vm^2
+        end
+
+        toBus = buses[BusIdx[lines[l].to]]
+        if toBus.bustype == 1
+            VminTo = toBus.Vmin^2
+            VmaxTo = toBus.Vmax^2
+        else
+            VminTo = toBus.Vm^2
+            VmaxTo = toBus.Vm^2
+        end
+
+        line_index = 2 * (l-1) + 1
+        frBound[line_index] = VminFr
+        frBound[line_index+1] = VmaxFr
+        toBound[line_index] = VminTo
+        toBound[line_index+1] = VmaxTo
+    end
+
+
+    # frBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
+    # toBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
 
     if use_gpu
         cuYshR = CuArray{Float64}(undef, length(ybus.YshR))
