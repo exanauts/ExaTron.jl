@@ -5,7 +5,7 @@ using Random
 using Test
 
 try
-    tmp = CuArray{Float64}(undef, 10)
+    tmp = ROCArray{Float64}(undef, 10)
 catch e
     throw(e)
 end
@@ -48,36 +48,36 @@ is checked if n < blockDim().x is OK.
 Random.seed!(0)
 
 @testset "GPU" begin
-    itermax = 10
+    itermax = 1
     n = 4
-    nblk = 5120
-    device = CUDADevice()
+    nblk = 500
+    device = ROCDevice()
 
     @testset "dicf" begin
-        @kernel function dicf_test(n::Int, d_in,
-                           d_out)
-            I = @index(Group, Linear)
-            J = @index(Local, Linear)
-            tx = J
-            ty = 1
+    @kernel function dicf_test(n::Int, d_in,
+                        d_out)
+        I = @index(Group, Linear)
+        J = @index(Local, Linear)
+        tx = J
+        ty = 1
 
-            L = @localmem Float64 (4,4)
-            if tx <= n && ty <= 1
-                for i in 1:n
-                    L[tx,i] = d_in[tx,i]
-                end
+        L = @localmem Float64 (4,4)
+        if tx <= n && ty <= 1
+            for i in 1:n
+                L[tx,i] = d_in[tx,i]
             end
-            @synchronize
-
-            # Test Cholesky factorization.
-            ExaTron.dicf(n,L,I,J)
-            if ty <= 1 && tx <= n
-                for i in 1:n
-                    d_out[tx,i] = L[tx,i]
-                end
-            end
-            @synchronize
         end
+        @synchronize
+
+        # Test Cholesky factorization.
+        ExaTron.dicf(n,L,I,J)
+        if ty <= 1 && tx <= n
+            for i in 1:n
+                d_out[tx,i] = L[tx,i]
+            end
+        end
+        @synchronize
+    end
 
         for i=1:itermax
             L = tril(rand(n,n))
@@ -86,10 +86,10 @@ Random.seed!(0)
             tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
             tron_A.vals .= A
 
-            d_in = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            d_in = ROCArray{Float64,2}(undef, (n,n))
+            d_out = ROCArray{Float64,2}(undef, (n,n))
             copyto!(d_in, tron_A.vals)
-            wait(dicf_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dicf_test(device)(n, d_in, d_out, ndrange=nblk, dependencies=Event(device)))
             h_L = d_out |> Array
 
             tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
@@ -145,8 +145,8 @@ Random.seed!(0)
             tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
             tron_A.vals .= A
 
-            dA = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            dA = ROCArray{Float64,2}(undef, (n,n))
+            d_out = ROCArray{Float64,2}(undef, (n,n))
             alpha = 1.0
             copyto!(dA, tron_A.vals)
             wait(dicfs_test(device)(n,alpha,dA,d_out,ndrange=nblk,dependencies=Event(device)))
@@ -154,7 +154,7 @@ Random.seed!(0)
             iwa = zeros(Int, 3*n)
             wa1 = zeros(n)
             wa2 = zeros(n)
-            ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
+            ExaTron.dicfs(n, n*n, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
             @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
             @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-9
@@ -227,13 +227,13 @@ Random.seed!(0)
             alpha = 1.0
             delta = 2.0*norm(g)
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dg = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            d_out1 = CuArray{Float64}(undef, n)
-            d_out2 = CuArray{Float64}(undef, n)
+            dx = ROCArray{Float64}(undef, n)
+            dl = ROCArray{Float64}(undef, n)
+            du = ROCArray{Float64}(undef, n)
+            dg = ROCArray{Float64}(undef, n)
+            dA = ROCArray{Float64,2}(undef, (n,n))
+            d_out1 = ROCArray{Float64}(undef, n)
+            d_out2 = ROCArray{Float64}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
@@ -311,10 +311,10 @@ Random.seed!(0)
             z = zeros(n)
             tron_A.vals .= A
             tron_L.vals .= A
-            d_in = CuArray{Float64,2}(undef, (n,n))
-            d_g = CuArray{Float64}(undef, n)
-            d_out_L = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64}(undef, n)
+            d_in = ROCArray{Float64,2}(undef, (n,n))
+            d_g = ROCArray{Float64}(undef, n)
+            d_out_L = ROCArray{Float64,2}(undef, (n,n))
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(d_in, A)
             copyto!(d_g, g)
             wait(dtrpcg_test(device)(n,delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=nblk,dependencies=Event(device)))
@@ -335,14 +335,14 @@ Random.seed!(0)
     end
 
     @testset "dprsrch" begin
-        @kernel function dprsrch_test(n::Int,d_x::CuDeviceArray{Float64},
-                              d_xl::CuDeviceArray{Float64},
-                              d_xu::CuDeviceArray{Float64},
-                              d_g::CuDeviceArray{Float64},
-                              d_w::CuDeviceArray{Float64},
-                              d_A::CuDeviceArray{Float64},
-                              d_out1::CuDeviceArray{Float64},
-                              d_out2::CuDeviceArray{Float64})
+        @kernel function dprsrch_test(n::Int,d_x,
+                              d_xl,
+                              d_xu,
+                              d_g,
+                              d_w,
+                              d_A,
+                              d_out1,
+                              d_out2)
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
@@ -391,14 +391,14 @@ Random.seed!(0)
             wa1 = zeros(n)
             wa2 = zeros(n)
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dg = CuArray{Float64}(undef, n)
-            dw = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            d_out1 = CuArray{Float64}(undef, n)
-            d_out2 = CuArray{Float64}(undef, n)
+            dx = ROCArray{Float64}(undef, n)
+            dl = ROCArray{Float64}(undef, n)
+            du = ROCArray{Float64}(undef, n)
+            dg = ROCArray{Float64}(undef, n)
+            dw = ROCArray{Float64}(undef, n)
+            dA = ROCArray{Float64,2}(undef, (n,n))
+            d_out1 = ROCArray{Float64}(undef, n)
+            d_out2 = ROCArray{Float64}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
@@ -446,8 +446,8 @@ Random.seed!(0)
             da = rand(1)[1]
             h_in = rand(2*n)
             h_out = zeros(n)
-            d_in = CuArray{Float64}(undef, 2*n)
-            d_out = CuArray{Float64}(undef, n)
+            d_in = ROCArray{Float64}(undef, 2*n)
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(d_in, h_in)
             wait(daxpy_test(device)(n,da,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
             copyto!(h_out, d_out)
@@ -489,9 +489,9 @@ Random.seed!(0)
             z = rand(n)
             h_in = rand(n,n)
             h_out = zeros(n)
-            d_z = CuArray{Float64}(undef, n)
-            d_in = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64}(undef, n)
+            d_z = ROCArray{Float64}(undef, n)
+            d_in = ROCArray{Float64,2}(undef, (n,n))
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(d_z, z)
             copyto!(d_in, h_in)
             wait(dssyax_test(device)(n,d_z,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
@@ -545,10 +545,10 @@ Random.seed!(0)
                 end
             end
             x_out = zeros(n)
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            dx = ROCArray{Float64}(undef, n)
+            dl = ROCArray{Float64}(undef, n)
+            du = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
@@ -617,11 +617,11 @@ Random.seed!(0)
                 end
             end
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dw = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            dx = ROCArray{Float64}(undef, n)
+            dl = ROCArray{Float64}(undef, n)
+            du = ROCArray{Float64}(undef, n)
+            dw = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
@@ -680,13 +680,13 @@ Random.seed!(0)
             h_brptmin = zeros((n,n))
             h_brptmax = zeros((n,n))
 
-            dx = CuArray{Float64}(undef, n)
-            dl = CuArray{Float64}(undef, n)
-            du = CuArray{Float64}(undef, n)
-            dw = CuArray{Float64}(undef, n)
-            d_nbrpt = CuArray{Float64,2}(undef, (n,n))
-            d_brptmin = CuArray{Float64,2}(undef, (n,n))
-            d_brptmax = CuArray{Float64,2}(undef, (n,n))
+            dx = ROCArray{Float64}(undef, n)
+            dl = ROCArray{Float64}(undef, n)
+            du = ROCArray{Float64}(undef, n)
+            dw = ROCArray{Float64}(undef, n)
+            d_nbrpt = ROCArray{Float64,2}(undef, (n,n))
+            d_brptmin = ROCArray{Float64,2}(undef, (n,n))
+            d_brptmax = ROCArray{Float64,2}(undef, (n,n))
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
@@ -729,9 +729,9 @@ Random.seed!(0)
 
         @inbounds for i=1:itermax
             h_in = rand(n)
-            h_out = zeros(n)
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            h_out = zeros((n,n))
+            d_in = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64,2}(undef, (n,n))
             copyto!(d_in, h_in)
             wait(dnrm2_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
             copyto!(h_out, d_out)
@@ -773,8 +773,8 @@ Random.seed!(0)
             tron_A.vals .= A
             ExaTron.nrm2!(wa, tron_A, n)
 
-            d_A = CuArray{Float64,2}(undef, (n,n))
-            d_out = CuArray{Float64}(undef, n)
+            d_A = ROCArray{Float64,2}(undef, (n,n))
+            d_out = ROCArray{Float64}(undef, n)
             h_wa = zeros(n)
             copyto!(d_A, A)
             wait(nrm2_test(device)(n,d_A,d_out,ndrange=nblk,dependencies=Event(device)))
@@ -812,8 +812,8 @@ Random.seed!(0)
         @inbounds for i=1:itermax
             h_in = rand(n)
             h_out = zeros(n)
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            d_in = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(d_in, h_in)
             wait(dcopy_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
             copyto!(h_out, d_out)
@@ -852,8 +852,8 @@ Random.seed!(0)
         @inbounds for i=1:itermax
             h_in = rand(n)
             h_out = zeros((n,n))
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            d_in = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64,2}(undef, (n,n))
             copyto!(d_in, h_in)
             wait(ddot_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
             copyto!(h_out, d_out)
@@ -866,9 +866,6 @@ Random.seed!(0)
         @kernel function dscal_test(n::Int, da::Float64,
                             d_in,
                             d_out)
-            tx = threadIdx().x
-            ty = threadIdx().y
-
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
@@ -892,8 +889,8 @@ Random.seed!(0)
             h_in = rand(n)
             h_out = zeros(n)
             da = rand(1)[1]
-            d_in = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            d_in = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64}(undef, n)
             copyto!(d_in, h_in)
             wait(dscal_test(device)(n,da,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
             copyto!(h_out, d_out)
@@ -936,13 +933,14 @@ Random.seed!(0)
             sigma = abs(rand(1)[1])
             delta = norm(x .+ sigma.*p)
 
-            d_x = CuArray{Float64}(undef, n)
-            d_p = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64,2}(undef, (n,n))
+            d_x = ROCArray{Float64}(undef, n)
+            d_p = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64,2}(undef, (n,n))
             copyto!(d_x, x)
             copyto!(d_p, p)
             wait(dtrqsol_test(device)(n,d_x,d_p,d_out,delta,ndrange=nblk,dependencies=Event(device)))
 
+            d_out = d_out |> Array
             @test norm(sigma .- d_out) <= 1e-10
         end
     end
@@ -1027,13 +1025,13 @@ Random.seed!(0)
             indfree = zeros(Int, n)
             iwa = zeros(Int, 3*n)
 
-            dx = CuArray{Float64}(undef, n)
-            dxl = CuArray{Float64}(undef, n)
-            dxu = CuArray{Float64}(undef, n)
-            dA = CuArray{Float64,2}(undef, (n,n))
-            dg = CuArray{Float64}(undef, n)
-            ds = CuArray{Float64}(undef, n)
-            d_out = CuArray{Float64}(undef, n)
+            dx = ROCArray{Float64}(undef, n)
+            dxl = ROCArray{Float64}(undef, n)
+            dxu = ROCArray{Float64}(undef, n)
+            dA = ROCArray{Float64,2}(undef, (n,n))
+            dg = ROCArray{Float64}(undef, n)
+            ds = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64}(undef, n)
 
             copyto!(dx, x)
             copyto!(dxl, xl)
@@ -1053,59 +1051,61 @@ Random.seed!(0)
         end
     end
 
-    # @testset "dgpnorm" begin
-    #     @kernel function dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
-    #         I = @index(Group, Linear)
-    #         J = @index(Local, Linear)
-    #         tx = J
-    #         ty = 1
+    @testset "dgpnorm" begin
+        @kernel function dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
+            I = @index(Group, Linear)
+            J = @index(Local, Linear)
+            tx = J
+            ty = 1
 
-    #         x = @localmem Float64 (4,)
-    #         xl = @localmem Float64 (4,)
-    #         xu = @localmem Float64 (4,)
-    #         g = @localmem Float64 (4,)
+            x = @localmem Float64 (4,)
+            xl = @localmem Float64 (4,)
+            xu = @localmem Float64 (4,)
+            g = @localmem Float64 (4,)
 
-    #         if ty <= 1 && tx <= n
-    #             x[tx] = dx[tx]
-    #             xl[tx] = dxl[tx]
-    #             xu[tx] = dxu[tx]
-    #             g[tx] = dg[tx]
-    #         end
-    #         @synchronize
+            if ty <= 1 && tx <= n
+                x[tx] = dx[tx]
+                xl[tx] = dxl[tx]
+                xu[tx] = dxu[tx]
+                g[tx] = dg[tx]
+            end
+            @synchronize
 
-    #         v = ExaTron.dgpnorm(n, x, xl, xu, g, I, J)
-    #         if ty <= 1 && tx <= n
-    #             d_out[tx] = v
-    #         end
-    #         @synchronize
+            v = ExaTron.dgpnorm(n, x, xl, xu, g, I, J)
+            if ty <= 1 && tx <= n
+                d_out[tx] = v
+            end
+            @synchronize
 
-    #     end
+        end
 
-    #     for i=1:itermax
-    #         x = rand(n)
-    #         xl = x .- abs.(rand(n))
-    #         xu = x .+ abs.(rand(n))
-    #         g = 2.0*rand(n) .- 1.0
+        for i=1:itermax
+            x = rand(n)
+            xl = x .- abs.(rand(n))
+            xu = x .+ abs.(rand(n))
+            g = 2.0*rand(n) .- 1.0
 
-    #         dx = CuArray{Float64}(undef, n)
-    #         dxl = CuArray{Float64}(undef, n)
-    #         dxu = CuArray{Float64}(undef, n)
-    #         dg = CuArray{Float64}(undef, n)
-    #         d_out = CuArray{Float64}(undef, n)
+            dx = ROCArray{Float64}(undef, n)
+            dxl = ROCArray{Float64}(undef, n)
+            dxu = ROCArray{Float64}(undef, n)
+            dg = ROCArray{Float64}(undef, n)
+            d_out = ROCArray{Float64}(undef, n)
 
-    #         copyto!(dx, x)
-    #         copyto!(dxl, xl)
-    #         copyto!(dxu, xu)
-    #         copyto!(dg, g)
+            copyto!(dx, x)
+            copyto!(dxl, xl)
+            copyto!(dxu, xu)
+            copyto!(dg, g)
 
-    #         wait(dgpnorm_test(device)(n, dx, dxl, dxu, dg, d_out, ndrange=nblk, dependencies=Event(device)))
-    #         h_v = zeros(n)
-    #         copyto!(h_v, d_out)
+            wait(dgpnorm_test(device)(n, dx, dxl, dxu, dg, d_out, ndrange=nblk, dependencies=Event(device)))
+            h_v = zeros(n)
+            copyto!(h_v, d_out)
 
-    #         v = ExaTron.dgpnorm(n, x, xl, xu, g)
-    #         @test norm(h_v .- v) <= 1e-10
-    #     end
-    # end
+            v = ExaTron.dgpnorm(n, x, xl, xu, g)
+            @show h_v
+            @show v
+            @test norm(h_v .- v) <= 1e-10
+        end
+    end
 
     # @testset "dtron" begin
     #     @kernel function dtron_test(n::Int, f::Float64, frtol::Float64, fatol::Float64, fmin::Float64,
@@ -1139,8 +1139,6 @@ Random.seed!(0)
     #         B = @localmem Float64 (4,4)
     #         L = @localmem Float64 (4,4)
 
-    #         @private nfree = 0
-
     #         if ty <= 1 && tx <= n
     #             for i in 1:n
     #                 A[tx,ty] = dA[tx,ty]
@@ -1154,7 +1152,7 @@ Random.seed!(0)
 
     #         ExaTron.dtron(n, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
     #                       cg_itermax, delta, task, B, L, xc, s, indfree, gfree,
-    #                       disave, ddsave, wa, iwa, wa1, wa2, wa3, wa4, wa5, I, J, nfree)
+    #                       disave, ddsave, wa, iwa, wa1, wa2, wa3, wa4, wa5, I, J)
     #         if ty <= 1 && tx <= n
     #             d_out[tx] = x[tx]
     #         end
@@ -1193,14 +1191,14 @@ Random.seed!(0)
     #         tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
     #         tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
 
-    #         dx = CuArray{Float64}(undef, n)
-    #         dxl = CuArray{Float64}(undef, n)
-    #         dxu = CuArray{Float64}(undef, n)
-    #         dA = CuArray{Float64,2}(undef, (n,n))
-    #         dg = CuArray{Float64}(undef, n)
-    #         disave = CuArray{Int}(undef, n)
-    #         ddsave = CuArray{Float64}(undef, n)
-    #         d_out = CuArray{Float64}(undef, n)
+    #         dx = ROCArray{Float64}(undef, n)
+    #         dxl = ROCArray{Float64}(undef, n)
+    #         dxu = ROCArray{Float64}(undef, n)
+    #         dA = ROCArray{Float64,2}(undef, (n,n))
+    #         dg = ROCArray{Float64}(undef, n)
+    #         disave = ROCArray{Int}(undef, n)
+    #         ddsave = ROCArray{Float64}(undef, n)
+    #         d_out = ROCArray{Float64}(undef, n)
 
     #         copyto!(dx, x)
     #         copyto!(dxl, xl)
@@ -1398,12 +1396,12 @@ Random.seed!(0)
     #     tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
     #     tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
 
-    #     dx = CuArray{Float64}(undef, n)
-    #     dxl = CuArray{Float64}(undef, n)
-    #     dxu = CuArray{Float64}(undef, n)
-    #     dA = CuArray{Float64,2}(undef, (n,n))
-    #     dc = CuArray{Float64}(undef, n)
-    #     d_out = CuArray{Float64}(undef, n)
+    #     dx = ROCArray{Float64}(undef, n)
+    #     dxl = ROCArray{Float64}(undef, n)
+    #     dxu = ROCArray{Float64}(undef, n)
+    #     dA = ROCArray{Float64,2}(undef, (n,n))
+    #     dc = ROCArray{Float64}(undef, n)
+    #     d_out = ROCArray{Float64}(undef, n)
 
     #     for i=1:itermax
     #         L = tril(rand(n,n))

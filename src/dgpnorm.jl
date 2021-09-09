@@ -23,25 +23,43 @@ end
                          xu, g,
                          I, J)
 
+    tx = J
+    ty = 1
     @synchronize
-    v = 0.0
-    for i in 1:n
-        @inbounds begin
-            if xl[i] != xu[i]
-                if x[i] == xl[i]
-                    v = min(g[i], 0.0)
-                elseif x[i] == xu[i]
-                    v = max(g[i], 0.0)
-                else
-                    v = g[i]
-                end
+    res = 0.0
+    inf_norm = @localmem Float64 (1,)
 
-                v = abs(v)
+    v = 0.0
+    if tx == 1
+        inf_norm[1] = 0.0
+        for i in 1:n
+            @inbounds begin
+                if xl[i] != xu[i]
+                    if x[i] == xl[i]
+                        v = min(g[i], 0.0)
+                        v = v*v
+                    elseif x[i] == xu[i]
+                        v = max(g[i], 0.0)
+                        v = v*v
+                    else
+                        v = g[i]*g[i]
+                    end
+
+                    v = sqrt(v)
+                    if inf_norm[1] > v
+                        inf_norm[1] = inf_norm[1]
+                    else
+                        inf_norm[1] = v
+                    end
+                end
             end
         end
     end
 
     @synchronize
-
-    return v
+    if tx <= n
+        res = inf_norm[1]
+    end
+    @synchronize
+    return res
 end
