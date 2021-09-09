@@ -208,7 +208,7 @@ function nrm2!(wa, A::TronSparseMatrixCSC, n)
     end
 end
 
-@inline function nrm2!(wa, A::CuDeviceArray{Float64,2}, n::Int, I, J)
+@inline function nrm2!(wa, A, n::Int, I, J)
     tx = J
     ty = 1
 
@@ -292,7 +292,7 @@ function dssyax(n, A::TronSparseMatrixCSC, x, y)
     return
 end
 
-@inline function dssyax(n::Int, A::CuDeviceArray{Float64,2},
+@inline function dssyax(n::Int, A,
                         z,
                         q,
                         I, J)
