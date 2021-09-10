@@ -9,6 +9,7 @@ using MPI
 
 using Printf
 using DelimitedFiles
+using Statistics
 
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 

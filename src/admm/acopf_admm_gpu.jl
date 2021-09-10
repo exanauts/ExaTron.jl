@@ -260,12 +260,66 @@ function check_linelimit_violation(data, u::Array{Float64})
     return rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol
 end
 
+function adjust_rho(ngen::Int, nline::Int, it::Int,
+                    sol::Solution, par::Parameters)
+    sol.delta_u .= sol.u_curr .- sol.u_prev
+    sol.delta_v .= sol.v_curr .- sol.v_prev
+    sol.delta_l .= sol.l_curr .- sol.l_prev
+    sol.alpha .= abs.(sol.delta_l ./ sol.delta_u)
+    sol.beta .= abs.(sol.delta_l ./ sol.delta_v)
+
+    n = length(sol.rho)
+    k = mod(it-1,10) + 1
+    km1 = ((k-1) == 0) ? 10 : k-1
+    for i=1:n
+        if abs(sol.delta_l[i]) <= par.eps_rp_min
+            sol.tau[i,k] = sol.tau[i,km1]
+        elseif abs(sol.delta_u[i]) <= par.eps_rp_min && abs(sol.delta_v[i]) > par.eps_rp_min
+            sol.tau[i,k] = sol.beta[i]
+        elseif abs(sol.delta_u[i]) > par.eps_rp_min && abs(sol.delta_v[i]) <= par.eps_rp_min
+            sol.tau[i,k] = sol.alpha[i]
+        elseif abs(sol.delta_u[i]) <= par.eps_rp_min && abs(sol.delta_v[i]) <= par.eps_rp_min
+            sol.tau[i,k] = sol.tau[i,km1]
+        else
+            sol.tau[i,k] = sqrt(sol.alpha[i]*sol.beta[i])
+        end
+    end
+
+    if (it % par.Kf) == 0
+        mean_tau = mean(sol.tau; dims=2)
+        for i=1:n
+            if mean_tau[i] >= par.rt_inc*sol.rho[i]
+                if abs(sol.rp[i]) >= par.eps_rp && abs(sol.rp_old[i]) >= par.eps_rp
+                    if abs(sol.rp[i]) > par.eta*abs(sol.rp_k0[i]) || abs(sol.rp_old[i]) > par.eta*abs(sol.rp_k0[i])
+                        sol.rho[i] *= par.rt_inc
+                    end
+                end
+            elseif mean_tau[i] > sol.rho[i]
+                if abs(sol.rp[i]) >= par.eps_rp && abs(sol.rp_old[i]) >= par.eps_rp
+                    if abs(sol.rp[i]) > par.eta*abs(sol.rp_k0[i]) || abs(sol.rp_old[i]) > par.eta*abs(sol.rp_k0[i])
+                        sol.rho[i] = mean_tau[i]
+                    end
+                end
+            elseif mean_tau[i] <= sol.rho[i]/par.rt_dec
+                sol.rho[i] /= par.rt_dec
+            elseif mean_tau[i] < sol.rho[i]
+                sol.rho[i] = mean_tau[i]
+            end
+        end
+    end
+
+    pq_end = 2*ngen+4*nline
+    sol.rho[sol.rho .>= par.rho_max] .= par.rho_max
+    sol.rho[1:pq_end] .= (sol.rho[1:pq_end] .>= par.rho_min_pq) .* sol.rho[1:pq_end] .+ (sol.rho[1:pq_end] .< par.rho_min_pq) .* par.rho_min_pq
+    sol.rho[pq_end+1:end] .= (sol.rho[pq_end+1:end] .>= par.rho_min_w) .* sol.rho[pq_end+1:end] .+ (sol.rho[pq_end+1:end] .< par.rho_min_w) .* par.rho_min_w
+end
+
 """
     admm_restart
 
 This function restarts the ADMM with a given `env::AdmmEnv` containing solutions and all the other parameters.
 """
-function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
+function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4, use_adjust_rho=false)
     if env.use_gpu
         CUDA.device!(env.gpu_no)
     end
@@ -316,7 +370,11 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
             sol.l_curr .+= sol.rho .* (sol.u_curr .- sol.v_curr)
             sol.rd .= -sol.rho .* (sol.v_curr .- sol.v_prev)
             sol.rp .= sol.u_curr .- sol.v_curr
-            #sol.rp_old .= sol.u_prev .- sol.v_prev
+            sol.rp_old .= sol.u_prev .- sol.v_prev
+
+            if ((it+par.Kf_mean-1) % par.Kf) == 0
+                sol.rp_k0 .= sol.rp
+            end
 
             primres = norm(sol.rp)
             dualres = norm(sol.rd)
@@ -329,6 +387,10 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
 
             if primres <= eps_pri && dualres <= eps_dual
                 break
+            end
+
+            if use_adjust_rho && it > 1
+                adjust_rho(mod.ngen, mod.nline, it, sol, par)
             end
         else
             @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, sol.u_prev, sol.u_curr)
@@ -408,14 +470,19 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4)
 end
 
 function admm_rect_gpu(case, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                       use_gpu=false, use_polar=true, gpu_no=1, verbose=1) where VT
+                       use_gpu=false, use_polar=true, use_adjust_rho=false,
+                       gpu_no=1, verbose=1) where VT
     if use_gpu
         CUDA.device!(gpu_no)
     end
     env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
         case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
     )
-    admm_restart(env, iterlim=iterlim, scale=scale)
+
+    fill!(env.solution.tau, 0.0)
+    env.solution.tau[:,1] .= env.solution.rho
+
+    admm_restart(env, iterlim=iterlim, scale=scale, use_adjust_rho=use_adjust_rho)
     return env
 end
 

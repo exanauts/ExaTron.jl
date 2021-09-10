@@ -17,6 +17,8 @@ mutable struct Parameters
     rt_inc::Float64     # TODO: not used
     rt_dec::Float64     # TODO: not used
     eta::Float64        # TODO: not used
+    Kf::Int
+    Kf_mean::Int
     verbose::Int
 
     function Parameters()
@@ -33,6 +35,8 @@ mutable struct Parameters
         par.max_auglag = 50
         par.ABSTOL = 1e-6
         par.RELTOL = 1e-5
+        par.Kf = 100
+        par.Kf_mean = 10
         par.verbose = 1
         return par
     end
@@ -104,7 +108,7 @@ end
 
 This contains the solutions of ACOPF model instance, including the ADMM parameter rho.
 """
-mutable struct Solution{T,TD}
+mutable struct Solution{T,TD,TM}
     u_curr::TD
     v_curr::TD
     l_curr::TD
@@ -114,19 +118,35 @@ mutable struct Solution{T,TD}
     rho::TD
     rd::TD
     rp::TD
+    rp_old::TD
+    rp_k0::TD
+    tau::TM
+    delta_u::TD
+    delta_v::TD
+    delta_l::TD
+    alpha::TD
+    beta::TD
     objval::T
 
-    function Solution{T,TD}(data::OPFData, model::Model, rho_pq, rho_va) where {T, TD<:AbstractArray{T}}
-        return new{T,TD}(
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
-            TD(undef, model.nvar),
+    function Solution{T,TD,TM}(data::OPFData, model::Model, rho_pq, rho_va) where {T, TD<:AbstractArray{T}, TM<:AbstractArray{T,2}}
+        return new{T,TD,TM}(
+            TD(undef, model.nvar), # u_curr
+            TD(undef, model.nvar), # v_curr
+            TD(undef, model.nvar), # l_curr
+            TD(undef, model.nvar), # u_prev
+            TD(undef, model.nvar), # v_prev
+            TD(undef, model.nvar), # l_prev
+            TD(undef, model.nvar), # rho
+            TD(undef, model.nvar), # rd
+            TD(undef, model.nvar), # rp
+            TD(undef, model.nvar), # rp_old
+            TD(undef, model.nvar), # rp_k0
+            TM(undef, (model.nvar, 10)), # tau
+            TD(undef, model.nvar), # delta_u
+            TD(undef, model.nvar), # delta_v
+            TD(undef, model.nvar), # delta_l
+            TD(undef, model.nvar), # alpha
+            TD(undef, model.nvar), # beta
             Inf,
         )
     end
@@ -165,7 +185,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         env.params.verbose = verbose
 
         env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar)
-        env.solution = Solution{T,TD}(env.data, env.model, rho_pq, rho_va)
+        env.solution = Solution{T,TD,TM}(env.data, env.model, rho_pq, rho_va)
 
         wRIij = zeros(2*env.model.nline) # TODO: Not used
 
