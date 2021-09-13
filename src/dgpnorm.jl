@@ -57,9 +57,7 @@ end
     end
 
     @synchronize
-    if tx <= n
-        res = inf_norm[1]
-    end
+    res = inf_norm[1]
     @synchronize
     return res
 end
