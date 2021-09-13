@@ -48,12 +48,14 @@ is checked if n < blockDim().x is OK.
 Random.seed!(0)
 
 @testset "GPU" begin
-    itermax = 1
+    itermax = 10
+    iterdebug = 0
     n = 4
     nblk = 500
     device = ROCDevice()
 
     @testset "dicf" begin
+    println("Testing dicf")
     @kernel function dicf_test(n::Int, d_in,
                         d_out)
         I = @index(Group, Linear)
@@ -108,6 +110,7 @@ Random.seed!(0)
     end
 
     @testset "dicfs" begin
+        println("Testing dicfs")
         @kernel function dicfs_test(n::Int, alpha::Float64,
                             dA,
                             d_out)
@@ -174,6 +177,7 @@ Random.seed!(0)
     end
 
     @testset "dcauchy" begin
+        println("Testing dcauchy")
         @kernel function dcauchy_test(n::Int,dx,
                               dl,
                               du,
@@ -253,6 +257,7 @@ Random.seed!(0)
     end
 
     @testset "dtrpcg" begin
+        println("Testing dtrpcg")
         @kernel function dtrpcg_test(n::Int, delta::Float64, tol::Float64,
                              stol::Float64, d_in,
                              d_g,
@@ -335,6 +340,7 @@ Random.seed!(0)
     end
 
     @testset "dprsrch" begin
+        println("Testing dprsrch")
         @kernel function dprsrch_test(n::Int,d_x,
                               d_xl,
                               d_xu,
@@ -419,6 +425,7 @@ Random.seed!(0)
     end
 
     @testset "daxpy" begin
+        println("Testing daxpy")
         @kernel function daxpy_test(n::Int, da, d_in,
                             d_out)
             I = @index(Group, Linear)
@@ -457,6 +464,7 @@ Random.seed!(0)
     end
 
     @testset "dssyax" begin
+        println("Testing dssyax")
         @kernel function dssyax_test(n::Int,d_z,
                              d_in,
                              d_out)
@@ -502,6 +510,7 @@ Random.seed!(0)
     end
 
     @testset "dmid" begin
+        println("Testing dmid")
         @kernel function dmid_test(n::Int, dx,
                            dl,
                            du,
@@ -561,6 +570,7 @@ Random.seed!(0)
     end
 
     @testset "dgpstep" begin
+        println("Testing dgpstep")
         @kernel function dgpstep_test(n,dx,
                               dl,
                               du,
@@ -635,6 +645,7 @@ Random.seed!(0)
     end
 
     @testset "dbreakpt" begin
+        println("Testing dbreakpt")
         @kernel function dbreakpt_test(n,dx,
                                dl,
                                du,
@@ -704,6 +715,7 @@ Random.seed!(0)
     end
 
     @testset "dnrm2" begin
+        println("Testing dnrm2")
         @kernel function dnrm2_test(n::Int, d_in,
                             d_out)
             I = @index(Group, Linear)
@@ -742,6 +754,7 @@ Random.seed!(0)
     end
 
     @testset "nrm2" begin
+        println("Testing nrm2")
         @kernel function nrm2_test(n::Int, d_A, d_out)
             I = @index(Group, Linear)
             J = @index(Local, Linear)
@@ -785,6 +798,7 @@ Random.seed!(0)
     end
 
     @testset "dcopy" begin
+        println("Testing dcopy")
         @kernel function dcopy_test(n::Int, d_in,
                             d_out)
             I = @index(Group, Linear)
@@ -823,6 +837,7 @@ Random.seed!(0)
     end
 
     @testset "ddot" begin
+        println("Testing ddot")
         @kernel function ddot_test(n::Int, d_in,
                            d_out)
             I = @index(Group, Linear)
@@ -863,6 +878,7 @@ Random.seed!(0)
     end
 
     @testset "dscal" begin
+        println("Testing dscal")
         @kernel function dscal_test(n::Int, da::Float64,
                             d_in,
                             d_out)
@@ -900,6 +916,7 @@ Random.seed!(0)
     end
 
     @testset "dtrqsol" begin
+        println("Testing dtrqsol")
         @kernel function dtrqsol_test(n::Int, d_x,
                               d_p,
                               d_out,
@@ -946,6 +963,7 @@ Random.seed!(0)
     end
 
     @testset "dspcg" begin
+        println("Testing dspcg")
         @kernel function dspcg_test(n::Int, delta::Float64, rtol::Float64,
                             cg_itermax::Int, dx,
                             dxl,
@@ -978,8 +996,6 @@ Random.seed!(0)
             B = @localmem Float64 (4,4)
             L = @localmem Float64 (4,4)
 
-            nfree = @private Int64 (1,)
-
             if ty <= 1 && tx <= n
                 for i in 1:n
                     A[tx,ty] = dA[tx,ty]
@@ -1003,7 +1019,7 @@ Random.seed!(0)
 
         end
 
-        for i=1:itermax
+        for i=1:iterdebug
             L = tril(rand(n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
@@ -1052,6 +1068,7 @@ Random.seed!(0)
     end
 
     @testset "dgpnorm" begin
+        println("Testing dgpnorm")
         @kernel function dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
             I = @index(Group, Linear)
             J = @index(Local, Linear)
@@ -1106,6 +1123,7 @@ Random.seed!(0)
     end
 
     @testset "dtron" begin
+        println("Testing dtron")
         @kernel function dtron_test(n::Int, f::Float64, frtol::Float64, fatol::Float64, fmin::Float64,
                             cgtol::Float64, cg_itermax::Int, delta::Float64, task::Int,
                             disave, ddsave,

@@ -1,7 +1,9 @@
 
 using CUDA
+using AMDGPU
 using KernelAbstractions
 using CUDAKernels
+using ROCKernels
 using ExaTron
 using Test
 using LinearAlgebra
@@ -24,14 +26,14 @@ LOADS = Dict(
 )
 
 USE_GPUS = [false]
-has_cuda_gpu() && push!(USE_GPUS, true)
+# has_cuda_gpu() && push!(USE_GPUS, true)
 # AMDGPU.hsa_configured && push!(ARCHS, (ROCDevice(), ROCArray, ROCMatrix))
 
 @testset "ProxAL wrapper (CUDA=$use_gpu)" for use_gpu in USE_GPUS
     data = ExaTron.opf_loaddata(CASE)
     t, T = 1, 2
     rho_pq, rho_va = 400.0, 40000.0
-    env = ExaTron.ProxALAdmmEnv(data, CUDADevice(), t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
+    env = ExaTron.ProxALAdmmEnv(data, ROCDevice(), t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
     @test isa(env, ExaTron.AdmmEnv)
     @test isa(env.model.gen_mod, ExaTron.ProxALGeneratorModel)
 
