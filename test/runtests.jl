@@ -7,6 +7,7 @@ using StatsBase
 using AMDGPU
 using CUDA
 using KernelAbstractions
+using CUDAKernels
 using ROCKernels
 const KA = KernelAbstractions
 
