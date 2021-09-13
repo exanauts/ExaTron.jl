@@ -47,10 +47,10 @@ else
 end
 
 @testset "GPU" begin
-    itermax = 10
-    iterdebug = 0
+    itermax = 100
+    iterdebug = 100
     n = 4
-    nblk = 500
+    nblk = 4
     device = CUDADevice()
 
     @testset "dicf" begin
@@ -997,7 +997,7 @@ end
 
             if ty <= 1 && tx <= n
                 for i in 1:n
-                    A[tx,ty] = dA[tx,ty]
+                    A[i,tx] = dA[i,tx]
                 end
                 x[tx] = dx[tx]
                 xl[tx] = dxl[tx]
@@ -1156,7 +1156,7 @@ end
 
             if ty <= 1 && tx <= n
                 for i in 1:n
-                    A[tx,ty] = dA[tx,ty]
+                    A[i,tx] = dA[i,tx]
                 end
                 x[tx] = dx[tx]
                 xl[tx] = dxl[tx]
