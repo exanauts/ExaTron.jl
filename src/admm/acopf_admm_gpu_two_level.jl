@@ -736,8 +736,11 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                     ev = polar_kernel_two_level(env.device)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                                                               shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                              mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx, ndrange=nblk_br)
+                                                              mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx,
+                                                              ndrange=nblk_br, dependencies=Event(env.device))
+                    println("Before wait")
                     wait(ev)
+                    println("After wait")
                 else
                     tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, inner, par.max_auglag, mod.line_start, scale, par.mu_max,
                                                                                                     u_curr, v_curr, l_curr, rho,

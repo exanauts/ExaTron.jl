@@ -1,5 +1,5 @@
-@inline function eval_f_kernel(n::Int, scale::Float64, x::CuDeviceArray{Float64,1},
-                       param::CuDeviceArray{Float64,2},
+@inline function eval_f_kernel(n::Int, scale::Float64, x,
+                       param,
                        YffR::Float64, YffI::Float64,
                        YftR::Float64, YftI::Float64,
                        YttR::Float64, YttI::Float64,
@@ -530,8 +530,8 @@ function eval_h_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
     return
 end
 
-@inline function eval_f_polar_kernel(n::Int, shift::Int, scale::Float64, x::CuDeviceArray{Float64,1},
-                             param::CuDeviceArray{Float64,2},
+@inline function eval_f_polar_kernel(n::Int, shift::Int, scale::Float64, x,
+                             param,
                              YffR::Float64, YffI::Float64,
                              YftR::Float64, YftI::Float64,
                              YttR::Float64, YttI::Float64,
