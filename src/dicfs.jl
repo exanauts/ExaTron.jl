@@ -164,7 +164,11 @@ end
 
     alpha = zero
     for i in 1:n
-        alpha = max(alpha, -A[i,i]*(wa2[i]^2))
+        if A[i,i] == zero
+            alpha = alphas
+        else
+            alpha = max(alpha, -A[i,i]*(wa2[i]^2))
+        end
     end
     if alpha > 0
         alpha = max(alpha,alphas)
