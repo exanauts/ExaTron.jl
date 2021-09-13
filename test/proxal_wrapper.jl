@@ -11,7 +11,7 @@ using LinearAlgebra
 if has_cuda_gpu()
     device = CUDADevice()
     AT = CuArray
-elseif AMDGPU.has_configured
+elseif AMDGPU.hsa_configured
     device = ROCDevice()
     AT = ROCArray
 else
@@ -34,11 +34,8 @@ LOADS = Dict(
     )
 )
 
-USE_GPUS = [false]
-# has_cuda_gpu() && push!(USE_GPUS, true)
-# AMDGPU.hsa_configured && push!(ARCHS, (ROCDevice(), ROCArray, ROCMatrix))
 
-# @testset "ProxAL wrapper (CUDA=$use_gpu)" for use_gpu in USE_GPUS
+@testset "ProxAL wrapper (CUDA=$device)" begin
     data = ExaTron.opf_loaddata(CASE)
     t, T = 2, 2
     rho_pq, rho_va = 400.0, 40000.0
@@ -57,6 +54,6 @@ USE_GPUS = [false]
 
     sol = env.solution
     @test sol.status == ExaTron.HAS_CONVERGED
-# end
+end
 
 

@@ -38,7 +38,7 @@ Random.seed!(0)
 if has_cuda_gpu()
     device = CUDADevice()
     AT = CuArray
-elseif AMDGPU.has_configured
+elseif AMDGPU.hsa_configured
     device = ROCDevice()
     AT = ROCArray
 else
@@ -51,7 +51,6 @@ end
     iterdebug = 100
     n = 4
     nblk = 4
-    device = CUDADevice()
 
     @testset "dicf" begin
     println("Testing dicf")
