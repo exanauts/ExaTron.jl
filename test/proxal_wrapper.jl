@@ -8,6 +8,17 @@ using ExaTron
 using Test
 using LinearAlgebra
 
+if has_cuda_gpu()
+    device = CUDADevice()
+    AT = CuArray
+elseif AMDGPU.has_configured
+    device = ROCDevice()
+    AT = ROCArray
+else
+    device = CPU()
+    error("CPU KA implementation is currently broken for nested functions")
+end
+
 CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
 
 RAMP_AGC = [1.25, 1.5, 1.35]
@@ -31,7 +42,7 @@ USE_GPUS = [false]
     data = ExaTron.opf_loaddata(CASE)
     t, T = 1, 2
     rho_pq, rho_va = 400.0, 40000.0
-    env = ExaTron.ProxALAdmmEnv(data, ROCDevice(), t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
+    env = ExaTron.ProxALAdmmEnv(data, device, t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
     @test isa(env, ExaTron.AdmmEnv)
     @test isa(env.model.gen_mod, ExaTron.ProxALGeneratorModel)
 
