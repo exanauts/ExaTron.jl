@@ -207,6 +207,7 @@ end
 
     tx = J
     ty = 1
+    nfree = @localmem Int (1,)
 
     zero = 0.0
     one = 1.0
@@ -236,13 +237,13 @@ end
 
         # Use a single thread to avoid multiple branch divergences.
         # XXX: Would there be any gain in employing multiple threads?
-        @uniform nfree = 0
         if tx == 1 && ty == 1
+            nfree[1] = 0
             @inbounds for j=1:n
                 if xl[j] < x[j] && x[j] < xu[j]
-                    nfree = nfree + 1
-                    indfree[nfree] = j
-                    iwa[j] = nfree
+                    nfree[1] = nfree[1] + 1
+                    indfree[nfree[1]] = j
+                    iwa[j] = nfree[1]
                 else
                     iwa[j] = 0
                 end
@@ -252,32 +253,32 @@ end
 
         # Exit if there are no free constraints.
 
-        if nfree == 0
+        if nfree[1] == 0
             info = 1
             return info, iters
         end
 
         # Obtain the submatrix of A for the free variables.
         # Recall that iwa allows the detection of free variables.
-        reorder!(n, nfree, B, A, indfree, iwa, I, J)
+        reorder!(n, nfree[1], B, A, indfree, iwa, I, J)
 
         # Compute the incomplete Cholesky factorization.
         alpha = zero
-        dicfs(nfree, alpha, B, L, wa1, wa2, I, J)
+        dicfs(nfree[1], alpha, B, L, wa1, wa2, I, J)
 
         # Compute the gradient grad q(x[k]) = g + A*(x[k] - x[0]),
         # of q at x[k] for the free variables.
         # Recall that w contains A*(x[k] - x[0]).
         # Compute the norm of the reduced gradient Z'*g.
 
-        if tx <= nfree && ty == 1
+        if tx <= nfree[1] && ty == 1
             @inbounds begin
                 gfree[tx] = w[indfree[tx]] + g[indfree[tx]]
                 wa1[tx] = g[indfree[tx]]
             end
         end
         @synchronize
-        gfnorm = dnrm2(nfree,wa1,1,I,J)
+        gfnorm = dnrm2(nfree[1],wa1,1,I,J)
 
         # Save the trust region subproblem in the free variables
         # to generate a direction p[k]. Store p[k] in the array w.
@@ -285,17 +286,17 @@ end
         tol = rtol*gfnorm
         stol = zero
 
-        infotr,itertr = dtrpcg(nfree,B,gfree,delta,L,
+        infotr,itertr = dtrpcg(nfree[1],B,gfree,delta,L,
                                tol,stol,itermax,w,
                                wa1,wa2,wa3,wa4,wa5,I,J)
 
         iters += itertr
-        dtsol(nfree, L, w, I, J)
+        dtsol(nfree[1], L, w, I, J)
 
         # Use a projected search to obtain the next iterate.
         # The projected search algorithm stores s[k] in w.
 
-        if tx <= nfree && ty == 1
+        if tx <= nfree[1] && ty == 1
             @inbounds begin
                 wa1[tx] = x[indfree[tx]]
                 wa2[tx] = xl[indfree[tx]]
@@ -304,12 +305,12 @@ end
         end
         @synchronize
 
-        dprsrch(nfree,wa1,wa2,wa3,B,gfree,w,wa4,wa5,I,J)
+        dprsrch(nfree[1],wa1,wa2,wa3,B,gfree,w,wa4,wa5,I,J)
 
         # Update the minimizer and the step.
         # Note that s now contains x[k+1] - x[0].
 
-        if tx <= nfree && ty == 1
+        if tx <= nfree[1] && ty == 1
             @inbounds begin
                 x[indfree[tx]] = wa1[tx]
                 s[indfree[tx]] += w[tx]
@@ -325,13 +326,13 @@ end
         # of q at x[k+1] for the free variables.
 
         if tx == 1 && ty == 1
-            @inbounds for j=1:nfree
+            @inbounds for j=1:nfree[1]
                 gfree[j] = w[indfree[j]] + g[indfree[j]]
             end
         end
         @synchronize
 
-        gfnormf = dnrm2(nfree, gfree, 1, I, J)
+        gfnormf = dnrm2(nfree[1], gfree, 1, I, J)
 
         # Convergence and termination test.
         # We terminate if the preconditioned conjugate gradient
