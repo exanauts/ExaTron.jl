@@ -31,6 +31,7 @@ mutable struct Parameters
     Kf_mean::Int        # TODO: not used
     MAX_MULTIPLIER::Float64
     DUAL_TOL::Float64
+    rho_sigma::Float64  # Penalty for bus
 
     function Parameters()
         par = new()
@@ -52,6 +53,7 @@ mutable struct Parameters
         par.Kf_mean = 10
         par.MAX_MULTIPLIER = 1e12
         par.DUAL_TOL = 1e-8
+        par.rho_sigma = 1e8
         return par
     end
 end
@@ -248,6 +250,7 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
     rp_old::TD
     Ax_plus_By::TD
     wRIij::TD
+    s_curr::TD
     objval::T
 
     function SolutionTwoLevel{T,TD}(model::Model) where {T, TD<:AbstractArray{T}}
@@ -266,7 +269,8 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
             TD(undef, model.nvar),      # rp_old
             TD(undef, model.nvar),      # Ax_plus_By
             TD(undef, 2*model.nline),   # wRIij
-            Inf,
+            TD(undef, 2*model.nbus),    # s_curr
+            Inf,                        # objval
         )
         sol.x_curr .= 0.0
         sol.xbar_curr .= 0.0
@@ -281,6 +285,7 @@ mutable struct SolutionTwoLevel{T,TD} <: AbstractSolution{T,TD}
         sol.rp_old .= 0.0
         sol.Ax_plus_By .= 0.0
         sol.wRIij .= 0.0
+        sol.s_curr .= 0.0
 
         return sol
     end
@@ -345,6 +350,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     use_gpu::Bool
     use_polar::Bool
     use_twolevel::Bool
+    allow_infeas::Bool
     gpu_no::Int
 
     params::Parameters
@@ -354,8 +360,9 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     membuf::TM # was param
 
     function AdmmEnv{T,TD,TI,TM}(
-        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false, gpu_no=-1, verbose=1,
-        outer_eps=2e-4,
+        opfdata, rho_pq, rho_va; use_gpu=false, use_polar=true, use_twolevel=false,
+        allow_infeas=false, rho_sigma=1e8,
+        gpu_no=-1, verbose=1, outer_eps=2e-4,
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         if use_gpu && gpu_no > 0
             CUDA.device!(gpu_no)
@@ -365,11 +372,13 @@ mutable struct AdmmEnv{T,TD,TI,TM}
         env.data = opfdata
         env.use_gpu = use_gpu
         env.use_polar = use_polar
+        env.allow_infeas = allow_infeas
         env.gpu_no = gpu_no
 
         env.params = Parameters()
         env.params.verbose = verbose
         env.params.outer_eps = outer_eps
+        env.params.rho_sigma = rho_sigma
 
         env.model = Model{T,TD,TI}(env.data, use_gpu, use_polar, use_twolevel)
         ybus = Ybus{Array{T}}(computeAdmitances(

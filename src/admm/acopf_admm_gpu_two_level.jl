@@ -658,9 +658,17 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                 end
                 time_br += tcpu.time
 
-                tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-                                                      mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-                                                      mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
+                if !env.allow_infeas
+                    tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
+                else
+                    tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI,
+                                                        sol.s_curr, par.rho_sigma)
+
+                end
                 time_bus += tcpu.time
 
                 update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
@@ -725,10 +733,20 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                                                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
                 end
                 time_br += tgpu.time
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-                                                                     mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-                                                                     mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
-                                                                     rho_v, mod.YshR, mod.YshI)
+
+                if !env.allow_infeas
+                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
+                                                                        rho_v, mod.YshR, mod.YshI)
+                else
+                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
+                                                                        rho_v, mod.YshR, mod.YshI,
+                                                                        sol.s_curr, par.rho_sigma)
+
+                end
                 time_bus += tgpu.time
 
                 # Update xbar.
@@ -841,10 +859,13 @@ end
 function admm_rect_gpu_two_level(
     case::String;
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-    use_gpu=false, use_polar=true, gpu_no=0, verbose=1, outer_eps=2e-4
+    use_gpu=false, use_polar=true, allow_infeas=false, rho_sigma=1e8,
+    gpu_no=0, verbose=1, outer_eps=2e-4
 )
     env = AdmmEnv(
-        case, use_gpu, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true, gpu_no=gpu_no, verbose=verbose,
+        case, use_gpu, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true,
+        allow_infeas=allow_infeas, rho_sigma=rho_sigma,
+        gpu_no=gpu_no, verbose=verbose,
     )
     admm_restart!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
