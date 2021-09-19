@@ -174,7 +174,111 @@ function get_load(name::String; load_scale=1.0, use_gpu=false)
   return load
 end
 
-function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64})
+function opf_loaddata_matpower(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64}, case_format="matpower")
+  data = parse_matpower(case_name; case_format=case_format)
+
+  #
+  # Load buses
+  #
+
+  nbus = length(data["bus"])
+  buses = Array{Bus}(undef, nbus)
+  bus_ref = -1
+
+  for i=1:nbus
+    @assert data["bus"][i]["bus_i"] > 0
+    buses[i] = Bus(data["bus"][i]["bus_i"],
+                   data["bus"][i]["type"],
+                   data["bus"][i]["Pd"],
+                   data["bus"][i]["Qd"],
+                   data["bus"][i]["Gs"],
+                   data["bus"][i]["Bs"],
+                   data["bus"][i]["area"],
+                   data["bus"][i]["Vm"],
+                   data["bus"][i]["Va"],
+                   data["bus"][i]["baseKV"],
+                   data["bus"][i]["zone"],
+                   data["bus"][i]["Vmax"],
+                   data["bus"][i]["Vmin"])
+      if buses[i].bustype == 3
+        if bus_ref > 0
+          error("More than one reference bus present in the data")
+        else
+          bus_ref = i
+        end
+      end
+  end
+
+  #
+  # Load branches
+  #
+  nline = length(data["branch"])
+  lines = Array{Line}(undef, nline)
+  for i=1:nline
+    @assert data["branch"][i]["status"] == 1
+    lines[i] = Line(data["branch"][i]["fbus"],
+                    data["branch"][i]["tbus"],
+                    data["branch"][i]["r"],
+                    data["branch"][i]["x"],
+                    data["branch"][i]["b"],
+                    data["branch"][i]["rateA"],
+                    data["branch"][i]["rateB"],
+                    data["branch"][i]["rateC"],
+                    data["branch"][i]["ratio"],
+                    data["branch"][i]["angle"],
+                    data["branch"][i]["status"],
+                    data["branch"][i]["angmin"],
+                    data["branch"][i]["angmax"])
+  end
+
+  #
+  # Load generators
+  #
+  ngen = length(data["gen"])
+  generators = Array{Gener}(undef, ngen)
+  for i=1:ngen
+    generators[i] = Gener(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, Array{Int}(undef, 0)) #gen_arr[i,1:end]...)
+    generators[i].bus = data["gen"][i]["bus"]
+    generators[i].Pg = data["gen"][i]["Pg"]
+    generators[i].Qg = data["gen"][i]["Qg"]
+    generators[i].Qmax = isinf(data["gen"][i]["Qmax"]) ? 999.99 : data["gen"][i]["Qmax"]
+    generators[i].Qmin = isinf(data["gen"][i]["Qmin"]) ? -999.99 : data["gen"][i]["Qmin"]
+    generators[i].Vg = data["gen"][i]["Vg"]
+    generators[i].mBase = data["gen"][i]["mBase"]
+    generators[i].status = data["gen"][i]["status"]
+    @assert generators[i].status == 1
+    generators[i].Pmax = isinf(data["gen"][i]["Pmax"]) ? 999.99 : data["gen"][i]["Pmax"]
+    generators[i].Pmin = isinf(data["gen"][i]["Pmin"]) ? -999.99 : data["gen"][i]["Pmin"]
+    if data["case_format"] == "MATPOWER"
+      generators[i].Pc1 = data["gen"][i]["Pc1"]
+      generators[i].Pc2 = data["gen"][i]["Pc2"]
+      generators[i].Qc1min = data["gen"][i]["Qc1min"]
+      generators[i].Qc1max = data["gen"][i]["Qc1max"]
+      generators[i].Qc2min = data["gen"][i]["Qc2min"]
+      generators[i].Qc2max = data["gen"][i]["Qc2max"]
+    end
+
+    generators[i].gentype = data["gencost"][i]["cost_type"]
+    generators[i].startup = data["gencost"][i]["startup"]
+    generators[i].shutdown = data["gencost"][i]["shutdown"]
+    generators[i].n = data["gencost"][i]["n"]
+    @assert generators[i].gentype == 2 && generators[i].n == 3
+    generators[i].coeff = [data["gencost"][i]["c2"], data["gencost"][i]["c1"], data["gencost"][i]["c0"]]
+  end
+
+  # build a dictionary between buses ids and their indexes
+  busIdx = mapBusIdToIdx(buses)
+
+  # set up the FromLines and ToLines for each bus
+  FromLines,ToLines = mapLinesToBuses(buses, lines, busIdx)
+
+  # generators at each bus
+  BusGeners = mapGenersToBuses(buses, generators, busIdx)
+
+  return OPFData(buses, lines, generators, bus_ref, data["baseMVA"], busIdx, FromLines, ToLines, BusGeners)
+end
+
+function opf_loaddata_dlm(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64})
   #
   # load buses
   #
@@ -304,6 +408,15 @@ function opf_loaddata(case_name, lineOff=Line(); VI=Array{Int}, VD=Array{Float64
   #println(generators)
   #println(bus_ref)
   return OPFData(buses, lines, generators, bus_ref, baseMVA, busIdx, FromLines, ToLines, BusGeners)
+end
+
+function opf_loaddata(case_name; VI=Array{Int}, VD=Array{Float64}, case_format="MATPOWER")
+  format = lowercase(case_format)
+  if format in ["matpower", "pglib"]
+    return opf_loaddata_matpower(case_name; VI=VI, VD=VD, case_format=format)
+  else
+    return opf_loaddata_dlm(case_name; VI=VI, VD=VD)
+  end
 end
 
 function  computeAdmitances(lines, buses, baseMVA; VI=Array{Int}, VD=Array{Float64})

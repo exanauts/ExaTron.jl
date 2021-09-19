@@ -76,8 +76,11 @@ mutable struct AdmmEnv{T,TD,TI,TM} <: AbstractAdmmEnv{T,TD,TI,TM}
     use_gpu::Bool
     use_linelimit::Bool
     use_twolevel::Bool
+    use_mpi::Bool
+    load_specified::Bool
     solve_pf::Bool
     gpu_no::Int
+    comm::MPI.Comm
 
     params::Parameters
 #    model::AbstractOPFModel{T,TD,TI}
@@ -85,21 +88,24 @@ mutable struct AdmmEnv{T,TD,TI,TM} <: AbstractAdmmEnv{T,TD,TI,TM}
 
     function AdmmEnv{T,TD,TI,TM}(
         case::String, rho_pq::Float64, rho_va::Float64;
-        use_gpu=false, use_linelimit=false, use_twolevel=false,
+        case_format="matpower",
+        use_gpu=false, use_linelimit=false, use_twolevel=false, use_mpi=false,
         solve_pf=false, gpu_no::Int=1, verbose::Int=1,
-        horizon_length=1, load_prefix::String=""
+        horizon_length=1, load_prefix::String="", comm::MPI.Comm=MPI.COMM_WORLD
     ) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         env = new{T,TD,TI,TM}()
-
         env.case = case
-        env.data = opf_loaddata(env.case, Line(); VI=TI, VD=TD)
+        env.data = opf_loaddata(env.case; VI=TI, VD=TD, case_format=case_format)
         env.initial_rho_pq = rho_pq
         env.initial_rho_va = rho_va
         env.use_gpu = use_gpu
         env.use_linelimit = use_linelimit
+        env.use_mpi = use_mpi
         env.gpu_no = gpu_no
         env.use_twolevel = use_twolevel
         env.solve_pf = solve_pf
+        env.load_specified = false
+        env.comm = comm
 
         env.params = Parameters()
         env.params.verbose = verbose
@@ -109,6 +115,7 @@ mutable struct AdmmEnv{T,TD,TI,TM} <: AbstractAdmmEnv{T,TD,TI,TM}
             env.load = get_load(load_prefix; use_gpu=use_gpu)
             @assert size(env.load.pd) == size(env.load.qd)
             @assert size(env.load.pd,2) >= horizon_length && size(env.load.qd,2) >= horizon_length
+            env.load_specified = true
         end
 
 #=
@@ -200,6 +207,8 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
             Inf,
         )
 
+        fill!(sol, 0.0)
+#=
         sol.u_curr .= 0.0
         sol.v_curr .= 0.0
         sol.l_curr .= 0.0
@@ -209,9 +218,22 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
         sol.rho .= 0.0
         sol.rd .= 0.0
         sol.rp .= 0.0
-
+=#
         return sol
     end
+end
+
+
+function Base.fill!(sol::SolutionOneLevel, val)
+    fill!(sol.u_curr, val)
+    fill!(sol.v_curr, val)
+    fill!(sol.l_curr, val)
+    fill!(sol.u_prev, val)
+    fill!(sol.v_prev, val)
+    fill!(sol.l_prev, val)
+    fill!(sol.rho, val)
+    fill!(sol.rd, val)
+    fill!(sol.rp, val)
 end
 
 """
@@ -300,6 +322,9 @@ mutable struct Model{T,TD,TI,TM} <: AbstractOPFModel{T,TD,TI,TM}
     pgmax::TD
     qgmin::TD
     qgmax::TD
+    pgmin_curr::TD   # taking ramping into account for rolling horizon
+    pgmax_curr::TD   # taking ramping into account for rolling horizon
+    ramp_rate::TD
     c2::TD
     c1::TD
     c0::TD
@@ -335,7 +360,12 @@ mutable struct Model{T,TD,TI,TM} <: AbstractOPFModel{T,TD,TI,TM}
     bus_start::Int # this is for varibles of type v.
     brBusIdx::TI
 
-    function Model{T,TD,TI,TM}(env::AdmmEnv{T,TD,TI,TM}) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
+    # Padded sizes for MPI
+    nline_padded::Int
+    nvar_u_padded::Int
+    nvar_padded::Int
+
+    function Model{T,TD,TI,TM}(env::AdmmEnv{T,TD,TI,TM}; ramp_ratio=0.2) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}, TM<:AbstractArray{T,2}}
         model = new{T,TD,TI,TM}()
 
         model.baseMVA = env.data.baseMVA
@@ -343,7 +373,16 @@ mutable struct Model{T,TD,TI,TM} <: AbstractOPFModel{T,TD,TI,TM}
         model.ngen = length(env.data.generators)
         model.nline = length(env.data.lines)
         model.nbus = length(env.data.buses)
+        model.nline_padded = model.nline
+
+        # Memory space is padded for the lines as a multiple of # processes.
+        if env.use_mpi
+            nprocs = MPI.Comm_size(env.comm)
+            model.nline_padded = nprocs * div(model.nline, nprocs, RoundUp)
+        end
+
         model.nvar = 2*model.ngen + 8*model.nline
+        model.nvar_padded = model.nvar + 8*(model.nline_padded - model.nline)
         model.gen_start = 1
         model.line_start = 2*model.ngen + 1
         model.pgmin, model.pgmax, model.qgmin, model.qgmax, model.c2, model.c1, model.c0 = get_generator_data(env.data; use_gpu=env.use_gpu)
@@ -351,21 +390,32 @@ mutable struct Model{T,TD,TI,TM} <: AbstractOPFModel{T,TD,TI,TM}
         model.FrStart, model.FrIdx, model.ToStart, model.ToIdx, model.GenStart, model.GenIdx, model.Pd, model.Qd, model.Vmin, model.Vmax = get_bus_data(env.data; use_gpu=env.use_gpu)
         model.brBusIdx = get_branch_bus_index(env.data; use_gpu=env.use_gpu)
 
+        model.pgmin_curr = TD(undef, model.ngen)
+        model.pgmax_curr = TD(undef, model.ngen)
+        copyto!(model.pgmin_curr, model.pgmin)
+        copyto!(model.pgmax_curr, model.pgmax)
+
+        model.ramp_rate = TD(undef, model.ngen)
+        model.ramp_rate .= ramp_ratio.*model.pgmax
+
         if env.solve_pf
             fix_power_flow_parameters(env.data, model)
         end
 
         # These are only for two-level ADMM.
         model.nvar_u = 2*model.ngen + 8*model.nline
+        model.nvar_u_padded = model.nvar_u + 8*(model.nline_padded - model.nline)
         model.nvar_v = 2*model.ngen + 4*model.nline + 2*model.nbus
         model.bus_start = 2*model.ngen + 4*model.nline + 1
         if env.use_twolevel
             model.nvar = model.nvar_u + model.nvar_v
+            model.nvar_padded = model.nvar_u_padded + model.nvar_v
         end
 
+        # Memory space is allocated based on the padded size.
         model.solution = ifelse(env.use_twolevel,
-            SolutionTwoLevel{T,TD}(model.nvar, model.nvar_v, model.nline),
-            SolutionOneLevel{T,TD}(model.nvar))
+            SolutionTwoLevel{T,TD}(model.nvar_padded, model.nvar_v, model.nline_padded),
+            SolutionOneLevel{T,TD}(model.nvar_padded))
         init_solution!(model, model.solution, env.initial_rho_pq, env.initial_rho_va)
 
         model.membuf = TM(undef, (31, model.nline))

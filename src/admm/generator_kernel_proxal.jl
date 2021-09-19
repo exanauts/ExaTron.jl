@@ -245,7 +245,7 @@ function generator_kernel_two_level_proxal_between(
             u[pg_idx] = pg_val3
             s[I] = s_val3
         else
-            # ERROR!
+            error("Error: generator_kernel: this can't happen.")
         end
     end
 end
@@ -300,7 +300,7 @@ function generator_kernel_two_level_proxal_last(
             u[pg_idx] = pg_val3
             s[I] = s_val3
         else
-            # ERROR!
+            error("Error: generator_kernel: this can't happen.")
         end
     end
 end

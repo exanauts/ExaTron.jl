@@ -660,7 +660,7 @@ function set_rateA_kernel(nline::Int, param::CuDeviceArray{Float64,2}, rateA::Cu
     tx = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
 
     if tx <= nline
-        param[29,tx] = (rateA[tx] == 0.0) ? Inf : rateA[tx]
+        param[29,tx] = (rateA[tx] == 0.0) ? 1e3 : rateA[tx]
     end
 
     return
@@ -801,12 +801,12 @@ function admm_restart_two_level(env::AdmmEnv, mod::Model; outer_iterlim=10, inne
 
                 if par.verbose > 0
                     if inner == 1 || (inner % 50) == 0
-                        @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
-                                "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
+                        @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s  %10s\n",
+                                "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "OuterTol", "Beta")
                     end
 
-                    @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
-                            outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
+                    @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
+                            outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, OUTER_TOL, beta)
                 end
 
                 if primres <= eps_pri || dualres <= par.DUAL_TOL
@@ -908,6 +908,12 @@ function admm_restart_two_level(env::AdmmEnv, mod::Model; outer_iterlim=10, inne
     end
     end
 
+    if mismatch <= OUTER_TOL
+        @printf(" ** Solution status: A solution was found.\n")
+    else
+        @printf(" ** Solution status: Iteration limit has reached.\n")
+    end
+
     sol.objval = sum(data.generators[g].coeff[data.generators[g].n-2]*(mod.baseMVA*u_curr[mod.gen_start+2*(g-1)])^2 +
                 data.generators[g].coeff[data.generators[g].n-1]*(mod.baseMVA*u_curr[mod.gen_start+2*(g-1)]) +
                 data.generators[g].coeff[data.generators[g].n]
@@ -928,9 +934,9 @@ function admm_restart_two_level(env::AdmmEnv, mod::Model; outer_iterlim=10, inne
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
         @printf(" ** Line limit violations\n")
         @printf("RateA number of violations = %d (%d)\n", rateA_nviols, mod.nline)
-        @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
+        @printf("RateA maximum violation    = %.6e\n", rateA_maxviol)
         @printf("RateC number of violations = %d (%d)\n", rateC_nviols, mod.nline)
-        @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
+        @printf("RateC maximum violation    = %.6e\n", rateC_maxviol)
 
         @printf(" ** Time\n")
         @printf("Overall time    = %.2f\n", overall_time.time)
@@ -945,32 +951,27 @@ function admm_restart_two_level(env::AdmmEnv, mod::Model; outer_iterlim=10, inne
 end
 
 function admm_rect_gpu_two_level(case::String;
+    case_format="matpower",
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
     use_gpu=false, use_linelimit=false, outer_eps=2*1e-4, solve_pf=false, gpu_no=0, verbose=1)
 
+    T = Float64; TD = Array{Float64,1}; TI = Array{Int,1}; TM = Array{Float64,2}
     if use_gpu
         CUDA.device!(gpu_no)
+        TD = CuArray{Float64,1}; TI = CuArray{Int,1}; TM = CuArray{Float64,2}
+    end
 
-        env = AdmmEnv{Float64, CuArray{Float64,1}, CuArray{Int,1}, CuArray{Float64,2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_linelimit=use_linelimit, use_twolevel=true,
-            solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose,
-        )
-        env.params.outer_eps = outer_eps
-        mod = Model{Float64, CuArray{Float64,1}, CuArray{Int,1}, CuArray{Float64,2}}(env)
-        if use_linelimit
-            # Set rateA in membuf.
-            @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) set_rateA_kernel(mod.nline, mod.membuf, mod.rateA)
-        end
+    env = AdmmEnv{T,TD,TI,TM}(case, rho_pq, rho_va; case_format=case_format,
+            use_gpu=use_gpu, use_linelimit=use_linelimit, use_twolevel=true,
+            solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose)
+    env.params.outer_eps = outer_eps
+    mod = Model{T,TD,TI,TM}(env)
+
+    if use_gpu
+        # Set rateA in membuf.
+        CUDA.@sync @cuda threads=64 blocks=(div(mod.nline-1, 64)+1) set_rateA_kernel(mod.nline, mod.membuf, mod.rateA)
     else
-        env = AdmmEnv{Float64, Array{Float64,1}, Array{Int,1}, Array{Float64,2}}(
-            case, rho_pq, rho_va; use_gpu=use_gpu, use_linelimit=use_linelimit, use_twolevel=true,
-            solve_pf=solve_pf, gpu_no=gpu_no, verbose=verbose,
-        )
-        env.params.outer_eps = outer_eps
-        mod = Model{Float64, Array{Float64,1}, Array{Int,1}, Array{Float64,2}}(env)
-        if use_linelimit
-            mod.membuf[29,:] .= mod.rateA
-        end
+        mod.membuf[29,:] .= mod.rateA
     end
 
     admm_restart_two_level(env, mod; outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)

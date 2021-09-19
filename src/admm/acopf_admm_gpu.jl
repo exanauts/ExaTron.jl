@@ -90,6 +90,11 @@ function get_branch_data(data::OPFData; use_gpu=false)
     frBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].from]].Vmin^2, buses[BusIdx[lines[l].from]].Vmax^2) ]
     toBound = [ x for l=1:nline for x in (buses[BusIdx[lines[l].to]].Vmin^2, buses[BusIdx[lines[l].to]].Vmax^2) ]
     rateA = [ (data.lines[l].rateA / data.baseMVA)^2 for l=1:nline ]
+    for l=1:nline
+        if rateA[l] == 0.0 || rateA[l] == 1e10
+            rateA[l] = 1e3
+        end
+    end
 
     if use_gpu
         cuYshR = CuArray{Float64}(undef, length(ybus.YshR))
