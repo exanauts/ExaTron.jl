@@ -155,19 +155,19 @@ function generator_kernel_two_level(
 )
     nblk = div(gen_mod.ngen, 32, RoundUp)
     if gen_mod.t_curr == 1
-        generator_kernel_two_level_proxal_first(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
+        wait(generator_kernel_two_level_proxal_first(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                     u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
-                    gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_next, gen_mod.pg_next, ndrange = nblk)
+                    gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_next, gen_mod.pg_next, ndrange = nblk, dependencies=Event(device)))
     elseif gen_mod.t_curr < gen_mod.T
-        generator_kernel_two_level_proxal_between(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
+        wait(generator_kernel_two_level_proxal_between(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                     u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
                     gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_next, gen_mod.pg_next,
-                    gen_mod.l_prev, gen_mod.pg_prev, gen_mod.smax, gen_mod.smin, gen_mod.s_curr, ndrange = nblk)
+                    gen_mod.l_prev, gen_mod.pg_prev, gen_mod.smax, gen_mod.smin, gen_mod.s_curr, ndrange = nblk, dependencies=Event(device)))
     else
-        generator_kernel_two_level_proxal_last(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
+        wait(generator_kernel_two_level_proxal_last(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                     u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
                     gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_prev, gen_mod.pg_prev,
-                    gen_mod.smax, gen_mod.smin, gen_mod.s_curr, ndrange = nblk)
+                    gen_mod.smax, gen_mod.smin, gen_mod.s_curr, ndrange = nblk, dependencies=Event(device)))
     end
 
     return 0.0

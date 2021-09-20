@@ -37,11 +37,11 @@ LOADS = Dict(
 )
 
 
-@testset "ProxAL wrapper (CUDA=$device)" begin
+@testset "ProxAL wrapper (device=$device)" begin
     data = ExaTron.opf_loaddata(CASE)
     t, T = 1, 2
     rho_pq, rho_va = 400.0, 40000.0
-    env = ExaTron.ProxALAdmmEnv(data, device, t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
+    env = ExaTron.ProxALAdmmEnv(data, device, t, T, rho_pq, rho_va; use_twolevel=true, verbose=1)
     @test isa(env, ExaTron.AdmmEnv)
     @test isa(env.model.gen_mod, ExaTron.ProxALGeneratorModel)
 
