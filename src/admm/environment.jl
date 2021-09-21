@@ -191,6 +191,11 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
     rho::TD
     rd::TD
     rp::TD
+    z_outer::TD    # used only for the two-level formulation
+    z_curr::TD     # used only for the two-level formulation
+    z_prev::TD     # used only for the two-level formulation
+    lz::TD         # used only for the two-level formulation
+    Ax_plus_By::TD # used only for the two-level formulation
     objval::T
 
     function SolutionOneLevel{T,TD}(nvar::Int) where {T, TD<:AbstractArray{T}}
@@ -204,21 +209,15 @@ mutable struct SolutionOneLevel{T,TD} <: AbstractSolution{T,TD}
             TD(undef, nvar),
             TD(undef, nvar),
             TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
+            TD(undef, nvar),
             Inf,
         )
 
         fill!(sol, 0.0)
-#=
-        sol.u_curr .= 0.0
-        sol.v_curr .= 0.0
-        sol.l_curr .= 0.0
-        sol.u_prev .= 0.0
-        sol.v_prev .= 0.0
-        sol.l_prev .= 0.0
-        sol.rho .= 0.0
-        sol.rd .= 0.0
-        sol.rp .= 0.0
-=#
         return sol
     end
 end
@@ -234,6 +233,11 @@ function Base.fill!(sol::SolutionOneLevel, val)
     fill!(sol.rho, val)
     fill!(sol.rd, val)
     fill!(sol.rp, val)
+    fill!(sol.z_outer, val)
+    fill!(sol.z_curr, val)
+    fill!(sol.z_prev, val)
+    fill!(sol.lz, val)
+    fill!(sol.Ax_plus_By, val)
 end
 
 """
