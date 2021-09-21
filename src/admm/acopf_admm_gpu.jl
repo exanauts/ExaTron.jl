@@ -315,10 +315,10 @@ function check_linelimit_violation(data::OPFData, u)
 
     for l=1:nline
         pij_idx = line_start + 8*(l-1)
-        ij_val = u[pij_idx]^2 + u[pij_idx+1]^2
-        ji_val = u[pij_idx+2]^2 + u[pij_idx+3]^2
+        ij_val = sqrt(u[pij_idx]^2 + u[pij_idx+1]^2)
+        ji_val = sqrt(u[pij_idx+2]^2 + u[pij_idx+3]^2)
 
-        limit = (lines[l].rateA / data.baseMVA)^2
+        limit = lines[l].rateA / data.baseMVA
         if limit > 0 && limit < 1e10
             if ij_val > limit || ji_val > limit
                 rateA_nviols += 1
@@ -326,7 +326,7 @@ function check_linelimit_violation(data::OPFData, u)
             end
         end
 
-        limit = (lines[l].rateC / data.baseMVA)^2
+        limit = lines[l].rateC / data.baseMVA
         if limit > 0 && limit < 1e10
             if ij_val > limit || ji_val > limit
                 rateC_nviols += 1

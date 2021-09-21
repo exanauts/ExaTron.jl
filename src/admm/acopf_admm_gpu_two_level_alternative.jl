@@ -22,7 +22,7 @@ function admm_restart_two_level_alternative(env::AdmmEnv, mod::Model; outer_iter
     sqrt_d = sqrt(mod.nvar)
     OUTER_TOL = sqrt_d*(par.outer_eps)
 
-    outer = inner = 0
+    outer = inner = cumul = 0
     mismatch = Inf
     z_prev_norm = z_curr_norm = Inf
 
@@ -41,6 +41,7 @@ function admm_restart_two_level_alternative(env::AdmmEnv, mod::Model; outer_iter
         inner = 0
         while inner < inner_iterlim
             inner += 1
+            cumul += 1
 
             if !env.use_gpu
                 sol.z_prev .= sol.z_curr
@@ -48,10 +49,18 @@ function admm_restart_two_level_alternative(env::AdmmEnv, mod::Model; outer_iter
                 tcpu = generator_kernel_two_level(mod, mod.baseMVA, sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho)
                 time_gen += tcpu.time
 
-                tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_alternative(mod.n, mod.nline, mod.line_start, scale,
+                if env.use_linelimit
+                    tcpu = @timed auglag_it, tron_it = auglag_linelimit_two_level_alternative(mod.n, mod.nline, mod.line_start,
+                                                        inner, par.max_auglag, par.mu_max, scale,
                                                         sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho,
                                                         shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                         mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                else
+                    tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_alternative(mod.n, mod.nline, mod.line_start, scale,
+                                                            sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho,
+                                                            shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                            mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                end
                 time_br += tcpu.time
 
                 tcpu = @timed bus_kernel_two_level_alternative(mod.baseMVA, mod.nbus, mod.gen_start, mod.line_start,
@@ -96,10 +105,19 @@ function admm_restart_two_level_alternative(env::AdmmEnv, mod::Model; outer_iter
                 tgpu = generator_kernel_two_level(mod, mod.baseMVA, sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho)
                 time_gen += tgpu.time
 
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel_two_level_alternative(mod.n, mod.nline, mod.line_start, scale,
-                                                                sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho,
-                                                                shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                if env.use_linelimit
+                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_linelimit_two_level_alternative(
+                                                        mod.n, mod.nline, mod.line_start,
+                                                        inner, par.max_auglag, par.mu_max, scale,
+                                                        sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho,
+                                                        shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                        mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                else
+                    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel_two_level_alternative(mod.n, mod.nline, mod.line_start, scale,
+                                                                    sol.u_curr, sol.v_curr, sol.z_curr, sol.l_curr, sol.rho,
+                                                                    shift_lines, mod.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                    mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                end
                 time_br += tgpu.time
                 tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel_two_level_alternative(mod.baseMVA, mod.nbus, mod.gen_start, mod.line_start,
                                                                             mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart,
@@ -211,23 +229,26 @@ function admm_restart_two_level_alternative(env::AdmmEnv, mod::Model; outer_iter
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
         @printf(" ** Line limit violations of u_curr\n")
         @printf("RateA number of violations = %d (%d)\n", rateA_nviols, mod.nline)
-        @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
+        @printf("RateA maximum violation    = %.6e\n", rateA_maxviol)
         @printf("RateC number of violations = %d (%d)\n", rateC_nviols, mod.nline)
-        @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
+        @printf("RateC maximum violation    = %.6e\n", rateC_maxviol)
 
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, v_curr)
         @printf(" ** Line limit violations of v_curr\n")
         @printf("RateA number of violations = %d (%d)\n", rateA_nviols, mod.nline)
-        @printf("RateA maximum violation    = %.2f\n", rateA_maxviol)
+        @printf("RateA maximum violation    = %.6e\n", rateA_maxviol)
         @printf("RateC number of violations = %d (%d)\n", rateC_nviols, mod.nline)
-        @printf("RateC maximum violation    = %.2f\n", rateC_maxviol)
+        @printf("RateC maximum violation    = %.6e\n", rateC_maxviol)
 
-        @printf(" ** Time\n")
-        @printf("Overall   = %.2f\n", overall_time.time)
-        @printf("Generator = %.2f\n", time_gen)
-        @printf("Branch    = %.2f\n", time_br)
-        @printf("Bus       = %.2f\n", time_bus)
-        @printf("G+Br+B    = %.2f\n", time_gen + time_br + time_bus)
+        @printf(" ** Statistics\n")
+        @printf("Outer iterations . . . . . . . . . %5d\n", outer)
+        @printf("Cumulative iterations  . . . . . . %5d\n", cumul)
+        @printf("Time per iteration . . . . . . . . %5.2f (secs/iter)\n", overall_time.time / cumul)
+        @printf("Overall time . . . . . . . . . . . %5.2f (secs)\n", overall_time.time)
+        @printf("Generator time . . . . . . . . . . %5.2f (secs)\n", time_gen)
+        @printf("Branch time. . . . . . . . . . . . %5.2f (secs)\n", time_br)
+        @printf("Bus time . . . . . . . . . . . . . %5.2f (secs)\n", time_bus)
+        @printf("G+Br+B time. . . . . . . . . . . . %5.2f (secs)\n", time_gen + time_br + time_bus)
     end
     return
 end
