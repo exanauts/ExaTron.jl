@@ -469,13 +469,17 @@ function admm_restart(env::AdmmEnv; iterlim=800, scale=1e-4, use_adjust_rho=fals
     return
 end
 
-function admm_rect_gpu(case, ::Type{VT}; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+function admm_rect_gpu(case; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
                        use_gpu=false, use_polar=true, use_adjust_rho=false,
-                       gpu_no=1, verbose=1) where VT
+                       gpu_no=0, verbose=1)
+
+    T = Float64; TD = Array{Float64,1}; TI = Array{Int,1}; TM = Array{Float64,2}
     if use_gpu
         CUDA.device!(gpu_no)
+        TD = CuArray{Float64,1}; TI = CuArray{Int,1}; TM = CuArray{Float64,2}
     end
-    env = AdmmEnv{Float64, VT{Float64, 1}, VT{Int, 1}, VT{Float64, 2}}(
+
+    env = AdmmEnv{T,TD,TI,TM}(
         case, rho_pq, rho_va; use_gpu=use_gpu, use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,
     )
 
