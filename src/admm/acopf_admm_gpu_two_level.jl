@@ -32,8 +32,10 @@ function check_generator_bounds(env::AdmmEnv, xbar)
         pidx = gen_start + 2*(g-1)
         qidx = gen_start + 2*(g-1) + 1
 
-        real_err = max(max(0.0, xbar[pidx] - pgmax[g]), max(0.0, pgmin[g] - xbar[pidx]))
-        reactive_err = max(max(0.0, xbar[qidx] - qgmax[g]), max(0.0, qgmin[g] - xbar[qidx]))
+        real_err = 0.0
+        reactive_err = 0.0
+        CUDA.@allowscalar real_err = max(max(0.0, xbar[pidx] - pgmax[g]), max(0.0, pgmin[g] - xbar[pidx]))
+        CUDA.@allowscalar reactive_err = max(max(0.0, xbar[qidx] - qgmax[g]), max(0.0, qgmin[g] - xbar[qidx]))
 
         max_viol_real = (max_viol_real < real_err) ? real_err : max_viol_real
         max_viol_reactive = (max_viol_reactive < reactive_err) ? reactive_err : max_viol_reactive
@@ -52,7 +54,8 @@ function check_voltage_bounds(env::AdmmEnv, xbar)
 
     for b=1:nbus
         bidx = bus_start + 2*(b-1)
-        err = max(max(0.0, xbar[bidx] - buses[b].Vmax^2), max(0.0, buses[b].Vmin^2 - xbar[bidx]))
+        err = 0.0
+        CUDA.@allowscalar err = max(max(0.0, xbar[bidx] - buses[b].Vmax^2), max(0.0, buses[b].Vmin^2 - xbar[bidx]))
         max_viol = (max_viol < err) ? err : max_viol
     end
 
@@ -73,28 +76,29 @@ function check_power_balance_violation(env::AdmmEnv, xbar)
         real_err = 0.0
         reactive_err = 0.0
         for g in data.BusGenerators[b]
-            real_err += xbar[gen_start + 2*(g-1)]
-            reactive_err += xbar[gen_start + 2*(g-1)+1]
+            CUDA.@allowscalar real_err += xbar[gen_start + 2*(g-1)]
+            CUDA.@allowscalar reactive_err += xbar[gen_start + 2*(g-1)+1]
         end
 
-        real_err -= (env.model.Pd[b] / baseMVA)
-        reactive_err -= (env.model.Qd[b] / baseMVA)
+        real_err = 0.0
+        reactive_err = 0.0
+        CUDA.@allowscalar reactive_err -= (env.model.Qd[b] / baseMVA)
 
         #real_err -= (data.buses[b].Pd / baseMVA)
         #reactive_err -= (data.buses[b].Qd / baseMVA)
 
         for l in data.FromLines[b]
-            real_err -= xbar[line_start + 4*(l-1)]
-            reactive_err -= xbar[line_start + 4*(l-1) + 1]
+            CUDA.@allowscalar real_err -= xbar[line_start + 4*(l-1)]
+            CUDA.@allowscalar reactive_err -= xbar[line_start + 4*(l-1) + 1]
         end
 
         for l in data.ToLines[b]
-            real_err -= xbar[line_start + 4*(l-1) + 2]
-            reactive_err -= xbar[line_start + 4*(l-1) + 3]
+            CUDA.@allowscalar real_err -= xbar[line_start + 4*(l-1) + 2]
+            CUDA.@allowscalar reactive_err -= xbar[line_start + 4*(l-1) + 3]
         end
 
-        real_err -= YshR[b] * xbar[bus_start + 2*(b-1)]
-        reactive_err += YshI[b] * xbar[bus_start + 2*(b-1)]
+        CUDA.@allowscalar real_err -= YshR[b] * xbar[bus_start + 2*(b-1)]
+        CUDA.@allowscalar reactive_err += YshI[b] * xbar[bus_start + 2*(b-1)]
 
         max_viol_real = (max_viol_real < abs(real_err)) ? abs(real_err) : max_viol_real
         max_viol_reactive = (max_viol_reactive < abs(reactive_err)) ? abs(reactive_err) : max_viol_reactive

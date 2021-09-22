@@ -231,8 +231,10 @@ function check_linelimit_violation(data::OPFData, u)
 
     for l=1:nline
         pij_idx = line_start + 8*(l-1)
-        ij_val = u[pij_idx]^2 + u[pij_idx+1]^2
-        ji_val = u[pij_idx+2]^2 + u[pij_idx+3]^2
+        ij_val = 0.0
+        ji_val = 0.0
+        CUDA.@allowscalar ij_val = u[pij_idx]^2 + u[pij_idx+1]^2
+        CUDA.@allowscalar ji_val = u[pij_idx+2]^2 + u[pij_idx+3]^2
 
         limit = (lines[l].rateA / data.baseMVA)^2
         if limit > 0 && limit < 1e10
