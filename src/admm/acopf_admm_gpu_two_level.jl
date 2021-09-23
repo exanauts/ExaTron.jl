@@ -80,8 +80,7 @@ function check_power_balance_violation(env::AdmmEnv, xbar)
             CUDA.@allowscalar reactive_err += xbar[gen_start + 2*(g-1)+1]
         end
 
-        real_err = 0.0
-        reactive_err = 0.0
+        CUDA.@allowscalar real_err -= (env.model.Pd[b] / baseMVA)
         CUDA.@allowscalar reactive_err -= (env.model.Qd[b] / baseMVA)
 
         #real_err -= (data.buses[b].Pd / baseMVA)

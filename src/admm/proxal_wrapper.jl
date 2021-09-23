@@ -22,6 +22,9 @@ mutable struct ProxALGeneratorModel{TD} <: AbstractGeneratorModel
     s_curr::TD       # slack for ramping
     smin::TD         # slack's lower bound
     smax::TD         # slack's upper bound
+
+    Q::TD
+    c::TD
 end
 function ProxALGeneratorModel(modelgen::GeneratorModel{TD}, t::Int, T::Int) where TD
     pg_ref  = TD(undef, modelgen.ngen)  ; fill!(pg_ref, 0.0)
@@ -32,10 +35,12 @@ function ProxALGeneratorModel(modelgen::GeneratorModel{TD}, t::Int, T::Int) wher
     s_curr  = TD(undef, modelgen.ngen)  ; fill!(s_curr, 0.0)
     s_min   = TD(undef, modelgen.ngen)  ; fill!(s_min, 0.0)
     s_max   = TD(undef, modelgen.ngen)  ; fill!(s_max, 0.0)
+    Q       = TD(undef, modelgen.ngen*4); fill!(Q, 0.0)
+    c       = TD(undef, modelgen.ngen*2); fill!(c, 0.0)
     return ProxALGeneratorModel{TD}(
         modelgen.ngen, modelgen.gen_start,
         modelgen.pgmin, modelgen.pgmax, modelgen.qgmin, modelgen.qgmax, modelgen.c2, modelgen.c1, modelgen.c0,
-        t, T, 0.1, 0.1, pg_ref, pg_next, l_next, pg_prev, l_prev, s_curr, s_min, s_max,
+        t, T, 0.1, 0.1, pg_ref, pg_next, l_next, pg_prev, l_prev, s_curr, s_min, s_max, Q, c
     )
 end
 
