@@ -484,20 +484,132 @@ function generator_kernel_two_level(
     n = 2
     shmem_size = sizeof(Float64)*(14*n+3+3*n^2) + sizeof(Int)*(3*n+3)
 
-    tgpu = CUDA.@timed @cuda threads=32 blocks=gen_mod.ngen shmem=shmem_size generator_kernel_two_level_proxal(
+    tgpu1 = build_qp_problem!(baseMVA, gen_mod)
+    tgpu2 = CUDA.@timed @cuda threads=32 blocks=gen_mod.ngen shmem=shmem_size generator_kernel_two_level_proxal(
                 gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax,
                 gen_mod.smin, gen_mod.smax, gen_mod.s_curr, gen_mod.Q, gen_mod.c)
-    return tgpu
+    return tgpu1 + tgpu2
 end
 
 function generator_kernel_two_level(
     gen_mod::ProxALGeneratorModel{Array{Float64,1}},
     baseMVA::Float64, u, xbar, zu, lu, rho_u)
+    build_qp_problem!(baseMVA, gen_mod)
     tcpu = @timed generator_kernel_two_level_proxal(gen_mod.ngen, gen_mod.gen_start,
-                u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax,
+                u, xbar, zu, lu, rho_u,
+                gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax,
                 gen_mod.smin, gen_mod.smax, gen_mod.s_curr, gen_mod.Q, gen_mod.c)
     return tcpu
+end
+
+function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{TD}) where TD
+    for g in 1:gen_mod.ngen
+        shift_Q = 4*(g-1)
+        shift_c = 2*(g-1)
+
+        # Q[1, 1]
+        gen_mod.Q[shift_Q + 1] = gen_mod.tau + 2.0 * gen_mod.c2[g]*baseMVA^2
+        # Q[2, 1]
+        gen_mod.Q[shift_Q + 2] = 0.0
+        # Q[1, 2]
+        gen_mod.Q[shift_Q + 3] = 0.0
+        # Q[2, 2]
+        gen_mod.Q[shift_Q + 4] = 0.0
+
+        # c[1]
+        gen_mod.c[shift_c + 1] = - gen_mod.tau * gen_mod.pg_ref[g] + gen_mod.c1[g]*baseMVA
+        # c[2]
+        gen_mod.c[shift_c + 2] = 0.0
+
+        # λ₊ (pg - pg₊) + ρ/2 * (pg - pg₊)^2
+        if (gen_mod.t_curr < gen_mod.T)
+            # Pg
+            gen_mod.Q[shift_Q + 1] += gen_mod.rho
+            gen_mod.c[shift_c + 1] += gen_mod.l_next[g]
+            gen_mod.c[shift_c + 1] -= gen_mod.rho * gen_mod.pg_next[g]
+        end
+
+        # λ₋ (pg₋ + s - pg) + ρ/2 * (pg₋ + s - pg)^2
+        if (gen_mod.t_curr > 1)
+            # Pg
+            gen_mod.Q[shift_Q + 1] += gen_mod.rho
+            gen_mod.c[shift_c + 1] -= gen_mod.l_prev[g]
+            gen_mod.c[shift_c + 1] -= gen_mod.rho * gen_mod.pg_prev[g]
+
+            # Slack
+            gen_mod.Q[shift_Q + 4] += gen_mod.rho
+            gen_mod.c[shift_c + 2] += gen_mod.l_prev[g]
+            gen_mod.c[shift_c + 2] += gen_mod.rho * gen_mod.pg_prev[g]
+
+            # Cross-term (Slack * Pg)
+            gen_mod.Q[shift_Q + 2] -= gen_mod.rho
+            gen_mod.Q[shift_Q + 3] -= gen_mod.rho
+        end
+    end
+end
+
+function _build_qp_kernel!(
+    Q::CuDeviceArray{Float64, 1}, c::CuDeviceArray{Float64, 1}, t_curr, T,
+    baseMVA::Float64, c2::CuDeviceArray{Float64,1}, c1::CuDeviceArray{Float64,1},
+    tau_prox::Float64, rho_prox::Float64,
+    pg_ref_prox::CuDeviceArray{Float64,1},
+    l_next_prox::CuDeviceArray{Float64,1}, pg_next_prox::CuDeviceArray{Float64,1},
+    l_prev_prox::CuDeviceArray{Float64,1}, pg_prev_prox::CuDeviceArray{Float64,1},
+)
+    I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+
+    shift_Q = 4*(I-1)
+    shift_c = 2*(I-1)
+
+    # Q[1, 1]
+    Q[shift_Q + 1] = tau_prox + 2.0 * c2[I]*baseMVA^2
+    # Q[2, 1]
+    Q[shift_Q + 2] = 0.0
+    # Q[1, 2]
+    Q[shift_Q + 3] = 0.0
+    # Q[2, 2]
+    Q[shift_Q + 4] = 0.0
+
+    # c[1]
+    c[shift_c + 1] = - tau_prox * pg_ref_prox[I] + c1[I]*baseMVA
+    # c[2]
+    c[shift_c + 2] = 0.0
+
+    # λ₊ (pg - pg₊) + ρ/2 * (pg - pg₊)^2
+    if (t_curr < T)
+        # Pg
+        Q[shift_Q + 1] += rho_prox
+        c[shift_c + 1] += l_next_prox[I]
+        c[shift_c + 1] -= rho_prox * pg_next_prox[I]
+    end
+
+    # λ₋ (pg₋ + s - pg) + ρ/2 * (pg₋ + s - pg)^2
+    if (t_curr > 1)
+        # Pg
+        Q[shift_Q + 1] += rho
+        c[shift_c + 1] -= l_prev[I]
+        c[shift_c + 1] -= rho * pg_prev[I]
+
+        # Slack
+        Q[shift_Q + 4] += rho
+        c[shift_c + 2] += l_prev[I]
+        c[shift_c + 2] += rho * gen_mod.pg_prev[I]
+
+        # Cross-term (Slack * Pg)
+        Q[shift_Q + 2] -= rho
+        Q[shift_Q + 3] -= rho
+    end
+end
+
+function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{<:CuArray})
+    tgpu = CUDA.@timed @cuda threads=32 blocks=gen_mod.gen _build_qp_kernel!(
+        gen_mod.Q, gen_mod.c, gen_mod.t_curr, gen_mod.T,
+        baseMVA, gen_mod.c2, gen_mod.c1,
+        gen_mod.tau, gen_mod.rho, gen_mod.pg_ref,
+        gen_mod.l_next, gen_mod.pg_next,
+        gen_mod.l_prev, gen_mod.pg_prev,
+    )
 end
 
 #=

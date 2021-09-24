@@ -23,7 +23,7 @@ has_cuda_gpu() && push!(USE_GPUS, true)
 
 @testset "ProxAL wrapper (CUDA=$use_gpu)" for use_gpu in USE_GPUS
     data = ExaTron.opf_loaddata(CASE)
-    t, T = 2, 2
+    t, T = 1, 2
     rho_pq, rho_va = 400.0, 40000.0
     env = ExaTron.ProxALAdmmEnv(data, use_gpu, t, T, rho_pq, rho_va; use_twolevel=true, verbose=0)
     @test isa(env, ExaTron.AdmmEnv)
@@ -39,7 +39,9 @@ has_cuda_gpu() && push!(USE_GPUS, true)
     ExaTron.admm_restart!(env)
 
     sol = env.solution
+    pg = ExaTron.active_power_generation(env)
     @test sol.status == ExaTron.HAS_CONVERGED
+    @test pg ≈ [0.8965723471282547, 1.3381394570889165, 0.9386855347032877] rtol=1e-4
 end
 
 
