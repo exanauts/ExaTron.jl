@@ -509,18 +509,22 @@ function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{TD}) where TD
         shift_c = 2*(g-1)
 
         # Q[1, 1]
-        gen_mod.Q[shift_Q + 1] = gen_mod.tau + 2.0 * gen_mod.c2[g]*baseMVA^2
+        gen_mod.Q[shift_Q + 1] = gen_mod.Q_ref[shift_Q + 1]
         # Q[2, 1]
-        gen_mod.Q[shift_Q + 2] = 0.0
+        gen_mod.Q[shift_Q + 2] = gen_mod.Q_ref[shift_Q + 2]
         # Q[1, 2]
-        gen_mod.Q[shift_Q + 3] = 0.0
+        gen_mod.Q[shift_Q + 3] = gen_mod.Q_ref[shift_Q + 3]
         # Q[2, 2]
-        gen_mod.Q[shift_Q + 4] = 0.0
+        gen_mod.Q[shift_Q + 4] = gen_mod.Q_ref[shift_Q + 4]
 
         # c[1]
-        gen_mod.c[shift_c + 1] = - gen_mod.tau * gen_mod.pg_ref[g] + gen_mod.c1[g]*baseMVA
+        gen_mod.c[shift_c + 1] = gen_mod.c_ref[shift_c + 1]
         # c[2]
-        gen_mod.c[shift_c + 2] = 0.0
+        gen_mod.c[shift_c + 2] = gen_mod.c_ref[shift_c + 2]
+
+        # τ/2 (pg - pgₚ)^2
+        gen_mod.Q[shift_Q + 1] += gen_mod.tau + 2.0 * gen_mod.c2[g]*baseMVA^2
+        gen_mod.c[shift_c + 1] += - gen_mod.tau * gen_mod.pg_ref[g] + gen_mod.c1[g]*baseMVA
 
         # λ₊ (pg - pg₊) + ρ/2 * (pg - pg₊)^2
         if (gen_mod.t_curr < gen_mod.T)
@@ -551,6 +555,7 @@ end
 
 function _build_qp_kernel!(
     Q::CuDeviceArray{Float64, 1}, c::CuDeviceArray{Float64, 1}, t_curr, T,
+    Q_ref::CuDeviceArray{Float64, 1}, c_ref::CuDeviceArray{Float64, 1},
     baseMVA::Float64, c2::CuDeviceArray{Float64,1}, c1::CuDeviceArray{Float64,1},
     tau_prox::Float64, rho_prox::Float64,
     pg_ref_prox::CuDeviceArray{Float64,1},
@@ -565,18 +570,22 @@ function _build_qp_kernel!(
         shift_c = 2*(I-1)
 
         # Q[1, 1]
-        Q[shift_Q + 1] = tau_prox + 2.0 * c2[I]*baseMVA^2
+        Q[shift_Q + 1] = Q_ref[shift_Q + 1]
         # Q[2, 1]
-        Q[shift_Q + 2] = 0.0
+        Q[shift_Q + 2] = Q_ref[shift_Q + 2]
         # Q[1, 2]
-        Q[shift_Q + 3] = 0.0
+        Q[shift_Q + 3] = Q_ref[shift_Q + 3]
         # Q[2, 2]
-        Q[shift_Q + 4] = 0.0
+        Q[shift_Q + 4] = Q_ref[shift_Q + 4]
 
         # c[1]
-        c[shift_c + 1] = - tau_prox * pg_ref_prox[I] + c1[I]*baseMVA
+        c[shift_c + 1] = c_ref[shift_c + 1]
         # c[2]
-        c[shift_c + 2] = 0.0
+        c[shift_c + 2] = c_ref[shift_c + 2]
+
+        # τ/2 (pg - pgₚ)^2
+        Q[shift_Q + 1] += tau_prox + 2.0 * c2[I]*baseMVA^2
+        c[shift_c + 1] += - tau_prox * pg_ref_prox[I] + c1[I]*baseMVA
 
         # λ₊ (pg - pg₊) + ρ/2 * (pg - pg₊)^2
         if (t_curr < T)
@@ -610,6 +619,7 @@ function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{<:CuArray})
     nblk_gen = div(gen_mod.ngen, 32, RoundUp)
     tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen _build_qp_kernel!(
         gen_mod.Q, gen_mod.c, gen_mod.t_curr, gen_mod.T,
+        gen_mod.Q_ref, gen_mod.c_ref,
         baseMVA, gen_mod.c2, gen_mod.c1,
         gen_mod.tau, gen_mod.rho, gen_mod.pg_ref,
         gen_mod.l_next, gen_mod.pg_next,
