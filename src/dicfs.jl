@@ -133,7 +133,6 @@ end
                        wa1::CuDeviceArray{Float64,1},
                        wa2::CuDeviceArray{Float64,1})
     tx = threadIdx().x
-    ty = threadIdx().y
 
     nbmax = 3
     alpham = 1.0e-3
@@ -147,7 +146,7 @@ end
     nrm2!(wa1, A, n)
 
     # Compute the scaling matrix D.
-    if tx <= n && ty == 1
+    if tx <= n
         @inbounds wa2[tx] = (wa1[tx] > zero) ? one/sqrt(wa1[tx]) : one
     end
     CUDA.sync_threads()
@@ -192,7 +191,7 @@ end
     info = 0
 
     while true
-        if tx <= n && ty == 1
+        if tx <= n
             @inbounds for j=1:n
                 L[j,tx] = A[j,tx] * wa2[j] * wa2[tx]
             end
@@ -215,7 +214,7 @@ end
                 alpha = alphas
                 nb = nb + 1
             else
-                if tx <= n && ty == 1
+                if tx <= n
                     @inbounds for j=1:n
                         if tx >= j
                             L[tx,j] /= wa2[tx]
