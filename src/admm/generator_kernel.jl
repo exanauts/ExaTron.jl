@@ -65,15 +65,17 @@ function generator_kernel(
 end
 
 
-function generator_kernel_two_level(
+@kernel function generator_kernel_two_level(
     baseMVA::Float64, ngen::Int, gen_start::Int,
-    u::CuDeviceArray{Float64,1}, x::CuDeviceArray{Float64,1}, z::CuDeviceArray{Float64,1},
-    l::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
-    pgmin::CuDeviceArray{Float64,1}, pgmax::CuDeviceArray{Float64,1},
-    qgmin::CuDeviceArray{Float64,1}, qgmax::CuDeviceArray{Float64,1},
-    c2::CuDeviceArray{Float64,1}, c1::CuDeviceArray{Float64,1}
+    u, x, z,
+    l, rho,
+    pgmin, pgmax,
+    qgmin, qgmax,
+    c2, c1
 )
-    I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (I_ * (I_ - 1))
     if (I <= ngen)
         pg_idx = gen_start + 2*(I-1)
         qg_idx = gen_start + 2*(I-1) + 1
@@ -84,8 +86,6 @@ function generator_kernel_two_level(
                         min(qgmax[I],
                             (-(l[qg_idx] + rho[qg_idx]*(-x[qg_idx] + z[qg_idx]))) / rho[qg_idx]))
     end
-
-    return
 end
 
 function generator_kernel_two_level(
@@ -110,14 +110,16 @@ function generator_kernel_two_level(
 end
 
 function generator_kernel_two_level(
-    gen_mod::GeneratorModel{CuArray{Float64,1}},
-    baseMVA::Float64, u::CuArray{Float64,1}, xbar::CuArray{Float64,1},
-    zu::CuArray{Float64,1}, lu::CuArray{Float64,1}, rho_u::CuArray{Float64,1}
-)
+    gen_mod::GeneratorModel{T},
+    baseMVA::Float64, u::T, xbar::T,
+    zu::T, lu::T, rho_u::T,
+    device
+) where {T}
     nblk = div(gen_mod.ngen, 32, RoundUp)
-    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk generator_kernel_two_level(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
-    return tgpu
+    wait(generator_kernel_two_level(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
+                u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
+                ndrange=nblk, dependencies=Event(device)))
+    return 0.0
 end
 
 function generator_kernel_two_level(

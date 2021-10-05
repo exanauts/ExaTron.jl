@@ -135,8 +135,8 @@ Driver to run TRON on GPU. This should be called from a kernel.
 end
 
 @inline function tron_qp_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64,
-    x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1}, xu::CuDeviceArray{Float64,1},
-    A::CuDeviceArray{Float64,2}, c::CuDeviceArray{Float64,1})
+    x, xl, xu,
+    A, c)
 
     tx = threadIdx().x
     I = blockIdx().x

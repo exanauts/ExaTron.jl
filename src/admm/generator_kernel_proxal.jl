@@ -173,6 +173,7 @@ function generator_kernel_two_level(
     return 0.0
 
 end
+=#
 
 function generator_kernel_two_level_proxal_between(
     baseMVA::Float64, ngen::Int, gen_start::Int,
@@ -293,24 +294,24 @@ function generator_kernel_two_level_proxal_last(
 end
 
 function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
-    u::CuDeviceArray{Float64,1}, xbar::CuDeviceArray{Float64,1}, z::CuDeviceArray{Float64,1},
-    l::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
-    pgmin::CuDeviceArray{Float64,1}, pgmax::CuDeviceArray{Float64,1},
-    qgmin::CuDeviceArray{Float64,1}, qgmax::CuDeviceArray{Float64,1},
-    smin::CuDeviceArray{Float64,1}, smax::CuDeviceArray{Float64,1}, s::CuDeviceArray{Float64,1},
-    _A::CuDeviceArray{Float64,1}, _c::CuDeviceArray{Float64,1})
+    u, xbar, z,
+    l, rho,
+    pgmin, pgmax,
+    qgmin, qgmax,
+    smin, smax, s,
+    _A, _c)
 
-    tx = threadIdx().x
-    I = blockIdx().x
+    tx = @index(Local, Linear)
+    I = @index(Group, Linear)
 
     if I <= ngen
         n = 2
-        x = CuDynamicSharedArray(Float64, n)
-        xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
-        xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+        x = @localmem Float64 (4,)
+        xl = @localmem Float64 (4,)
+        xu = @localmem Float64 (4,)
 
-        A = CuDynamicSharedArray(Float64, (n,n), (13*n+3)*sizeof(Float64)+(3*n+3)*sizeof(Int))
-        c = CuDynamicSharedArray(Float64, n, (13*n+3+3*n^2)*sizeof(Float64)+(3*n+3)*sizeof(Int))
+        A = @localmem Float64 (4,4)
+        c = @localmem Float64 (4,)
 
         pg_idx = gen_start + 2*(I-1)
         qg_idx = gen_start + 2*(I-1) + 1
@@ -334,7 +335,7 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
                 end
             end
         end
-        CUDA.sync_threads()
+        @synchronize
 
         @inbounds begin
             xl[1] = pgmin[I]
@@ -343,9 +344,9 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
             xu[2] = smax[I]
             x[1] = min(xu[1], max(xl[1], u[pg_idx]))
             x[2] = min(xu[2], max(xl[2], s[I]))
-            CUDA.sync_threads()
+            @synchronize
 
-            status, minor_iter = tron_qp_kernel(n, 500, 200, 1e-6, 1.0, x, xl, xu, A, c)
+            status, minor_iter = tron_qp_kernel(n, 500, 200, 1e-6, 1.0, x, xl, xu, A, c, I, J)
 
             u[pg_idx] = x[1]
             s[I] = x[2]
@@ -449,12 +450,11 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
 end
 
 function generator_kernel_two_level(
-    gen_mod::ProxALGeneratorModel{CuArray{Float64,1}},
-    baseMVA::Float64, u::CuArray{Float64,1}, xbar::CuArray{Float64,1},
-    zu::CuArray{Float64,1}, lu::CuArray{Float64,1}, rho_u::CuArray{Float64,1})
+    gen_mod::ProxALGeneratorModel{T},
+    baseMVA::Float64, u::T, xbar::T,
+    zu::T, lu::T, rho_u::T) where {T}
 
     n = 2
-    shmem_size = sizeof(Float64)*(14*n+3+3*n^2) + sizeof(Int)*(3*n+3)
 
     tgpu1 = build_qp_problem!(baseMVA, gen_mod)
     tgpu2 = CUDA.@timed @cuda threads=32 blocks=gen_mod.ngen shmem=shmem_size generator_kernel_two_level_proxal(
