@@ -760,13 +760,13 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                                                                         )
                 )
                 else
-                    wait(bus_kernel_two_level(env.device)(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-                                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-                                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
-                                                                        rho_v, mod.YshR, mod.YshI,
-                                                                        sol.s_curr, par.rho_sigma,
-                                                                        ndrange=nblk_bus, dependencies=Event(env.device)
-                                                                        )
+                    # wait(bus_kernel_two_level(env.device)(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                    #                                                     mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                    #                                                     mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
+                    #                                                     rho_v, mod.YshR, mod.YshI,
+                    #                                                     sol.s_curr, par.rho_sigma,
+                    #                                                     ndrange=nblk_bus, dependencies=Event(env.device)
+                    #                                                     )
                 end
 
                 # Update xbar.
