@@ -644,7 +644,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             z_prev_norm = norm(z_outer)
         else
             # synchronize(env.device)
-            wait(copy_data_kernel(env.device)(z_outer, z_curr, ndrange = mod.nvar, dependencies=Event(env.device)))
+            wait(copy_data_kernel(env.device, 16)(z_outer, z_curr, ndrange = mod.nvar, dependencies=Event(env.device)))
             z_prev_norm = norm(z_curr)
         end
 
@@ -718,8 +718,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             #     end
             # else
                 # synchronize(env.device)
-                wait(copy_data_kernel(env.device)(z_prev, z_curr, ndrange = mod.nvar, dependencies=Event(env.device)))
-                wait(copy_data_kernel(env.device)(rp_old, rp, ndrange = mod.nvar, dependencies=Event(env.device)))
+                wait(copy_data_kernel(env.device, 16)(z_prev, z_curr, ndrange = mod.nvar, dependencies=Event(env.device)))
+                wait(copy_data_kernel(env.device, 16)(rp_old, rp, ndrange = mod.nvar, dependencies=Event(env.device)))
 
                 tgpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, env.device)
                 # MPI routines to be implemented:
@@ -729,7 +729,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 
                 # time_gen += tgpu.time
                 if env.use_polar
-                    ev = polar_kernel_two_level(env.device)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                    ev = polar_kernel_two_level(env.device, 16)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                                                               shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                               mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx,

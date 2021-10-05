@@ -216,8 +216,11 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
 end
 
 @kernel function copy_data_kernel(dest, @Const(src))
-    I = @index(Global)
-    dest[I] = src[I]
+    I = @index(Global, Linear)
+    J = @index(Local, Linear)
+    if J < length(dest)
+        dest[J] = src[J]
+    end
 
 end
 
