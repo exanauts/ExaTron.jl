@@ -75,7 +75,7 @@ end
 )
     I_ = @index(Group, Linear)
     J_ = @index(Local, Linear)
-    I = J_ + (I_ * (I_ - 1))
+    I = J_ + (@groupsize()[1] * (I_ - 1))
     if (I <= ngen)
         pg_idx = gen_start + 2*(I-1)
         qg_idx = gen_start + 2*(I-1) + 1
@@ -116,9 +116,9 @@ function generator_kernel_two_level(
     device
 ) where {T}
     nblk = div(gen_mod.ngen, 32, RoundUp)
-    wait(generator_kernel_two_level(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
+    wait(generator_kernel_two_level(device, 32, gen_mod.ngen)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
-                ndrange=nblk, dependencies=Event(device)))
+                dependencies=Event(device)))
     return 0.0
 end
 

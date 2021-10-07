@@ -273,9 +273,10 @@ function update_xbar(env::AdmmEnv, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
 end
 
 @kernel function update_xbar_generator_kernel(n::Int, gen_start::Int, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         i = gen_start + 2*(tx - 1)
@@ -287,9 +288,10 @@ end
 end
 
 @kernel function update_xbar_branch_kernel(n::Int, line_start::Int, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         ul_cur = line_start + 8*(tx-1)
@@ -312,9 +314,10 @@ end
 end
 
 @kernel function update_xbar_bus_kernel(n::Int, line_start::Int, bus_start::Int, FrStart, FrIdx, ToStart, ToIdx, u, v, xbar, zu, zv, lu, lv, rho_u, rho_v)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    b = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    b = I
 
     if b <= n
         wi_sum = 0.0
@@ -405,9 +408,10 @@ function update_zu(env::AdmmEnv, u, xbar, z, l, rho, lz, beta)
 end
 
 @kernel function update_zu_generator_kernel(n::Int, gen_start::Int, u, xbar, z, l, rho, lz, beta)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         i = gen_start  + 2*(tx - 1)
@@ -419,9 +423,10 @@ end
 end
 
 @kernel function update_zu_branch_kernel(n::Int, line_start::Int, bus_start::Int, brBusIdx, u, xbar, z, l, rho, lz, beta)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         ul_cur = line_start + 8*(tx - 1)
@@ -444,9 +449,10 @@ end
 end
 
 @kernel function update_zv_kernel(n::Int, v, xbar, z, l, rho, lz, beta)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         @inbounds begin
@@ -456,9 +462,10 @@ end
 end
 
 @kernel function update_l_kernel(n::Int, l, z, lz, beta)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         @inbounds begin
@@ -498,9 +505,10 @@ end
 end
 
 @kernel function compute_primal_residual_u_generator_kernel(n::Int, gen_start::Int, rp, u, xbar, z)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         i = gen_start + 2*(tx - 1)
@@ -512,9 +520,10 @@ end
 end
 
 @kernel function compute_primal_residual_u_branch_kernel(n::Int, line_start::Int, bus_start::Int, brBusIdx, rp, u, xbar, z)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         ul_cur = line_start + 8*(tx - 1)
@@ -534,9 +543,10 @@ end
 end
 
 @kernel function compute_primal_residual_v_kernel(n::Int, rp, v, xbar, z)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         rp[tx] = v[tx] - xbar[tx] + z[tx]
@@ -544,9 +554,10 @@ end
 end
 
 @kernel function vector_difference(n::Int, c, a, b)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         c[tx] = a[tx] - b[tx]
@@ -554,9 +565,10 @@ end
 end
 
 @kernel function update_lz_kernel(n::Int, max_limit::Float64, z, lz, beta)
-    I = @index(Group, Linear)
-    J = @index(Local, Linear)
-    tx = J + (I * (I - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
+    tx = I
 
     if tx <= n
         lz[tx] += max(-max_limit, min(max_limit, beta*z[tx]))
@@ -645,7 +657,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             z_prev_norm = norm(z_outer)
         else
             # synchronize(env.device)
-            wait(copy_data_kernel(env.device)(z_outer, z_curr, ndrange = mod.nvar, dependencies=Event(env.device)))
+            blocks = (div(mod.nvar-1, 64)+1)
+            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, z_outer, z_curr, dependencies=Event(env.device)))
             z_prev_norm = norm(z_curr)
         end
 
@@ -727,8 +740,9 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             #     end
             # else
                 # synchronize(env.device)
-                wait(copy_data_kernel(env.device)(z_prev, z_curr, ndrange = mod.nvar, dependencies=Event(env.device)))
-                wait(copy_data_kernel(env.device)(rp_old, rp, ndrange = mod.nvar, dependencies=Event(env.device)))
+                blocks = (div(mod.nvar-1, 64)+1)
+                wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, z_prev, z_curr, dependencies=Event(env.device)))
+                wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, rp_old, rp, dependencies=Event(env.device)))
 
                 tgpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, env.device)
                 # MPI routines to be implemented:
@@ -738,11 +752,11 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 
                 # time_gen += tgpu.time
                 if env.use_polar
-                    ev = polar_kernel_two_level(env.device)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                    ev = polar_kernel_two_level(env.device, 32, mod.nline)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                                                               shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                               mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx,
-                                                              ndrange=nblk_br, dependencies=Event(env.device))
+                                                              dependencies=Event(env.device))
                     wait(ev)
                 else
                     # tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, inner, par.max_auglag, mod.line_start, scale, par.mu_max,
@@ -752,11 +766,11 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                     error("Not implemented")
                 end
                 if !env.allow_infeas
-                    wait(bus_kernel_two_level(env.device)(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                    wait(bus_kernel_two_level(env.device, 32, mod.nbus)(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
                                                                         mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
                                                                         mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
                                                                         rho_v, mod.YshR, mod.YshI,
-                                                                        ndrange=nblk_bus, dependencies=Event(env.device)
+                                                                        dependencies=Event(env.device)
                                                                         )
                 )
                 else
@@ -765,78 +779,78 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                     #                                                     mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr,
                     #                                                     rho_v, mod.YshR, mod.YshI,
                     #                                                     sol.s_curr, par.rho_sigma,
-                    #                                                     ndrange=nblk_bus, dependencies=Event(env.device)
+                    #                                                     dependencies=Event(env.device)
                     #                                                     )
                 end
 
                 # Update xbar.
                 blocks=(div(mod.gen_mod.ngen-1, 64)+1)
-                wait(update_xbar_generator_kernel(env.device)(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr, v_curr,
+                wait(update_xbar_generator_kernel(env.device, 64, mod.gen_mod.ngen)(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nline-1, 64)+1)
-                wait(update_xbar_branch_kernel(env.device)(mod.nline, mod.line_start, u_curr, v_curr,
+                wait(update_xbar_branch_kernel(env.device, 64, mod.nline)(mod.nline, mod.line_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nbus-1, 64)+1)
-                wait(update_xbar_bus_kernel(env.device)(mod.nbus, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(update_xbar_bus_kernel(env.device, 64, mod.nbus)(mod.nbus, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
+                                               dependencies=Event(env.device)
                                                )
                 )
 
                 # Update z.
                 blocks=(div(mod.gen_mod.ngen-1, 64)+1)
-                wait(update_zu_generator_kernel(env.device)(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr,
+                wait(update_zu_generator_kernel(env.device, 64, mod.gen_mod.ngen)(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr,
                                                xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nline-1, 64)+1)
-                wait(update_zu_branch_kernel(env.device)(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(update_zu_branch_kernel(env.device, 64, mod.nline)(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta,
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nvar_v-1, 64)+1)
-                wait(update_zv_kernel(env.device)(mod.nvar_v, v_curr, xbar_curr, zv_curr,
+                wait(update_zv_kernel(env.device, 64, mod.nvar_v)(mod.nvar_v, v_curr, xbar_curr, zv_curr,
                                                lv_curr, rho_v, lz_v, beta,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                                               dependencies=Event(env.device)
                                                )
                 )
 
                 # Update multiiplier and residuals.
                 blocks=(div(mod.nvar-1, 64)+1)
-                wait(update_l_kernel(env.device)(mod.nvar, l_curr, z_curr, lz, beta,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(update_l_kernel(env.device, 64, mod.nvar)(mod.nvar, l_curr, z_curr, lz, beta,
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.gen_mod.ngen-1, 64)+1)
-                wait(compute_primal_residual_u_generator_kernel(env.device)(mod.gen_mod.ngen, mod.gen_mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(compute_primal_residual_u_generator_kernel(env.device, 64, mod.gen_mod.ngen)(mod.gen_mod.ngen, mod.gen_mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr,
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nline-1, 64)+1)
-                wait(compute_primal_residual_u_branch_kernel(env.device)(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(compute_primal_residual_u_branch_kernel(env.device, 64, mod.nline)(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr,
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nvar_v-1, 64)+1)
-                wait(compute_primal_residual_v_kernel(env.device)(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(compute_primal_residual_v_kernel(env.device, 64, mod.nvar_v)(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr,
+                                               dependencies=Event(env.device)
                                                )
                 )
                 blocks=(div(mod.nvar-1, 64)+1)
-                wait(vector_difference(env.device)(mod.nvar, rd, z_curr, z_prev,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(vector_difference(env.device, 64, mod.nvar)(mod.nvar, rd, z_curr, z_prev,
+                                               dependencies=Event(env.device)
                                                )
                 )
 
                 blocks=(div(mod.nvar-1, 64)+1)
-                wait(vector_difference(env.device)(mod.nvar, Ax_plus_By, rp, z_curr,
-                                               ndrange=blocks, dependencies=Event(env.device)
+                wait(vector_difference(env.device, 64, mod.nvar)(mod.nvar, Ax_plus_By, rp, z_curr,
+                                               dependencies=Event(env.device)
                                                )
                 )
                 mismatch = norm(Ax_plus_By)
@@ -871,8 +885,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             lz .+= max.(-par.MAX_MULTIPLIER, min.(par.MAX_MULTIPLIER, beta .* z_curr))
         else
             blocks=(div(mod.nvar-1, 64)+1)
-            wait(update_lz_kernel(env.device)(mod.nvar, par.MAX_MULTIPLIER, z_curr, lz, beta,
-                                               ndrange=blocks, dependencies=Event(env.device)
+            wait(update_lz_kernel(env.device, 64, mod.nvar)(mod.nvar, par.MAX_MULTIPLIER, z_curr, lz, beta,
+                                               dependencies=Event(env.device)
                                                )
             )
         end

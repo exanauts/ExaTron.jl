@@ -50,10 +50,14 @@ LOADS = Dict(
     ExaTron.set_active_load!(env, LOADS[t]["pd"])
     ExaTron.set_reactive_load!(env, LOADS[t]["qd"])
 
+    pg = ExaTron.active_power_generation(env)
+    @show pg |> Array
+
     ExaTron.admm_restart!(env)
 
     sol = env.solution
     pg = ExaTron.active_power_generation(env)
+    pg = pg |> Array
     @test sol.status == ExaTron.HAS_CONVERGED
     @test pg ≈ [0.8965723471282547, 1.3381394570889165, 0.9386855347032877] rtol=1e-4
 end

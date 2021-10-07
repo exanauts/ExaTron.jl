@@ -219,7 +219,7 @@ end
 )
     I_ = @index(Group, Linear)
     J_ = @index(Local, Linear)
-    I = J_ + (I_ * (I_ - 1))
+    I = J_ + (@groupsize()[1] * (I_ - 1))
     if I <= nbus
         inv_rhosum_pij_ji = 0.0
         inv_rhosum_qij_ji = 0.0
