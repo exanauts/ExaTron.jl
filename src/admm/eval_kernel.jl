@@ -65,6 +65,7 @@ end
 
     # All threads execute the same code.
     tx = J
+    ty = 1
 
     @inbounds begin
         c1 = (x[1] - (YffR*x[5] + YftR*x[7] + YftI*x[8]))
@@ -212,6 +213,8 @@ end
     end
 
     @synchronize
+    tx = J
+    ty = 1
 
     if tx <= n && ty == 1
         @inbounds for j=1:n
@@ -1365,7 +1368,7 @@ function eval_h_polar_kernel_cpu(I, x, mode, scale, rows, cols, lambda, values,
 end
 
 # Assume that scaling factor has already been applied to Q and c.
-@inline function eval_qp_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, Q::CuDeviceArray{Float64,2}, c::CuDeviceArray{Float64,1})
+@inline function eval_qp_f_kernel(n::Int, x, Q, c, I, J)
     # f = xQx/2 + cx
     f = 0.0
     @inbounds begin
@@ -1382,21 +1385,22 @@ end
     return f
 end
 
-@inline function eval_qp_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1}, Q::CuDeviceArray{Float64,2}, c::CuDeviceArray{Float64,1})
+@inline function eval_qp_grad_f_kernel(n::Int, x, g, Q, c, I, J)
     # g = Qx + c
-    tx = threadIdx().x
+    tx = J
 
     @inbounds begin
         if tx <= n
             g[tx] = c[tx]
         end
-        CUDA.sync_threads()
+        @synchronize
+        tx = J
         if tx <= n
             for j=1:n
                 g[tx] += Q[tx,j]*x[j]
             end
         end
-        CUDA.sync_threads()
+        @synchronize
     end
     return
 end

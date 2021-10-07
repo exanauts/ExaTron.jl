@@ -136,28 +136,28 @@ end
 
 @inline function tron_qp_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64,
     x, xl, xu,
-    A, c)
+    A, c, I_, J_)
 
-    tx = threadIdx().x
-    I = blockIdx().x
+    tx = J_
+    I = I_
 
-    g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-    xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-    s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-    wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-    wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-    wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-    wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-    wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-    wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-    gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-    dsave = @cuDynamicSharedMem(Float64, 3, (13*n)*sizeof(Float64))
-    indfree = @cuDynamicSharedMem(Int, n, (13*n+3)*sizeof(Float64))
-    iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (13*n+3)*sizeof(Float64))
-    isave = @cuDynamicSharedMem(Int, 3, (3*n)*sizeof(Int) + (13*n+3)*sizeof(Float64))
+    g = @localmem Float64 (4,)
+    xc = @localmem Float64 (4,)
+    s = @localmem Float64 (4,)
+    wa = @localmem Float64 (4,)
+    wa1 = @localmem Float64 (4,)
+    wa2 = @localmem Float64 (4,)
+    wa3 = @localmem Float64 (4,)
+    wa4 = @localmem Float64 (4,)
+    wa5 = @localmem Float64 (4,)
+    gfree = @localmem Float64 (4,)
+    dsave = @localmem Float64 (3,)
+    indfree = @localmem Int (4,)
+    iwa = @localmem Int (8,)
+    isave = @localmem Int (3,)
 
-    B = @cuDynamicSharedMem(Float64, (n,n), (13*n+3+n^2)*sizeof(Float64)+(3*n+3)*sizeof(Int))
-    L = @cuDynamicSharedMem(Float64, (n,n), (13*n+3+2*n^2)*sizeof(Float64)+(3*n+3)*sizeof(Int))
+    B = @localmem Float64 (4,4)
+    L = @localmem Float64 (4,4)
 
     if tx <= n
         @inbounds begin
@@ -167,7 +167,7 @@ end
             end
         end
     end
-    CUDA.sync_threads()
+    @synchronize
 
     task = 0
     status = 0
@@ -191,7 +191,7 @@ end
         # [0|1]: Evaluate function.
 
         if task == 0 || task == 1
-            f = eval_qp_f_kernel(n, x, A, c)
+            f = eval_qp_f_kernel(n, x, A, c, I_, J_)
             nfev += 1
             if nfev >= max_feval
                 search = false
@@ -201,7 +201,7 @@ end
         # [2] G or H: Evaluate gradient and Hessian.
 
         if task == 0 || task == 2
-            eval_qp_grad_f_kernel(n, x, g, A, c)
+            eval_qp_grad_f_kernel(n, x, g, A, c, I_, J_)
             # We do not have to evaluate Hessian since A does not change.
             ngev += 1
             nhev += 1
@@ -211,7 +211,7 @@ end
         # Initialize the trust region bound.
 
         if task == 0
-            gnorm0 = dnrm2(n, g, 1)
+            gnorm0 = dnrm2(n, g, 1, I_, J_)
             delta = gnorm0
         end
 
@@ -220,13 +220,13 @@ end
         if search
             delta, task = dtron(n, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
                                 cg_itermax, delta, task, B, L, xc, s, indfree, gfree,
-                                isave, dsave, wa, iwa, wa1, wa2, wa3, wa4, wa5)
+                                isave, dsave, wa, iwa, wa1, wa2, wa3, wa4, wa5, I_, J_)
         end
 
         # [3] NEWX: a new point was computed.
 
         if task == 3
-            gnorm_inf = dgpnorm(n, x, xl, xu, g)
+            gnorm_inf = dgpnorm(n, x, xl, xu, g, I_, J_)
 
             if gnorm_inf <= gtol
                 task = 4
@@ -246,7 +246,7 @@ end
         end
     end
 
-    CUDA.sync_threads()
+    @synchronize
 
     return status, minor_iter
 end

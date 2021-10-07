@@ -9,7 +9,9 @@
     tau_prox::Float64, rho_prox::Float64, pg_ref_prox,
     l_next_prox, pg_next_prox
 )
-    I = @index(Global)
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
 
     if I <= ngen
         pg_idx = gen_start + 2*(I-1)
@@ -41,7 +43,9 @@ end
     smax_prox, smin_prox,
     s
 )
-    I = @index(Global)
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
 
     if I <= ngen
         pg_idx = gen_start + 2*(I-1)
@@ -102,7 +106,9 @@ end
     smax_prox, smin_prox,
     s
 )
-    I = @index(Global)
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
 
     if I <= ngen
         pg_idx = gen_start + 2*(I-1)
@@ -157,17 +163,17 @@ function generator_kernel_two_level(
     if gen_mod.t_curr == 1
         wait(generator_kernel_two_level_proxal_first(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                     u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
-                    gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_next, gen_mod.pg_next, ndrange = nblk, dependencies=Event(device)))
+                    gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_next, gen_mod.pg_next, dependencies=Event(device)))
     elseif gen_mod.t_curr < gen_mod.T
         wait(generator_kernel_two_level_proxal_between(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                     u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
                     gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_next, gen_mod.pg_next,
-                    gen_mod.l_prev, gen_mod.pg_prev, gen_mod.smax, gen_mod.smin, gen_mod.s_curr, ndrange = nblk, dependencies=Event(device)))
+                    gen_mod.l_prev, gen_mod.pg_prev, gen_mod.smax, gen_mod.smin, gen_mod.s_curr, dependencies=Event(device)))
     else
         wait(generator_kernel_two_level_proxal_last(device)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                     u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
                     gen_mod.tau, gen_mod.rho, gen_mod.pg_ref, gen_mod.l_prev, gen_mod.pg_prev,
-                    gen_mod.smax, gen_mod.smin, gen_mod.s_curr, ndrange = nblk, dependencies=Event(device)))
+                    gen_mod.smax, gen_mod.smin, gen_mod.s_curr, dependencies=Event(device)))
     end
 
     return 0.0
@@ -293,7 +299,7 @@ function generator_kernel_two_level_proxal_last(
     end
 end
 
-function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
+@kernel function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
     u, xbar, z,
     l, rho,
     pgmin, pgmax,
@@ -301,17 +307,20 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
     smin, smax, s,
     _A, _c)
 
-    tx = @index(Local, Linear)
-    I = @index(Group, Linear)
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    J = J_
+    I = I_
+    tx = J_
+    x = @localmem Float64 (4,)
+    xl = @localmem Float64 (4,)
+    xu = @localmem Float64 (4,)
+
+    A = @localmem Float64 (4,4)
+    c = @localmem Float64 (4,)
 
     if I <= ngen
         n = 2
-        x = @localmem Float64 (4,)
-        xl = @localmem Float64 (4,)
-        xu = @localmem Float64 (4,)
-
-        A = @localmem Float64 (4,4)
-        c = @localmem Float64 (4,)
 
         pg_idx = gen_start + 2*(I-1)
         qg_idx = gen_start + 2*(I-1) + 1
@@ -336,6 +345,7 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
             end
         end
         @synchronize
+        I = I_
 
         @inbounds begin
             xl[1] = pgmin[I]
@@ -346,14 +356,12 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
             x[2] = min(xu[2], max(xl[2], s[I]))
             @synchronize
 
-            status, minor_iter = tron_qp_kernel(n, 500, 200, 1e-6, 1.0, x, xl, xu, A, c, I, J)
+            status, minor_iter = tron_qp_kernel(n, 500, 200, 1e-6, 1.0, x, xl, xu, A, c, I_, J_)
 
             u[pg_idx] = x[1]
             s[I] = x[2]
         end
     end
-
-    return
 end
 
 function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
@@ -452,22 +460,26 @@ end
 function generator_kernel_two_level(
     gen_mod::ProxALGeneratorModel{T},
     baseMVA::Float64, u::T, xbar::T,
-    zu::T, lu::T, rho_u::T) where {T}
+    zu::T, lu::T, rho_u::T, device) where {T}
 
     n = 2
 
-    tgpu1 = build_qp_problem!(baseMVA, gen_mod)
-    tgpu2 = CUDA.@timed @cuda threads=32 blocks=gen_mod.ngen shmem=shmem_size generator_kernel_two_level_proxal(
+    tgpu1 = build_qp_problem!(baseMVA, gen_mod, device)
+    ev = generator_kernel_two_level_proxal(device, 32, gen_mod.ngen)(
                 gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax,
-                gen_mod.smin, gen_mod.smax, gen_mod.s_curr, gen_mod.Q, gen_mod.c)
+                gen_mod.smin, gen_mod.smax, gen_mod.s_curr, gen_mod.Q, gen_mod.c,
+                dependencies = Event(device))
+    wait(ev)
+    tgpu1 = 0.0
+    tgpu2 = 0.0
     return tgpu2
 end
 
 function generator_kernel_two_level(
     gen_mod::ProxALGeneratorModel{Array{Float64,1}},
-    baseMVA::Float64, u, xbar, zu, lu, rho_u)
-    build_qp_problem!(baseMVA, gen_mod)
+    baseMVA::Float64, u, xbar, zu, lu, rho_u, device)
+    build_qp_problem!(baseMVA, gen_mod, device)
     tcpu = @timed generator_kernel_two_level_proxal(gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u,
                 gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax,
@@ -475,7 +487,7 @@ function generator_kernel_two_level(
     return tcpu
 end
 
-function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{TD}) where TD
+function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{Vector}, device)
     for g in 1:gen_mod.ngen
         shift_Q = 4*(g-1)
         shift_c = 2*(g-1)
@@ -525,17 +537,19 @@ function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{TD}) where TD
     end
 end
 
-function _build_qp_kernel!(
-    Q::CuDeviceArray{Float64, 1}, c::CuDeviceArray{Float64, 1}, t_curr, T,
-    Q_ref::CuDeviceArray{Float64, 1}, c_ref::CuDeviceArray{Float64, 1},
-    baseMVA::Float64, c2::CuDeviceArray{Float64,1}, c1::CuDeviceArray{Float64,1},
+@kernel function _build_qp_kernel!(
+    Q, c, t_curr, T,
+    Q_ref, c_ref,
+    baseMVA::Float64, c2, c1,
     tau_prox::Float64, rho_prox::Float64,
-    pg_ref_prox::CuDeviceArray{Float64,1},
-    l_next_prox::CuDeviceArray{Float64,1}, pg_next_prox::CuDeviceArray{Float64,1},
-    l_prev_prox::CuDeviceArray{Float64,1}, pg_prev_prox::CuDeviceArray{Float64,1},
+    pg_ref_prox,
+    l_next_prox, pg_next_prox,
+    l_prev_prox, pg_prev_prox,
     ngen::Int,
 )
-    I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
 
     if (I <= ngen)
         shift_Q = 4*(I-1)
@@ -584,19 +598,21 @@ function _build_qp_kernel!(
             Q[shift_Q + 3] -= rho_prox
         end
     end
-    return
 end
 
-function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{<:CuArray})
+function build_qp_problem!(baseMVA, gen_mod::ProxALGeneratorModel{TD}, device) where {TD}
     nblk_gen = div(gen_mod.ngen, 32, RoundUp)
-    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_gen _build_qp_kernel!(
+    ev = _build_qp_kernel!(device, 32, gen_mod.ngen)(
         gen_mod.Q, gen_mod.c, gen_mod.t_curr, gen_mod.T,
         gen_mod.Q_ref, gen_mod.c_ref,
         baseMVA, gen_mod.c2, gen_mod.c1,
         gen_mod.tau, gen_mod.rho, gen_mod.pg_ref,
         gen_mod.l_next, gen_mod.pg_next,
         gen_mod.l_prev, gen_mod.pg_prev, gen_mod.ngen,
+        dependencies = Event(device)
     )
+    wait(ev)
+    tgpu = 0.0
     return tgpu
 end
 
