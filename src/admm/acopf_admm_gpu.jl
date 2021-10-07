@@ -215,10 +215,14 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
     return
 end
 
-@kernel function copy_data_kernel(dest, @Const(src))
-    I = @index(Global)
-    dest[I] = src[I]
+@kernel function copy_data_kernel(n, dest, @Const(src))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    tx = J_ + (@groupsize()[1] * (I_ - 1))
 
+    if tx <= n
+        dest[tx] = src[tx]
+    end
 end
 
 function update_multiplier_kernel(n::Int, l_curr::CuDeviceArray{Float64,1},
