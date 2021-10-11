@@ -465,7 +465,7 @@ function generator_kernel_two_level(
     n = 2
 
     tgpu1 = build_qp_problem!(baseMVA, gen_mod, device)
-    ev = generator_kernel_two_level_proxal(device, 32, gen_mod.ngen)(
+    ev = generator_kernel_two_level_proxal(device, 32, gen_mod.ngen*32)(
                 gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax,
                 gen_mod.smin, gen_mod.smax, gen_mod.s_curr, gen_mod.Q, gen_mod.c,

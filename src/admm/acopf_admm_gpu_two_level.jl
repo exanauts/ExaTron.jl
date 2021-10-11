@@ -752,7 +752,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 
                 # time_gen += tgpu.time
                 if env.use_polar
-                    ev = polar_kernel_two_level(env.device, 32, mod.nline)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                    ev = polar_kernel_two_level(env.device, 32, mod.nline*32)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                                                               shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                               mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx,

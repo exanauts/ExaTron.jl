@@ -1,3 +1,3 @@
 
-norm(x) = mapreduce(x->x*x, +, x)
+norm(x) = sqrt(mapreduce(x->x*x, +, x))
 synchronize(device::KA.Device) = wait(Event(device))
