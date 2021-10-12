@@ -313,13 +313,15 @@ end
     end
 end
 
-function bus_kernel_two_level(
+@kernel function bus_kernel_two_level(
     baseMVA, nbus, gen_start, line_start, bus_start,
     FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx,
     Pd, Qd, v, xbar, z, l, rho, YshR, YshI,
     slack, slack_rho
 )
-    I = threadIdx().x + (blockDim().x * (blockIdx().x - 1))
+    I_ = @index(Group, Linear)
+    J_ = @index(Local, Linear)
+    I = J_ + (@groupsize()[1] * (I_ - 1))
     if I <= nbus
         inv_rhosum_pij_ji = 0.0
         inv_rhosum_qij_ji = 0.0
@@ -414,8 +416,6 @@ function bus_kernel_two_level(
             slack[2*I] = (-mu2) / slack_rho
         end
     end
-
-    return
 end
 
 function bus_kernel_two_level_cpu(
