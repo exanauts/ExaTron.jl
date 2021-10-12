@@ -474,7 +474,7 @@ end
     end
 end
 
-@kernel function compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
+function compute_primal_residual_u(env::AdmmEnv, rp_u, u, xbar, z)
     data = env.data
     lines = data.lines
     BusIdx = data.BusIdx
@@ -656,7 +656,6 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             z_outer .= z_curr
             z_prev_norm = norm(z_outer)
         else
-            # synchronize(env.device)
             blocks = (div(mod.nvar-1, 64)+1)
             wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, z_outer, z_curr, dependencies=Event(env.device)))
             z_prev_norm = norm(z_curr)
@@ -666,81 +665,79 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
         while inner < inner_iterlim
             inner += 1
 
-            # if !env.use_gpu
-            #     z_prev .= z_curr
-            #     rp_old .= rp
+            if isa(env.device, KA.CPU)
+                z_prev .= z_curr
+                rp_old .= rp
 
-            #     tcpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u)
-            #     time_gen += tcpu.time
+                tcpu = generator_kernel_two_level(mod.gen_mod, data.baseMVA, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, env.device)
+                time_gen += tcpu.time
 
-            #     #scale = min(scale, (2*1e4) / maximum(abs.(rho_u)))
-            #     if env.use_polar
-            #         tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
-            #                                                                     u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
-            #                                                                     shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-            #                                                                     mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
-            #     else
-            #         tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, inner, par.max_auglag, mod.line_start, par.mu_max,
-            #                                                             u_curr, v_curr, l_curr, rho,
-            #                                                             wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-            #                                                             mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
-            #     end
-            #     time_br += tcpu.time
+                #scale = min(scale, (2*1e4) / maximum(abs.(rho_u)))
+                if env.use_polar
+                    tcpu = @timed auglag_it, tron_it = polar_kernel_two_level_cpu(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                                                                                u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
+                                                                                shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx)
+                else
+                    tcpu = @timed auglag_it, tron_it = auglag_kernel_cpu(mod.n, mod.nline, inner, par.max_auglag, mod.line_start, par.mu_max,
+                                                                        u_curr, v_curr, l_curr, rho,
+                                                                        wRIij, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                                                                        mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                end
+                time_br += tcpu.time
 
-            #     if !env.allow_infeas
-            #         tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-            #                                             mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-            #                                             mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
-            #     else
-            #         tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
-            #                                             mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
-            #                                             mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI,
-            #                                             sol.s_curr, par.rho_sigma)
+                if !env.allow_infeas
+                    tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI)
+                else
+                    tcpu = @timed bus_kernel_two_level_cpu(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start, mod.bus_start,
+                                                        mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart, mod.GenIdx,
+                                                        mod.Pd, mod.Qd, v_curr, xbar_curr, zv_curr, lv_curr, rho_v, mod.YshR, mod.YshI,
+                                                        sol.s_curr, par.rho_sigma)
 
-            #     end
-            #     time_bus += tcpu.time
+                end
+                time_bus += tcpu.time
 
-            #     update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
+                update_xbar(env, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v)
 
-            #     update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
-            #     zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
+                update_zu(env, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta)
+                zv_curr .= (-(lz_v .+ lv_curr .+ rho_v.*(v_curr .- xbar_curr))) ./ (beta .+ rho_v)
 
-            #     l_curr .= -(lz .+ beta.*z_curr)
+                l_curr .= -(lz .+ beta.*z_curr)
 
-            #     compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
-            #     rp_v .= v_curr .- xbar_curr .+ zv_curr
+                compute_primal_residual_u(env, rp_u, u_curr, xbar_curr, zu_curr)
+                rp_v .= v_curr .- xbar_curr .+ zv_curr
 
-            #     #=
-            #     if inner > 1
-            #         update_rho(rho, rp, rp_old, theta, gamma)
-            #     end
-            #     =#
+                #=
+                if inner > 1
+                    update_rho(rho, rp, rp_old, theta, gamma)
+                end
+                =#
 
-            #     rd .= z_curr .- z_prev
-            #     Ax_plus_By .= rp .- z_curr
+                rd .= z_curr .- z_prev
+                Ax_plus_By .= rp .- z_curr
 
-            #     primres = norm(rp)
-            #     dualres = norm(rd)
-            #     z_curr_norm = norm(z_curr)
-            #     mismatch = norm(Ax_plus_By)
-            #     eps_pri = sqrt_d / (2500*outer)
+                primres = norm(rp)
+                dualres = norm(rd)
+                z_curr_norm = norm(z_curr)
+                mismatch = norm(Ax_plus_By)
+                eps_pri = sqrt_d / (2500*outer)
 
-            #     if par.verbose > 0
-            #         if inner == 1 || (inner % 50) == 0
-            #             @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
-            #                     "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
-            #         end
+                if par.verbose > 0
+                    if inner == 1 || (inner % 50) == 0
+                        @printf("%8s  %8s  %10s  %10s  %10s  %10s  %10s  %10s\n",
+                                "Outer", "Inner", "PrimRes", "EpsPrimRes", "DualRes", "||z||", "||Ax+By||", "Beta")
+                    end
 
-            #         @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
-            #                 outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
-            #     end
+                    @printf("%8d  %8d  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e  %10.3e\n",
+                            outer, inner, primres, eps_pri, dualres, z_curr_norm, mismatch, beta)
+                end
 
-            #     if primres <= eps_pri || dualres <= par.DUAL_TOL
-            #         break
-            #     end
-            # else
-                # synchronize(env.device)
-                blocks = (div(mod.nvar-1, 64)+1)
+                if primres <= eps_pri || dualres <= par.DUAL_TOL
+                    break
+                end
+            else
                 wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, z_prev, z_curr, dependencies=Event(env.device)))
                 wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, rp_old, rp, dependencies=Event(env.device)))
 
@@ -785,37 +782,31 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                 end
 
                 # Update xbar.
-                blocks=(div(mod.gen_mod.ngen-1, 64)+1)
                 wait(update_xbar_generator_kernel(env.device, 64, mod.gen_mod.ngen)(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nline-1, 64)+1)
                 wait(update_xbar_branch_kernel(env.device, 64, mod.nline)(mod.nline, mod.line_start, u_curr, v_curr,
                                                xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nbus-1, 64)+1)
                 wait(update_xbar_bus_kernel(env.device, 64, mod.nbus)(mod.nbus, mod.line_start, mod.bus_start, mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, u_curr, v_curr, xbar_curr, zu_curr, zv_curr, lu_curr, lv_curr, rho_u, rho_v,
                                                dependencies=Event(env.device)
                                                )
                 )
 
                 # Update z.
-                blocks=(div(mod.gen_mod.ngen-1, 64)+1)
                 wait(update_zu_generator_kernel(env.device, 64, mod.gen_mod.ngen)(mod.gen_mod.ngen, mod.gen_mod.gen_start, u_curr,
                                                xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nline-1, 64)+1)
                 wait(update_zu_branch_kernel(env.device, 64, mod.nline)(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, u_curr, xbar_curr, zu_curr, lu_curr, rho_u, lz_u, beta,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nvar_v-1, 64)+1)
                 wait(update_zv_kernel(env.device, 64, mod.nvar_v)(mod.nvar_v, v_curr, xbar_curr, zv_curr,
                                                lv_curr, rho_v, lz_v, beta,
                                                dependencies=Event(env.device)
@@ -823,33 +814,27 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                 )
 
                 # Update multiiplier and residuals.
-                blocks=(div(mod.nvar-1, 64)+1)
                 wait(update_l_kernel(env.device, 64, mod.nvar)(mod.nvar, l_curr, z_curr, lz, beta,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.gen_mod.ngen-1, 64)+1)
                 wait(compute_primal_residual_u_generator_kernel(env.device, 64, mod.gen_mod.ngen)(mod.gen_mod.ngen, mod.gen_mod.gen_start, rp_u, u_curr, xbar_curr, zu_curr,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nline-1, 64)+1)
                 wait(compute_primal_residual_u_branch_kernel(env.device, 64, mod.nline)(mod.nline, mod.line_start, mod.bus_start, mod.brBusIdx, rp_u, u_curr, xbar_curr, zu_curr,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nvar_v-1, 64)+1)
                 wait(compute_primal_residual_v_kernel(env.device, 64, mod.nvar_v)(mod.nvar_v, rp_v, v_curr, xbar_curr, zv_curr,
                                                dependencies=Event(env.device)
                                                )
                 )
-                blocks=(div(mod.nvar-1, 64)+1)
                 wait(vector_difference(env.device, 64, mod.nvar)(mod.nvar, rd, z_curr, z_prev,
                                                dependencies=Event(env.device)
                                                )
                 )
 
-                blocks=(div(mod.nvar-1, 64)+1)
                 wait(vector_difference(env.device, 64, mod.nvar)(mod.nvar, Ax_plus_By, rp, z_curr,
                                                dependencies=Event(env.device)
                                                )
@@ -874,7 +859,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
                 if primres <= eps_pri || dualres <= par.DUAL_TOL
                     break
                 end
-            # end
+            end
         end
 
         if mismatch <= OUTER_TOL

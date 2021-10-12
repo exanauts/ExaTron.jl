@@ -8,15 +8,13 @@ using ExaTron
 using Test
 using LinearAlgebra
 
+devices = []
+push!(devices, CPU())
 if has_cuda_gpu()
-    device = CUDADevice()
-    AT = CuArray
-elseif AMDGPU.hsa_configured
-    device = ROCDevice()
-    AT = ROCArray
-else
-    device = CPU()
-    error("CPU KA implementation is currently broken for nested functions")
+    push!(devices, CUDADevice())
+end
+if AMDGPU.hsa_configured
+    push!(devices, ROCDevice())
 end
 
 CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
@@ -35,7 +33,7 @@ LOADS = Dict(
 )
 
 
-@testset "ProxAL wrapper (device=$device)" begin
+@testset "ProxAL wrapper (device=$device)" for device in devices
     data = ExaTron.opf_loaddata(CASE)
     t, T = 1, 2
     rho_pq, rho_va = 400.0, 40000.0

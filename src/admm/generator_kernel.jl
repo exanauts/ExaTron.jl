@@ -115,7 +115,6 @@ function generator_kernel_two_level(
     zu::T, lu::T, rho_u::T,
     device
 ) where {T}
-    nblk = div(gen_mod.ngen, 32, RoundUp)
     wait(generator_kernel_two_level(device, 32, gen_mod.ngen)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
                 dependencies=Event(device)))
@@ -124,7 +123,8 @@ end
 
 function generator_kernel_two_level(
     gen_mod::GeneratorModel{Array{Float64,1}},
-    baseMVA::Float64, u, xbar, zu, lu, rho_u
+    baseMVA::Float64, u, xbar, zu, lu, rho_u,
+    device
 )
     tcpu = @timed generator_kernel_two_level(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                 u, xbar, zu, lu, rho_u, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
