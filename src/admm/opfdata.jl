@@ -144,18 +144,36 @@ mutable struct Ybus{VD}
   Ybus{VD}(YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI) where {VD} = new(YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI)
 end
 
-function opf_loaddata(case_name, lineOff=Line())
+mutable struct RawData
+    baseMVA::Float64
+    bus_arr::Array{Float64, 2}
+    branch_arr::Array{Float64, 2}
+    gen_arr::Array{Float64, 2}
+    costgen_arr::Array{Float64, 2}
+end
+
+function RawData(case_name::String)
+    return RawData(
+        100.0,
+        readdlm(case_name * ".bus"),
+        readdlm(case_name * ".branch"),
+        readdlm(case_name * ".gen"),
+        readdlm(case_name * ".gencost"),
+    )
+end
+
+opf_loaddata(case_name::String, lineOff=Line()) = opf_loaddata(RawData(case_name), lineOff)
+
+function opf_loaddata(raw::RawData, lineOff=Line())
   #
   # load buses
   #
-  # bus_arr = readdlm("data/" * case_name * ".bus")
-  bus_arr = readdlm(case_name * ".bus")
-  num_buses = size(bus_arr,1)
+  num_buses = size(raw.bus_arr,1)
   buses = Array{Bus}(undef, num_buses)
   bus_ref=-1
   for i in 1:num_buses
-    @assert bus_arr[i,1]>0  #don't support nonpositive bus ids
-    buses[i] = Bus(bus_arr[i,1:13]...)
+    @assert raw.bus_arr[i,1]>0  #don't support nonpositive bus ids
+    buses[i] = Bus(raw.bus_arr[i,1:13]...)
     buses[i].Va *= pi/180
     if buses[i].bustype==3
       if bus_ref>0
@@ -164,35 +182,31 @@ function opf_loaddata(case_name, lineOff=Line())
          bus_ref=i
       end
     end
-    #println("bus ", i, " ", buses[i].Vmin, "      ", buses[i].Vmax)
   end
 
   #
   # load branches/lines
   #
-  # branch_arr = readdlm("data/" * case_name * ".branch")
-  branch_arr = readdlm(case_name * ".branch")
-  num_lines = size(branch_arr,1)
-  lines_on = findall((branch_arr[:,11].>0) .& ((branch_arr[:,1].!=lineOff.from) .| (branch_arr[:,2].!=lineOff.to)) )
+  num_lines = size(raw.branch_arr,1)
+  lines_on = findall((raw.branch_arr[:,11].>0) .& ((raw.branch_arr[:,1].!=lineOff.from) .| (raw.branch_arr[:,2].!=lineOff.to)) )
   num_on   = length(lines_on)
 
   if lineOff.from>0 && lineOff.to>0
     println("opf_loaddata: was asked to remove line from,to=", lineOff.from, ",", lineOff.to)
     #println(lines_on, branch_arr[:,1].!=lineOff.from, branch_arr[:,2].!=lineOff.to)
   end
-  if length(findall(branch_arr[:,11].==0))>0
-    println("opf_loaddata: ", num_lines-length(findall(branch_arr[:,11].>0)), " lines are off and will be discarded (out of ", num_lines, ")")
+  if length(findall(raw.branch_arr[:,11].==0))>0
+    println("opf_loaddata: ", num_lines-length(findall(raw.branch_arr[:,11].>0)), " lines are off and will be discarded (out of ", num_lines, ")")
   end
-
 
 
   lines = Array{Line}(undef, num_on)
 
   lit=0
   for i in lines_on
-    @assert branch_arr[i,11] == 1  #should be on since we discarded all other
+    @assert raw.branch_arr[i,11] == 1  #should be on since we discarded all other
     lit += 1
-    lines[lit] = Line(branch_arr[i, 1:13]...)
+    lines[lit] = Line(raw.branch_arr[i, 1:13]...)
     #=
     if (lines[lit].angmin != 0 || lines[lit].angmax != 0) && (lines[lit].angmin>-360 || lines[lit].angmax<360)
       println("Voltage bounds on line ", i, " with angmin ", lines[lit].angmin, " and angmax ", lines[lit].angmax)
@@ -206,17 +220,12 @@ function opf_loaddata(case_name, lineOff=Line())
   #
   # load generators
   #
-  # gen_arr = readdlm("data/" * case_name * ".gen")
-  gen_arr = readdlm(case_name * ".gen")
-  # costgen_arr = readdlm("data/" * case_name * ".gencost")
-  costgen_arr = readdlm(case_name * ".gencost")
-  num_gens = size(gen_arr,1)
+  num_gens = size(raw.gen_arr,1)
+  baseMVA = raw.baseMVA
 
-  baseMVA=100
+  @assert num_gens == size(raw.costgen_arr,1)
 
-  @assert num_gens == size(costgen_arr,1)
-
-  gens_on=findall(x->x!=0, gen_arr[:,8]); num_on=length(gens_on)
+  gens_on=findall(x->x!=0, raw.gen_arr[:,8]); num_on=length(gens_on)
   if num_gens-num_on>0
     println("loaddata: ", num_gens-num_on, " generators are off and will be discarded (out of ", num_gens, ")")
   end
@@ -227,34 +236,34 @@ function opf_loaddata(case_name, lineOff=Line())
     i += 1
     generators[i] = Gener(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, Array{Int}(undef, 0)) #gen_arr[i,1:end]...)
 
-    generators[i].bus      = gen_arr[git,1]
-    generators[i].Pg       = gen_arr[git,2] / baseMVA
-    generators[i].Qg       = gen_arr[git,3] / baseMVA
-    generators[i].Qmax     = gen_arr[git,4] / baseMVA
-    generators[i].Qmin     = gen_arr[git,5] / baseMVA
-    generators[i].Vg       = gen_arr[git,6]
-    generators[i].mBase    = gen_arr[git,7]
-    generators[i].status   = gen_arr[git,8]
+    generators[i].bus      = raw.gen_arr[git,1]
+    generators[i].Pg       = raw.gen_arr[git,2] / baseMVA
+    generators[i].Qg       = raw.gen_arr[git,3] / baseMVA
+    generators[i].Qmax     = raw.gen_arr[git,4] / baseMVA
+    generators[i].Qmin     = raw.gen_arr[git,5] / baseMVA
+    generators[i].Vg       = raw.gen_arr[git,6]
+    generators[i].mBase    = raw.gen_arr[git,7]
+    generators[i].status   = raw.gen_arr[git,8]
     @assert generators[i].status==1
-    generators[i].Pmax     = gen_arr[git,9]  / baseMVA
-    generators[i].Pmin     = gen_arr[git,10] / baseMVA
-    generators[i].Pc1      = gen_arr[git,11]
-    generators[i].Pc2      = gen_arr[git,12]
-    generators[i].Qc1min   = gen_arr[git,13]
-    generators[i].Qc1max   = gen_arr[git,14]
-    generators[i].Qc2min   = gen_arr[git,15]
-    generators[i].Qc2max   = gen_arr[git,16]
-    generators[i].gentype  = costgen_arr[git,1]
-    generators[i].startup  = costgen_arr[git,2]
-    generators[i].shutdown = costgen_arr[git,3]
-    generators[i].n        = costgen_arr[git,4]
+    generators[i].Pmax     = raw.gen_arr[git,9]  / baseMVA
+    generators[i].Pmin     = raw.gen_arr[git,10] / baseMVA
+    generators[i].Pc1      = raw.gen_arr[git,11]
+    generators[i].Pc2      = raw.gen_arr[git,12]
+    generators[i].Qc1min   = raw.gen_arr[git,13]
+    generators[i].Qc1max   = raw.gen_arr[git,14]
+    generators[i].Qc2min   = raw.gen_arr[git,15]
+    generators[i].Qc2max   = raw.gen_arr[git,16]
+    generators[i].gentype  = raw.costgen_arr[git,1]
+    generators[i].startup  = raw.costgen_arr[git,2]
+    generators[i].shutdown = raw.costgen_arr[git,3]
+    generators[i].n        = raw.costgen_arr[git,4]
     @assert(generators[i].n <= 3 && generators[i].n >= 2)
     if generators[i].gentype == 1
-      generators[i].coeff = costgen_arr[git,5:end]
+      generators[i].coeff = raw.costgen_arr[git,5:end]
       error("Piecewise linear costs remains to be implemented.")
     else
       if generators[i].gentype == 2
-        generators[i].coeff = costgen_arr[git,5:end]
+        generators[i].coeff = raw.costgen_arr[git,5:end]
         #println(generators[i].coeff, " ", length(generators[i].coeff), " ", generators[i].coeff[2])
       else
         error("Invalid generator cost model in the data.")
