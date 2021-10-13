@@ -262,7 +262,7 @@ function dual_residual_kernel(n::Int, rd::CuDeviceArray{Float64,1},
     return
 end
 
-function check_linelimit_violation(data::OPFData, u; device=KA.CPU())
+function check_linelimit_violation(data::OPFData, u_; device=KA.CPU())
     lines = data.lines
     nline = length(data.lines)
     line_start = 2*length(data.generators) + 1
@@ -271,13 +271,14 @@ function check_linelimit_violation(data::OPFData, u; device=KA.CPU())
     rateA_maxviol = 0.0
     rateC_nviols = 0
     rateC_maxviol = 0.0
+    u = u_ |> Array
 
     for l=1:nline
         pij_idx = line_start + 8*(l-1)
         ij_val = 0.0
         ji_val = 0.0
-        AMDGPU.@allowscalar ij_val = u[pij_idx]^2 + u[pij_idx+1]^2
-        AMDGPU.@allowscalar ji_val = u[pij_idx+2]^2 + u[pij_idx+3]^2
+        ij_val = u[pij_idx]^2 + u[pij_idx+1]^2
+        ji_val = u[pij_idx+2]^2 + u[pij_idx+3]^2
 
         limit = (lines[l].rateA / data.baseMVA)^2
         if limit > 0 && limit < 1e10

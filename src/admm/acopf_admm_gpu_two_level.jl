@@ -4,31 +4,14 @@ function check_generator_bounds(env::AdmmEnv, xbar)
 
     ngen = length(generators)
 
-    if isa(env.device, CUDADevice)
-        pgmin = CuArray{Float64}(undef, ngen)
-        pgmax = CuArray{Float64}(undef, ngen)
-        qgmin = CuArray{Float64}(undef, ngen)
-        qgmax = CuArray{Float64}(undef, ngen)
-    elseif isa(env.device, ROCDevice)
-        pgmin = ROCArray{Float64}(undef, ngen)
-        pgmax = ROCArray{Float64}(undef, ngen)
-        qgmin = ROCArray{Float64}(undef, ngen)
-        qgmax = ROCArray{Float64}(undef, ngen)
-    else
-        pgmin = Array{Float64}(undef, ngen)
-        pgmax = Array{Float64}(undef, ngen)
-        qgmin = Array{Float64}(undef, ngen)
-        qgmax = Array{Float64}(undef, ngen)
-    end
-
     Pmin = Float64[generators[g].Pmin for g in 1:ngen]
     Pmax = Float64[generators[g].Pmax for g in 1:ngen]
     Qmin = Float64[generators[g].Qmin for g in 1:ngen]
     Qmax = Float64[generators[g].Qmax for g in 1:ngen]
-    copyto!(pgmin, Pmin)
-    copyto!(pgmax, Pmax)
-    copyto!(qgmin, Qmin)
-    copyto!(qgmax, Qmax)
+    pgmin = Pmin
+    pgmax = Pmax
+    qgmin = Qmin
+    qgmax = Qmax
 
     max_viol_real = 0.0
     max_viol_reactive = 0.0
@@ -39,8 +22,8 @@ function check_generator_bounds(env::AdmmEnv, xbar)
 
         real_err = 0.0
         reactive_err = 0.0
-        AMDGPU.@allowscalar real_err = max(max(0.0, xbar[pidx] - pgmax[g]), max(0.0, pgmin[g] - xbar[pidx]))
-        AMDGPU.@allowscalar reactive_err = max(max(0.0, xbar[qidx] - qgmax[g]), max(0.0, qgmin[g] - xbar[qidx]))
+        real_err = max(max(0.0, xbar[pidx] - pgmax[g]), max(0.0, pgmin[g] - xbar[pidx]))
+        reactive_err = max(max(0.0, xbar[qidx] - qgmax[g]), max(0.0, qgmin[g] - xbar[qidx]))
 
         max_viol_real = (max_viol_real < real_err) ? real_err : max_viol_real
         max_viol_reactive = (max_viol_reactive < reactive_err) ? reactive_err : max_viol_reactive
@@ -49,62 +32,68 @@ function check_generator_bounds(env::AdmmEnv, xbar)
     return max_viol_real, max_viol_reactive
 end
 
-function check_voltage_bounds(env::AdmmEnv, xbar)
+function check_voltage_bounds(env::AdmmEnv, xbar_)
 
     buses = env.data.buses
     nbus = length(buses)
     bus_start = env.model.bus_start
 
     max_viol = 0.0
+    xbar = xbar_ |> Array
 
     for b=1:nbus
         bidx = bus_start + 2*(b-1)
         err = 0.0
-        AMDGPU.@allowscalar err = max(max(0.0, xbar[bidx] - buses[b].Vmax^2), max(0.0, buses[b].Vmin^2 - xbar[bidx]))
+        err = max(max(0.0, xbar[bidx] - buses[b].Vmax^2), max(0.0, buses[b].Vmin^2 - xbar[bidx]))
         max_viol = (max_viol < err) ? err : max_viol
     end
 
     return max_viol
 end
 
-function check_power_balance_violation(env::AdmmEnv, xbar)
+function check_power_balance_violation(env::AdmmEnv, xbar_)
     data = env.data
     model = env.model
-    gen_start, line_start, bus_start, YshR, YshI = model.gen_mod.gen_start, model.line_start, model.bus_start, model.YshR, model.YshI
+    gen_start, line_start, bus_start, YshR_, YshI_ = model.gen_mod.gen_start, model.line_start, model.bus_start, model.YshR, model.YshI
 
     baseMVA = data.baseMVA
     nbus = length(data.buses)
 
     max_viol_real = 0.0
     max_viol_reactive = 0.0
+    xbar = xbar_ |> Array
+    Pd = env.model.Pd |> Array
+    Qd = env.model.Qd |> Array
+    YshR = YshR_ |> Array
+    YshI = YshI_ |> Array
     for b=1:nbus
         real_err = 0.0
         reactive_err = 0.0
         for g in data.BusGenerators[b]
-            AMDGPU.@allowscalar real_err += xbar[gen_start + 2*(g-1)]
-            AMDGPU.@allowscalar reactive_err += xbar[gen_start + 2*(g-1)+1]
+            real_err += xbar[gen_start + 2*(g-1)]
+            reactive_err += xbar[gen_start + 2*(g-1)+1]
         end
 
         real_err = 0.0
         reactive_err = 0.0
-        AMDGPU.@allowscalar real_err -= (env.model.Pd[b] / baseMVA)
-        AMDGPU.@allowscalar reactive_err -= (env.model.Qd[b] / baseMVA)
+        real_err -= (Pd[b] / baseMVA)
+        reactive_err -= (Qd[b] / baseMVA)
 
         #real_err -= (data.buses[b].Pd / baseMVA)
         #reactive_err -= (data.buses[b].Qd / baseMVA)
 
         for l in data.FromLines[b]
-            AMDGPU.@allowscalar real_err -= xbar[line_start + 4*(l-1)]
-            AMDGPU.@allowscalar reactive_err -= xbar[line_start + 4*(l-1) + 1]
+            real_err -= xbar[line_start + 4*(l-1)]
+            reactive_err -= xbar[line_start + 4*(l-1) + 1]
         end
 
         for l in data.ToLines[b]
-            AMDGPU.@allowscalar real_err -= xbar[line_start + 4*(l-1) + 2]
-            AMDGPU.@allowscalar reactive_err -= xbar[line_start + 4*(l-1) + 3]
+            real_err -= xbar[line_start + 4*(l-1) + 2]
+            reactive_err -= xbar[line_start + 4*(l-1) + 3]
         end
 
-        AMDGPU.@allowscalar real_err -= YshR[b] * xbar[bus_start + 2*(b-1)]
-        AMDGPU.@allowscalar reactive_err += YshI[b] * xbar[bus_start + 2*(b-1)]
+        real_err -= YshR[b] * xbar[bus_start + 2*(b-1)]
+        reactive_err += YshI[b] * xbar[bus_start + 2*(b-1)]
 
         max_viol_real = (max_viol_real < abs(real_err)) ? abs(real_err) : max_viol_real
         max_viol_reactive = (max_viol_reactive < abs(reactive_err)) ? abs(reactive_err) : max_viol_reactive
@@ -174,14 +163,19 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
     rho_v .= rho_pq
     rho_v[bus_start:end] .= rho_va
 
+    # Move to host
+    xbar_curr_h = sol.xbar_curr |> Array
+    u_curr_h = u_curr |> Array
+    v_curr_h = v_curr |> Array
+    wRIij_h = sol.wRIij |> Array
 
     for g=1:ngen
         pg_idx = gen_start + 2*(g-1)
-        AMDGPU.@allowscalar sol.xbar_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
-        AMDGPU.@allowscalar sol.xbar_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
+        xbar_curr_h[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
+        xbar_curr_h[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
     end
 
-    fill!(sol.wRIij, 0.0)
+    fill!(wRIij_h, 0.0)
     for l=1:nline
         fr_idx = BusIdx[lines[l].from]
         to_idx = BusIdx[lines[l].to]
@@ -192,21 +186,26 @@ function init_solution!(env::AdmmEnv, sol::SolutionTwoLevel, ybus::Ybus, rho_pq,
 
         u_pij_idx = line_start + 8*(l-1)
         v_pij_idx = line_start + 4*(l-1)
-        AMDGPU.@allowscalar v_curr[v_pij_idx] = u_curr[u_pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
-        AMDGPU.@allowscalar v_curr[v_pij_idx+1] = u_curr[u_pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
-        AMDGPU.@allowscalar v_curr[v_pij_idx+2] = u_curr[u_pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
-        AMDGPU.@allowscalar v_curr[v_pij_idx+3] = u_curr[u_pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        v_curr_h[v_pij_idx] = u_curr_h[u_pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        v_curr_h[v_pij_idx+1] = u_curr_h[u_pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        v_curr_h[v_pij_idx+2] = u_curr_h[u_pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        v_curr_h[v_pij_idx+3] = u_curr_h[u_pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
 
         rho_u[u_pij_idx+4:u_pij_idx+7] .= rho_va
 
-        AMDGPU.@allowscalar sol.wRIij[2*(l-1)+1] = wR0
-        AMDGPU.@allowscalar sol.wRIij[2*l] = 0.0
+        wRIij_h[2*(l-1)+1] = wR0
+        wRIij_h[2*l] = 0.0
     end
 
     for b=1:nbus
-        AMDGPU.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)] = (buses[b].Vmax^2 + buses[b].Vmin^2) / 2
-        AMDGPU.@allowscalar sol.xbar_curr[bus_start + 2*(b-1)+1] = 0.0
+        xbar_curr_h[bus_start + 2*(b-1)] = (buses[b].Vmax^2 + buses[b].Vmin^2) / 2
+        xbar_curr_h[bus_start + 2*(b-1)+1] = 0.0
     end
+
+    # Move to GPU
+    copyto!(sol.xbar_curr, xbar_curr_h)
+    copyto!(v_curr, v_curr_h)
+    copyto!(sol.wRIij, wRIij_h)
 
     return
 end
@@ -641,7 +640,6 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 
     time_gen = time_br = time_bus = 0
     shift_lines = 0
-    shmem_size = sizeof(Float64)*(14*mod.n+3*mod.n^2) + sizeof(Int)*(4*mod.n)
 
     mismatch = Inf
     z_prev_norm = z_curr_norm = Inf
@@ -656,7 +654,6 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
             z_outer .= z_curr
             z_prev_norm = norm(z_outer)
         else
-            blocks = (div(mod.nvar-1, 64)+1)
             wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, z_outer, z_curr, dependencies=Event(env.device)))
             z_prev_norm = norm(z_curr)
         end
