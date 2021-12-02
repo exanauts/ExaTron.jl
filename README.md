@@ -28,6 +28,53 @@ This package can be installed by cloning this repository:
 This presents the use case of `ExaTron.jl` for solving large-scale alternating current optimal power flow (ACOPF) problem.
 In this pacakge, we also provide the implementation of adaptive ADMM for distributed ACOPF introduced by [Mhanna et al. (2019)](https://doi.org/10.1109/TPWRS.2018.2886344). We have implemented the ADMM algorithm fully on GPUs without data transfer to the CPU, where `ExaTron.jl` is used to solve many small nonlinear nonconvex problems, each of which represents a branch subproblem of the ADMM. See details in the documentation.
 
+We note that the following is for illustration purposes only.
+If you want to run it on a HPC cluster, you may want to follow instructions specific to the HPC software.
+
+### Using a single GPU
+
+```bash
+$ julia --project ./src/admm_standalone.jl ./data/casename pq_val va_val iterlim true
+```
+where `casename` is the filename of a power network, `pq_val` is an initial penalty value
+for power values, `va_val` an initial penalty value for voltage values, `iterlim` the
+maximum iteration limit, and `true|false` specifies whether to use GPU or CPU.
+Power network files are provided in the `data` directory.
+
+The following table shows what values need to be specified for parameters:
+
+| casename | pq_val | va_val | iterlim |
+| -------: | -----: | -----: | ------: |
+| case2868rte | 10.0 | 1000.0 | 6,000 |
+| case6515rte | 20.0 | 2000.0 | 15,000 |
+| case9241pegase | 50.0 | 5000.0 | 35,000 |
+| case13659pegase | 50.0 | 5000.0 | 45,000 |
+| case19402_goc | 500.0 | 50000.0 | 30,000 |
+
+For example, if you want to solve `case19402_goc` using a single GPU, you need to run
+```bash
+$ julia --project ./src/admm_standalone.jl ./data/case19402_goc 500 50000 30000 true
+```
+
+### Using multiple GPUs
+
+If you want to use `N` GPUs, we launch `N` MPI processes and execute `launch_mpi.jl`.
+
+```bash
+$ mpirun -np N julia --project ./src/launch_mpi.jl ./data/casename pq_val va_val iterlim true
+```
+
+We assume that all of the MPI processes can see the `N` number of GPUs. Otherwise, it will generate an error.
+The parameter values are the same as the single GPU case, except that we use the following actual
+iteration limit for each case. If you see the logs, the total number of iterations is the same as single GPU case.
+| casename | iterlim |
+| -------: | ------: |
+| case2868rte | 5648 |
+| case6515rte | 13651 |
+| case9241pegase | 30927 |
+| case13659pegase | 41126 |
+| case19402_goc | 28358 |
+
 ## Citing this package
 
 ```

@@ -66,7 +66,7 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
 
         CUDA.sync_threads()
 
-        status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
+        status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 5*1e-4, scale, true, x, xl, xu,
                                          param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
 
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
@@ -163,7 +163,7 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int, scale::Float64,
 
         nele_hess = 10
         tron = ExaTron.createProblem(4, xl, xu, nele_hess, eval_f_cb, eval_g_cb, eval_h_cb;
-                                     :tol => 1e-6, :matrix_type => :Dense, :max_minor => 200,
+                                     :tol => 5*1e-4, :matrix_type => :Dense, :max_minor => 200,
                                      :frtol => 1e-12)
 
         tron.x .= x
