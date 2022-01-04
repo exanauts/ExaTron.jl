@@ -134,8 +134,8 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
 
     for g=1:ngen
         pg_idx = model.gen_mod.gen_start + 2*(g-1)
-        sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
-        sol.v_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
+        CUDA.@allowscalar sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
+        CUDA.@allowscalar sol.v_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
     end
 
     sol.rho .= rho_pq
@@ -148,10 +148,10 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
         wR0 = sqrt(wij0 * wji0)
 
         pij_idx = model.line_start + 8*(l-1)
-        sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
-        sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
-        sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
-        sol.u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
         #=
         u_curr[pij_idx+4] = wij0
         u_curr[pij_idx+5] = wji0
@@ -161,10 +161,10 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
         # wRIij[2*(l-1)+1] = wR0
         # wRIij[2*l] = 0.0
 
-        sol.v_curr[pij_idx+4] = wij0
-        sol.v_curr[pij_idx+5] = wji0
-        sol.v_curr[pij_idx+6] = 0.0
-        sol.v_curr[pij_idx+7] = 0.0
+        CUDA.@allowscalar sol.v_curr[pij_idx+4] = wij0
+        CUDA.@allowscalar sol.v_curr[pij_idx+5] = wji0
+        CUDA.@allowscalar sol.v_curr[pij_idx+6] = 0.0
+        CUDA.@allowscalar sol.v_curr[pij_idx+7] = 0.0
 
         sol.rho[pij_idx+4:pij_idx+7] .= rho_va
     end
