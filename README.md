@@ -1,5 +1,7 @@
 # ExaTron.jl
 
+ [![][build-release-img]][build-url]
+
 ExaTron.jl implements a trust-region Newton solver for batched nonlinear programming on GPUs.
 Problems in the batch are solved in parallel by employing multiple thread blocks on GPUs.
 Our basic algorithm to solve each problem on GPUs is an extension of the
@@ -80,3 +82,6 @@ $ mpiexec -n num julia --project launch_mpi.jl casename rho_pq rho_va max_iter u
 ## Acknowledgements
 
 This material is based upon work supported by the U.S. Department of Energy, Office of Science, under contract number DE-AC02-06CH11357.
+
+[build-release-img]: https://github.com/exanauts/ExaTron.jl/workflows/Run%20tests/badge.svg?branch=release
+[build-url]: https://github.com/exanauts/ExaTron.jl/actions?query=workflow
