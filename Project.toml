@@ -13,8 +13,10 @@ MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [compat]
+BenchmarkTools = "1.2"
 CUDA = "3.4"
 julia = "1.6"
+MPI = "0.19"
 
 [extras]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
