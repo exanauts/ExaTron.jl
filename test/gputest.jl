@@ -1,3 +1,9 @@
+using CUDA
+using ExaTron
+using LinearAlgebra
+using Random
+using Test
+
 try
     tmp = CuArray{Float64}(undef, 10)
 catch e
@@ -96,6 +102,7 @@ Random.seed!(0)
                             dA::CuDeviceArray{Float64},
                             d_out::CuDeviceArray{Float64})
             tx = threadIdx().x
+            bx = blockIdx().x
 
             wa1 = @cuDynamicSharedMem(Float64, n)
             wa2 = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
@@ -108,8 +115,10 @@ Random.seed!(0)
             CUDA.sync_threads()
 
             ExaTron.dicfs(n, alpha, A, L, wa1, wa2)
-            @inbounds for j=1:n
-                d_out[j,tx] = L[j,tx]
+            if bx == 1
+                @inbounds for j=1:n
+                    d_out[j,tx] = L[j,tx]
+                end
             end
             CUDA.sync_threads()
 
@@ -137,7 +146,7 @@ Random.seed!(0)
             ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
             @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-9
 
             # Make it negative definite.
             for j=1:n

@@ -1,7 +1,7 @@
-
 using CUDA
-using Test
+using ExaTron
 using LinearAlgebra
+using Test
 
 CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
 

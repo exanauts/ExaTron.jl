@@ -267,10 +267,10 @@ function polar_kernel_two_level(
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
         vi_vj_sin = x[1]*x[2]*sin(x[3] - x[4])
 
-        u[pij_idx] = YffR[id_line]*x[1]^2 + YftR[id_line]*vi_vj_cos + YftI[id_line]*vi_vj_sin
-        u[pij_idx+1] = -YffI[id_line]*x[1]^2 - YftI[id_line]*vi_vj_cos + YftR[id_line]*vi_vj_sin
-        u[pij_idx+2] = YttR[id_line]*x[2]^2 + YtfR[id_line]*vi_vj_cos - YtfI[id_line]*vi_vj_sin
-        u[pij_idx+3] = -YttI[id_line]*x[2]^2 - YtfI[id_line]*vi_vj_cos - YtfR[id_line]*vi_vj_sin
+        u[pij_idx] = YffR*x[1]^2 + YftR*vi_vj_cos + YftI*vi_vj_sin
+        u[pij_idx+1] = -YffI*x[1]^2 - YftI*vi_vj_cos + YftR*vi_vj_sin
+        u[pij_idx+2] = YttR*x[2]^2 + YtfR*vi_vj_cos - YtfI*vi_vj_sin
+        u[pij_idx+3] = -YttI*x[2]^2 - YtfI*vi_vj_cos - YtfR*vi_vj_sin
         u[pij_idx+4] = x[1]^2
         u[pij_idx+5] = x[2]^2
         u[pij_idx+6] = x[3]
