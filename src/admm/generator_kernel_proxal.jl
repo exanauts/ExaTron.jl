@@ -312,12 +312,13 @@ end
     J = J_
     I = I_
     tx = J_
-    x = @localmem Float64 (4,)
-    xl = @localmem Float64 (4,)
-    xu = @localmem Float64 (4,)
+    n = Val{2}()
+    x = @localmem Float64 (2,)
+    xl = @localmem Float64 (2,)
+    xu = @localmem Float64 (2,)
 
-    A = @localmem Float64 (4,4)
-    c = @localmem Float64 (4,)
+    A = @localmem Float64 (2,2)
+    c = @localmem Float64 (2,)
 
     if I <= ngen
         n = 2

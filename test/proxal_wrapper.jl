@@ -1,21 +1,21 @@
-
 using CUDA
-using AMDGPU
+# using AMDGPU
 using KernelAbstractions
-using CUDAKernels
-using ROCKernels
 using ExaTron
 using Test
 using LinearAlgebra
+using Test
 
 devices = []
 push!(devices, CPU())
 if has_cuda_gpu()
+    using CUDAKernels
     push!(devices, CUDADevice())
 end
-if AMDGPU.hsa_configured
-    push!(devices, ROCDevice())
-end
+# if AMDGPU.hsa_configured
+#     using ROCKernels
+#     push!(devices, ROCDevice())
+# end
 
 CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
 
@@ -56,7 +56,7 @@ LOADS = Dict(
     pg = ExaTron.active_power_generation(env)
     pg = pg |> Array
     @test sol.status == ExaTron.HAS_CONVERGED
-    @test pg ≈ [0.8965723471282547, 1.3381394570889165, 0.9386855347032877] rtol=1e-4
+    @test pg |> Array ≈ [0.8965723471282547, 1.3381394570889165, 0.9386855347032877] rtol=1e-4
 end
 
 

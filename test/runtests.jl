@@ -4,19 +4,29 @@ using Random
 using LinearAlgebra
 using SparseArrays
 using StatsBase
-using AMDGPU
+# using AMDGPU
 using CUDA
 using KernelAbstractions
 using CUDAKernels
-using ROCKernels
+# using ROCKernels
 const KA = KernelAbstractions
 
-try
-    include("gputest.jl")
-catch e
-    println(e)
+@testset "Test ExaTron" begin
+    if has_cuda_gpu()
+        @testset "gputest" begin
+            include("gputest.jl")
+        end
+    end
+    @testset "qptests" begin
+        include("qptest.jl")
+    end
+    @testset "densetest" begin
+        include("densetest.jl")
+    end
+    @testset "proxal_wrapper" begin
+        include("proxal_wrapper.jl")
+    end
+    @testset "admmtest" begin
+        include("admmtest.jl")
+    end
 end
-
-# include("qptest.jl")
-# include("densetest.jl")
-# include("admmtest.jl")

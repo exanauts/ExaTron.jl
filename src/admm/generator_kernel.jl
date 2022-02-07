@@ -47,17 +47,20 @@ end
 
 function generator_kernel(
     gen_mod::GeneratorModel{CuArray{Float64,1}},
-    baseMVA::Float64, u, v, l, rho
+    baseMVA::Float64, u, v, l, rho,
+    device
 )
-    nblk = div(gen_mod.ngen, 32, RoundUp)
-    tgpu = CUDA.@timed @cuda threads=32 blocks=nblk generator_kernel(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)
-    return tgpu
+    wait(generator_kernel(device, 32, gen_mod.ngen)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
+                u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
+                dependencies=Event(device))
+                )
+    return 0.0
 end
 
 function generator_kernel(
     gen_mod::GeneratorModel{Array{Float64,1}},
-    baseMVA::Float64, u, v, l, rho
+    baseMVA::Float64, u, v, l, rho,
+    device::KA.CPU
 )
     tcpu = @timed generator_kernel(baseMVA, gen_mod.ngen, gen_mod.gen_start,
                 u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1)

@@ -1,7 +1,7 @@
 """
 Driver to run TRON on GPU. This should be called from a kernel.
 """
-@inline function tron_kernel(n::Int, shift::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64, use_polar::Bool,
+@inline function tron_kernel(::Val{n}, shift::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64, use_polar::Bool,
                      x, xl,
                      xu,
                      param,
@@ -10,7 +10,7 @@ Driver to run TRON on GPU. This should be called from a kernel.
                      YttR::Float64, YttI::Float64,
                      YtfR::Float64, YtfI::Float64,
                      I, J
-                     )
+                     ) where {n}
 
     tx = J
     g = @localmem Float64 (4,)
@@ -136,7 +136,8 @@ end
 
 @inline function tron_qp_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64,
     x, xl, xu,
-    A, c, I_, J_)
+    A, c, I_, J_
+    )
 
     tx = J_
     I = I_

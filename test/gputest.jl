@@ -1,3 +1,15 @@
+using CUDA
+using ExaTron
+using LinearAlgebra
+using Random
+using Test
+
+try
+    tmp = CuArray{Float64}(undef, 10)
+catch e
+    throw(e)
+end
+
 """
 Test ExaTron's internal routines written for GPU.
 
@@ -54,15 +66,15 @@ end
 
     @testset "dicf" begin
     println("Testing dicf")
-    @kernel function dicf_test(n::Int, d_in,
-                        d_out)
+    @kernel function dicf_test(::Val{n}, d_in,
+                        d_out) where {n}
         I = @index(Group, Linear)
         J = @index(Local, Linear)
         tx = J
-        ty = 1
+        ty = I
 
-        L = @localmem Float64 (4,4)
-        if tx <= n && ty <= 1
+        L = @localmem Float64 (n,n)
+        if tx <= n && ty == 1
             for i in 1:n
                 L[tx,i] = d_in[tx,i]
             end
@@ -71,7 +83,7 @@ end
 
         # Test Cholesky factorization.
         ExaTron.dicf(n,L,I,J)
-        if ty <= 1 && tx <= n
+        if ty == 1 && tx <= n
             for i in 1:n
                 d_out[tx,i] = L[tx,i]
             end
@@ -89,7 +101,7 @@ end
             d_in = AT{Float64,2}(undef, (n,n))
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_in, tron_A.vals)
-            wait(dicf_test(device)(n, d_in, d_out, ndrange=nblk, dependencies=Event(device)))
+            wait(dicf_test(device, (n,n))(Val{n}(), d_in, d_out, ndrange=(n,n*nblk), dependencies=Event(device)))
             h_L = d_out |> Array
 
             tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
@@ -102,24 +114,24 @@ end
 
             @test norm(tron_A.vals .- tril(h_L)*transpose(tril(h_L))) <= 1e-10
             @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-9
         end
     end
 
     @testset "dicfs" begin
         println("Testing dicfs")
-        @kernel function dicfs_test(n::Int, alpha::Float64,
+        @kernel function dicfs_test(::Val{n}, alpha::Float64,
                             dA,
-                            d_out)
+                            d_out) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            wa1 = @localmem Float64 (4,)
-            wa2 = @localmem Float64 (4,)
-            A = @localmem Float64 (4,4)
-            L = @localmem Float64 (4,4)
+            wa1 = @localmem Float64 (n,)
+            wa2 = @localmem Float64 (n,)
+            A = @localmem Float64 (n,n)
+            L = @localmem Float64 (n,n)
 
             if tx <= n && ty <= 1
                 for i in 1:n
@@ -149,7 +161,7 @@ end
             d_out = AT{Float64,2}(undef, (n,n))
             alpha = 1.0
             copyto!(dA, tron_A.vals)
-            wait(dicfs_test(device)(n,alpha,dA,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dicfs_test(device, (n,n))(Val{n}(),alpha,dA,d_out,ndrange=(n, n*nblk),dependencies=Event(device)))
             h_L = d_out |> Array
             iwa = zeros(Int, 3*n)
             wa1 = zeros(n)
@@ -157,14 +169,14 @@ end
             ExaTron.dicfs(n, n*n, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
             @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-9
 
             # Make it negative definite.
             for j=1:n
                 tron_A.vals[j,j] = -tron_A.vals[j,j]
             end
             copyto!(dA, tron_A.vals)
-            wait(dicfs_test(device)(n,alpha,dA,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dicfs_test(device, (n,n))(Val{n}(),alpha,dA,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_L, d_out)
             ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
@@ -175,7 +187,7 @@ end
 
     @testset "dcauchy" begin
         println("Testing dcauchy")
-        @kernel function dcauchy_test(n::Int,dx,
+        @kernel function dcauchy_test(::Val{n},dx,
                               dl,
                               du,
                               dA,
@@ -183,19 +195,20 @@ end
                               delta::Float64,
                               alpha::Float64,
                               d_out1,
-                              d_out2)
+                              d_out2
+                              ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            g = @localmem Float64 (4,)
-            s = @localmem Float64 (4,)
-            wa = @localmem Float64 (4,)
-            A = @localmem Float64 (4,4)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            g = @localmem Float64 (n,)
+            s = @localmem Float64 (n,)
+            wa = @localmem Float64 (n,)
+            A = @localmem Float64 (n,n)
             if tx <= n && ty == 1
                 for i in 1:n
                     A[tx,i] = dA[tx,i]
@@ -240,7 +253,7 @@ end
             copyto!(du, xu)
             copyto!(dg, g)
             copyto!(dA, A.vals)
-            wait(dcauchy_test(device)(n,dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2,ndrange=nblk,dependencies=Event(device)))
+            wait(dcauchy_test(device, (n,n))(Val{n}(),dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2,ndrange=(n,n*nblk),dependencies=Event(device)))
             h_s = zeros(n)
             h_alpha = zeros(n)
             copyto!(h_s, d_out1)
@@ -255,26 +268,27 @@ end
 
     @testset "dtrpcg" begin
         println("Testing dtrpcg")
-        @kernel function dtrpcg_test(n::Int, delta::Float64, tol::Float64,
+        @kernel function dtrpcg_test(::Val{n}, delta::Float64, tol::Float64,
                              stol::Float64, d_in,
                              d_g,
                              d_out_L,
-                             d_out)
+                             d_out
+                             ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            A = @localmem Float64 (4,4)
-            L = @localmem Float64 (4,4)
+            A = @localmem Float64 (n,n)
+            L = @localmem Float64 (n,n)
 
-            g = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            p = @localmem Float64 (4,)
-            q = @localmem Float64 (4,)
-            r = @localmem Float64 (4,)
-            t = @localmem Float64 (4,)
-            z = @localmem Float64 (4,)
+            g = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            p = @localmem Float64 (n,)
+            q = @localmem Float64 (n,)
+            r = @localmem Float64 (n,)
+            t = @localmem Float64 (n,)
+            z = @localmem Float64 (n,)
             if tx <= n && ty <= 1
                 for i in 1:n
                     A[tx,i] = d_in[tx,i]
@@ -319,7 +333,7 @@ end
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, A)
             copyto!(d_g, g)
-            wait(dtrpcg_test(device)(n,delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dtrpcg_test(device, (n,n))(Val{n}(),delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             h_w = zeros(n)
             h_L = zeros(n,n)
             copyto!(h_L, d_out_L)
@@ -338,27 +352,28 @@ end
 
     @testset "dprsrch" begin
         println("Testing dprsrch")
-        @kernel function dprsrch_test(n::Int,d_x,
+        @kernel function dprsrch_test(::Val{n},d_x,
                               d_xl,
                               d_xu,
                               d_g,
                               d_w,
                               d_A,
                               d_out1,
-                              d_out2)
+                              d_out2
+                              ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            g = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            wa1 = @localmem Float64 (4,)
-            wa2 = @localmem Float64 (4,)
-            A = @localmem Float64 (4,4)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            g = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            wa1 = @localmem Float64 (n,)
+            wa2 = @localmem Float64 (n,)
+            A = @localmem Float64 (n,n)
 
             if tx <= n && ty <= 1
                 for i in 1:n
@@ -408,7 +423,7 @@ end
             copyto!(dg, g)
             copyto!(dw, w)
             copyto!(dA, A.vals)
-            wait(dprsrch_test(device)(n,dx,dl,du,dg,dw,dA,d_out1,d_out2,ndrange=nblk,dependencies=Event(device)))
+            wait(dprsrch_test(device,(n,n))(Val{n}(),dx,dl,du,dg,dw,dA,d_out1,d_out2,ndrange=(n,n*nblk),dependencies=Event(device)))
             h_x = zeros(n)
             h_w = zeros(n)
             copyto!(h_x, d_out1)
@@ -423,15 +438,16 @@ end
 
     @testset "daxpy" begin
         println("Testing daxpy")
-        @kernel function daxpy_test(n::Int, da, d_in,
-                            d_out)
+        @kernel function daxpy_test(::Val{n}, da, d_in,
+                            d_out
+                            ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            y = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            y = @localmem Float64 (n,)
             if ty == 1 && tx <= n
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx + n]
@@ -453,7 +469,7 @@ end
             d_in = AT{Float64}(undef, 2*n)
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, h_in)
-            wait(daxpy_test(device)(n,da,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(daxpy_test(device,(n,n))(Val{n}(),da,d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(h_out .- (h_in[n+1:2*n] .+ da.*h_in[1:n])) <= 1e-12
@@ -462,17 +478,18 @@ end
 
     @testset "dssyax" begin
         println("Testing dssyax")
-        @kernel function dssyax_test(n::Int,d_z,
+        @kernel function dssyax_test(::Val{n},d_z,
                              d_in,
-                             d_out)
+                             d_out
+                             ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            z = @localmem Float64 (4,)
-            q = @localmem Float64 (4,)
-            A = @localmem Float64 (4,4)
+            z = @localmem Float64 (n,)
+            q = @localmem Float64 (n,)
+            A = @localmem Float64 (n,n)
 
             if ty == 1 && tx <= n
                 for i in 1:n
@@ -499,7 +516,7 @@ end
             d_out = AT{Float64}(undef, n)
             copyto!(d_z, z)
             copyto!(d_in, h_in)
-            wait(dssyax_test(device)(n,d_z,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dssyax_test(device,(n,n))(Val{n}(),d_z,d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(h_out .- h_in*z) <= 1e-12
@@ -508,18 +525,19 @@ end
 
     @testset "dmid" begin
         println("Testing dmid")
-        @kernel function dmid_test(n::Int, dx,
+        @kernel function dmid_test(::Val{n}, dx,
                            dl,
                            du,
-                           d_out)
+                           d_out
+                           ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
             if ty == 1 && tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -558,7 +576,7 @@ end
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
-            wait(dmid_test(device)(n,dx,dl,du,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dmid_test(device,(n,n))(Val{n}(),dx,dl,du,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(x_out, d_out)
 
             ExaTron.dmid(n, x, xl, xu)
@@ -568,22 +586,23 @@ end
 
     @testset "dgpstep" begin
         println("Testing dgpstep")
-        @kernel function dgpstep_test(n,dx,
+        @kernel function dgpstep_test(::Val{n},dx,
                               dl,
                               du,
                               alpha::Float64,
                               dw,
-                              d_out)
+                              d_out
+                              ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            s = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            s = @localmem Float64 (n,)
             if ty == 1 && tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -633,7 +652,7 @@ end
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dw, w)
-            wait(dgpstep_test(device)(n,dx,dl,du,alpha,dw,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dgpstep_test(device,(n,n))(Val{n}(),dx,dl,du,alpha,dw,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(s_out, d_out)
 
             ExaTron.dgpstep(n, x, xl, xu, alpha, w, s)
@@ -643,22 +662,23 @@ end
 
     @testset "dbreakpt" begin
         println("Testing dbreakpt")
-        @kernel function dbreakpt_test(n,dx,
+        @kernel function dbreakpt_test(::Val{n},dx,
                                dl,
                                du,
                                dw,
                                d_nbrpt,
                                d_brptmin,
-                               d_brptmax)
+                               d_brptmax
+                               ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
             if ty == 1 && tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -699,7 +719,7 @@ end
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dw, w)
-            wait(dbreakpt_test(device)(n,dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax,ndrange=nblk,dependencies=Event(device)))
+            wait(dbreakpt_test(device,(n,n))(Val{n}(),dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_nbrpt, d_nbrpt)
             copyto!(h_brptmin, d_brptmin)
             copyto!(h_brptmax, d_brptmax)
@@ -713,14 +733,15 @@ end
 
     @testset "dnrm2" begin
         println("Testing dnrm2")
-        @kernel function dnrm2_test(n::Int, d_in,
-                            d_out)
+        @kernel function dnrm2_test(::Val{n}, d_in,
+                            d_out
+                            ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
             if tx <= n && ty <= 1
                 x[tx] = d_in[tx]
             end
@@ -742,7 +763,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_in, h_in)
-            wait(dnrm2_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dnrm2_test(device,(n,n))(Val{n}(),d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
             xnorm = norm(h_in, 2)
 
@@ -752,14 +773,14 @@ end
 
     @testset "nrm2" begin
         println("Testing nrm2")
-        @kernel function nrm2_test(n::Int, d_A, d_out)
+        @kernel function nrm2_test(::Val{n}, d_A, d_out) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            wa = @localmem Float64 (4,)
-            A = @localmem Float64 (4,4)
+            wa = @localmem Float64 (n,)
+            A = @localmem Float64 (n,n)
             if tx <= n
                 for i in 1:n
                     A[tx,i] = d_A[tx,i]
@@ -787,7 +808,7 @@ end
             d_out = AT{Float64}(undef, n)
             h_wa = zeros(n)
             copyto!(d_A, A)
-            wait(nrm2_test(device)(n,d_A,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(nrm2_test(device,(n,n))(Val{n}(),d_A,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_wa, d_out)
 
             @test norm(wa .- h_wa) <= 1e-10
@@ -796,15 +817,16 @@ end
 
     @testset "dcopy" begin
         println("Testing dcopy")
-        @kernel function dcopy_test(n::Int, d_in,
-                            d_out)
+        @kernel function dcopy_test(::Val{n}, d_in,
+                            d_out
+                            ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            y = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            y = @localmem Float64 (n,)
 
             if tx <= n && ty <= 1
                 x[tx] = d_in[tx]
@@ -826,7 +848,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, h_in)
-            wait(dcopy_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dcopy_test(device,(n,n))(Val{n}(),d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test !(false in (h_in .== h_out))
@@ -835,12 +857,13 @@ end
 
     @testset "ddot" begin
         println("Testing ddot")
-        @kernel function ddot_test(n::Int, d_in,
-                           d_out)
+        @kernel function ddot_test(::Val{n}, d_in,
+                           d_out
+                           ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
             x = @localmem Float64 (4,)
             y = @localmem Float64 (4,)
@@ -867,7 +890,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_in, h_in)
-            wait(ddot_test(device)(n,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(ddot_test(device, (n,n))(Val{n}(),d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(dot(h_in,h_in) .- h_out, 2) <= 1e-10
@@ -876,15 +899,16 @@ end
 
     @testset "dscal" begin
         println("Testing dscal")
-        @kernel function dscal_test(n::Int, da::Float64,
+        @kernel function dscal_test(::Val{n}, da::Float64,
                             d_in,
-                            d_out)
+                            d_out
+                            ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
             if tx <= n && ty <= 1
                 x[tx] = d_in[tx]
             end
@@ -905,7 +929,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, h_in)
-            wait(dscal_test(device)(n,da,d_in,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dscal_test(device, (n,n))(Val{n}(),da,d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(h_out .- (da.*h_in)) <= 1e-12
@@ -914,17 +938,18 @@ end
 
     @testset "dtrqsol" begin
         println("Testing dtrqsol")
-        @kernel function dtrqsol_test(n::Int, d_x,
+        @kernel function dtrqsol_test(::Val{n}, d_x,
                               d_p,
                               d_out,
-                              delta::Float64)
+                              delta::Float64
+                              ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            p = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            p = @localmem Float64 (n,)
 
             if tx <= n && ty <= 1
                 x[tx] = d_x[tx]
@@ -952,7 +977,7 @@ end
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_x, x)
             copyto!(d_p, p)
-            wait(dtrqsol_test(device)(n,d_x,d_p,d_out,delta,ndrange=nblk,dependencies=Event(device)))
+            wait(dtrqsol_test(device, (n,n))(Val{n}(),d_x,d_p,d_out,delta,ndrange=(n, n*nblk),dependencies=Event(device)))
 
             d_out = d_out |> Array
             @test norm(sigma .- d_out) <= 1e-10
@@ -961,37 +986,38 @@ end
 
     @testset "dspcg" begin
         println("Testing dspcg")
-        @kernel function dspcg_test(n::Int, delta::Float64, rtol::Float64,
+        @kernel function dspcg_test(::Val{n}, delta::Float64, rtol::Float64,
                             cg_itermax::Int, dx,
                             dxl,
                             dxu,
                             dA,
                             dg,
                             ds,
-                            d_out)
+                            d_out
+                            ) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            g = @localmem Float64 (4,)
-            s = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            wa1 = @localmem Float64 (4,)
-            wa2 = @localmem Float64 (4,)
-            wa3 = @localmem Float64 (4,)
-            wa4 = @localmem Float64 (4,)
-            wa5 = @localmem Float64 (4,)
-            gfree = @localmem Float64 (4,)
-            indfree = @localmem Int (4,)
-            iwa = @localmem Int (4,)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            g = @localmem Float64 (n,)
+            s = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            wa1 = @localmem Float64 (n,)
+            wa2 = @localmem Float64 (n,)
+            wa3 = @localmem Float64 (n,)
+            wa4 = @localmem Float64 (n,)
+            wa5 = @localmem Float64 (n,)
+            gfree = @localmem Float64 (n,)
+            indfree = @localmem Int (n,)
+            iwa = @localmem Int (n,)
 
-            A = @localmem Float64 (4,4)
-            B = @localmem Float64 (4,4)
-            L = @localmem Float64 (4,4)
+            A = @localmem Float64 (n,n)
+            B = @localmem Float64 (n,n)
+            L = @localmem Float64 (n,n)
 
             if ty <= 1 && tx <= n
                 for i in 1:n
@@ -1016,7 +1042,7 @@ end
 
         end
 
-        for i=1:iterdebug
+        for i=1:itermax
             L = tril(rand(n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
@@ -1053,7 +1079,7 @@ end
             copyto!(dg, g)
             copyto!(ds, s)
 
-            wait(dspcg_test(device)(n,delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dspcg_test(device, (n,n))(Val{n}(),delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             h_x = zeros(n)
             copyto!(h_x, d_out)
 
@@ -1066,16 +1092,16 @@ end
 
     @testset "dgpnorm" begin
         println("Testing dgpnorm")
-        @kernel function dgpnorm_test(n, dx, dxl, dxu, dg, d_out)
+        @kernel function dgpnorm_test(::Val{n}, dx, dxl, dxu, dg, d_out) where {n}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            g = @localmem Float64 (4,)
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            g = @localmem Float64 (n,)
 
             if ty <= 1 && tx <= n
                 x[tx] = dx[tx]
@@ -1110,7 +1136,7 @@ end
             copyto!(dxu, xu)
             copyto!(dg, g)
 
-            wait(dgpnorm_test(device)(n, dx, dxl, dxu, dg, d_out, ndrange=nblk, dependencies=Event(device)))
+            wait(dgpnorm_test(device, (n,n))(Val{n}(), dx, dxl, dxu, dg, d_out, ndrange=(n,n*nblk), dependencies=Event(device)))
             h_v = zeros(n)
             copyto!(h_v, d_out)
 
@@ -1121,39 +1147,40 @@ end
 
     @testset "dtron" begin
         println("Testing dtron")
-        @kernel function dtron_test(n::Int, f::Float64, frtol::Float64, fatol::Float64, fmin::Float64,
+        @kernel function dtron_test(n::Val{N}, f::Float64, frtol::Float64, fatol::Float64, fmin::Float64,
                             cgtol::Float64, cg_itermax::Int, delta::Float64, task::Int,
                             disave, ddsave,
                             dx, dxl,
                             dxu, dA,
-                            dg, d_out)
+                            dg, d_out
+                            ) where {N}
             I = @index(Group, Linear)
             J = @index(Local, Linear)
             tx = J
-            ty = 1
+            ty = I
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            g = @localmem Float64 (4,)
-            xc = @localmem Float64 (4,)
-            s = @localmem Float64 (4,)
-            wa = @localmem Float64 (4,)
-            wa1 = @localmem Float64 (4,)
-            wa2 = @localmem Float64 (4,)
-            wa3 = @localmem Float64 (4,)
-            wa4 = @localmem Float64 (4,)
-            wa5 = @localmem Float64 (4,)
-            gfree = @localmem Float64 (4,)
-            indfree = @localmem Int (4,)
-            iwa = @localmem Int (4,)
+            x = @localmem Float64 (N,)
+            xl = @localmem Float64 (N,)
+            xu = @localmem Float64 (N,)
+            g = @localmem Float64 (N,)
+            xc = @localmem Float64 (N,)
+            s = @localmem Float64 (N,)
+            wa = @localmem Float64 (N,)
+            wa1 = @localmem Float64 (N,)
+            wa2 = @localmem Float64 (N,)
+            wa3 = @localmem Float64 (N,)
+            wa4 = @localmem Float64 (N,)
+            wa5 = @localmem Float64 (N,)
+            gfree = @localmem Float64 (N,)
+            indfree = @localmem Int (N,)
+            iwa = @localmem Int (N,)
 
-            A = @localmem Float64 (4,4)
-            B = @localmem Float64 (4,4)
-            L = @localmem Float64 (4,4)
+            A = @localmem Float64 (N,N)
+            B = @localmem Float64 (N,N)
+            L = @localmem Float64 (N,N)
 
-            if ty <= 1 && tx <= n
-                for i in 1:n
+            if tx <= N
+                for i in 1:N
                     A[i,tx] = dA[i,tx]
                 end
                 x[tx] = dx[tx]
@@ -1163,10 +1190,10 @@ end
             end
             @synchronize
 
-            ExaTron.dtron(n, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
+            ExaTron.dtron(N, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
                           cg_itermax, delta, task, B, L, xc, s, indfree, gfree,
                           disave, ddsave, wa, iwa, wa1, wa2, wa3, wa4, wa5, I, J)
-            if ty <= 1 && tx <= n
+            if ty <= 1 && tx <= N
                 d_out[tx] = x[tx]
             end
             @synchronize
@@ -1219,7 +1246,7 @@ end
             copyto!(dA, tron_A.vals)
             copyto!(dg, g)
 
-            wait(dtron_test(device)(n,f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out,ndrange=nblk,dependencies=Event(device)))
+            wait(dtron_test(device,(n,n))(Val{n}(),f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
             h_x = zeros(n)
             copyto!(h_x, d_out)
 

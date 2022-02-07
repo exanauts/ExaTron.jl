@@ -1,23 +1,25 @@
-function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
-                     u_curr::CuDeviceArray{Float64,1}, v_curr::CuDeviceArray{Float64,1},
-                     l_curr::CuDeviceArray{Float64,1}, rho::CuDeviceArray{Float64,1},
-                     shift_lines::Int, param::CuDeviceArray{Float64,2},
-                     _YffR::CuDeviceArray{Float64,1}, _YffI::CuDeviceArray{Float64,1},
-                     _YftR::CuDeviceArray{Float64,1}, _YftI::CuDeviceArray{Float64,1},
-                     _YttR::CuDeviceArray{Float64,1}, _YttI::CuDeviceArray{Float64,1},
-                     _YtfR::CuDeviceArray{Float64,1}, _YtfI::CuDeviceArray{Float64,1},
-                     frBound::CuDeviceArray{Float64,1}, toBound::CuDeviceArray{Float64,1})
+@kernel function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
+                     u_curr, v_curr,
+                     l_curr, rho,
+                     shift_lines::Int, param,
+                     _YffR, _YffI,
+                     _YftR, _YftI,
+                     _YttR, _YttI,
+                     _YtfR, _YtfI,
+                     frBound, toBound)
 
-    tx = threadIdx().x
-    ty = threadIdx().y
-    I = blockIdx().x
-    id_line = I + shift_lines
+    I = @index(Group, Linear)
+    J = @index(Local, Linear)
+    tx = J
+    ty = I
 
-    x = @cuDynamicSharedMem(Float64, n)
-    xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-    xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+    x = @localmem Float64 (n, )
+    xl = @localmem Float64 (n, )
+    xu = @localmem Float64 (n, )
 
     @inbounds begin
+        id_line = I + shift_lines
+
         YffR = _YffR[id_line]; YffI = _YffI[id_line]
         YftR = _YftR[id_line]; YftI = _YftI[id_line]
         YttR = _YttR[id_line]; YttI = _YttI[id_line]
@@ -64,10 +66,22 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
         param[23,id_line] = v_curr[pij_idx+6]
         param[24,id_line] = v_curr[pij_idx+7]
 
-        CUDA.sync_threads()
+        @synchronize
+
+        # recompute indices
+        id_line = I + shift_lines
+        YffR = _YffR[id_line]; YffI = _YffI[id_line]
+        YftR = _YftR[id_line]; YftI = _YftI[id_line]
+        YttR = _YttR[id_line]; YttI = _YttI[id_line]
+        YtfR = _YtfR[id_line]; YtfI = _YtfI[id_line]
 
         status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
-                                         param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI)
+                                         param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
+                                         I,J)
+
+        # recompute indices
+        id_line = I + shift_lines
+        pij_idx = line_start + 8*(I-1)
 
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
         vi_vj_sin = x[1]*x[2]*sin(x[3] - x[4])
@@ -81,8 +95,6 @@ function polar_kernel(n::Int, nlines::Int, line_start::Int, scale::Float64,
         u_curr[pij_idx+6] = x[3]
         u_curr[pij_idx+7] = x[4]
     end
-
-    return
 end
 
 function polar_kernel_cpu(n::Int, nline::Int, line_start::Int, scale::Float64,
@@ -189,8 +201,7 @@ function polar_kernel_cpu(n::Int, nline::Int, line_start::Int, scale::Float64,
     return 0, avg_minor_it / nline
 end
 
-@kernel function polar_kernel_two_level(
-    @Const(n::Int), nline::Int, line_start::Int, bus_start::Int, scale::Float64,
+@kernel function polar_kernel_two_level(N::Val{n}, nline::Int, line_start::Int, bus_start::Int, scale::Float64,
     u, xbar,
     z, l, rho,
     shift_lines::Int, param,
@@ -200,7 +211,7 @@ end
     _YtfR, _YtfI,
     frBound, toBound,
     brBusIdx
-)
+) where {n}
     I = @index(Group, Linear)
     J = @index(Local, Linear)
 
@@ -264,7 +275,7 @@ end
         YttR = _YttR[id_line]; YttI = _YttI[id_line]
         YtfR = _YtfR[id_line]; YtfI = _YtfI[id_line]
 
-        status, minor_iter = tron_kernel(n, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
+        status, minor_iter = tron_kernel(N, shift_lines, 500, 200, 1e-6, scale, true, x, xl, xu,
                                          param, YffR, YffI, YftR, YftI, YttR, YttI, YtfR, YtfI,
                                          I, J)
 
@@ -275,10 +286,10 @@ end
         vi_vj_cos = x[1]*x[2]*cos(x[3] - x[4])
         vi_vj_sin = x[1]*x[2]*sin(x[3] - x[4])
 
-        u[pij_idx] = YffR[id_line]*x[1]^2 + YftR[id_line]*vi_vj_cos + YftI[id_line]*vi_vj_sin
-        u[pij_idx+1] = -YffI[id_line]*x[1]^2 - YftI[id_line]*vi_vj_cos + YftR[id_line]*vi_vj_sin
-        u[pij_idx+2] = YttR[id_line]*x[2]^2 + YtfR[id_line]*vi_vj_cos - YtfI[id_line]*vi_vj_sin
-        u[pij_idx+3] = -YttI[id_line]*x[2]^2 - YtfI[id_line]*vi_vj_cos - YtfR[id_line]*vi_vj_sin
+        u[pij_idx] = YffR*x[1]^2 + YftR*vi_vj_cos + YftI*vi_vj_sin
+        u[pij_idx+1] = -YffI*x[1]^2 - YftI*vi_vj_cos + YftR*vi_vj_sin
+        u[pij_idx+2] = YttR*x[2]^2 + YtfR*vi_vj_cos - YtfI*vi_vj_sin
+        u[pij_idx+3] = -YttI*x[2]^2 - YtfI*vi_vj_cos - YtfR*vi_vj_sin
         u[pij_idx+4] = x[1]^2
         u[pij_idx+5] = x[2]^2
         u[pij_idx+6] = x[3]

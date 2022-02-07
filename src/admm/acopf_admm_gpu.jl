@@ -176,8 +176,8 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
 
     for g=1:ngen
         pg_idx = model.gen_mod.gen_start + 2*(g-1)
-        sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
-        sol.v_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
+        CUDA.@allowscalar sol.v_curr[pg_idx] = 0.5*(data.generators[g].Pmin + data.generators[g].Pmax)
+        CUDA.@allowscalar sol.v_curr[pg_idx+1] = 0.5*(data.generators[g].Qmin + data.generators[g].Qmax)
     end
 
     sol.rho .= rho_pq
@@ -190,10 +190,10 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
         wR0 = sqrt(wij0 * wji0)
 
         pij_idx = model.line_start + 8*(l-1)
-        sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
-        sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
-        sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
-        sol.u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx] = YffR[l] * wij0 + YftR[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx+1] = -YffI[l] * wij0 - YftI[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx+2] = YttR[l] * wji0 + YtfR[l] * wR0
+        CUDA.@allowscalar sol.u_curr[pij_idx+3] = -YttI[l] * wji0 - YtfI[l] * wR0
         #=
         u_curr[pij_idx+4] = wij0
         u_curr[pij_idx+5] = wji0
@@ -203,10 +203,10 @@ function init_solution!(env::AdmmEnv, sol::SolutionOneLevel, ybus::Ybus, rho_pq,
         # wRIij[2*(l-1)+1] = wR0
         # wRIij[2*l] = 0.0
 
-        sol.v_curr[pij_idx+4] = wij0
-        sol.v_curr[pij_idx+5] = wji0
-        sol.v_curr[pij_idx+6] = 0.0
-        sol.v_curr[pij_idx+7] = 0.0
+        CUDA.@allowscalar sol.v_curr[pij_idx+4] = wij0
+        CUDA.@allowscalar sol.v_curr[pij_idx+5] = wji0
+        CUDA.@allowscalar sol.v_curr[pij_idx+6] = 0.0
+        CUDA.@allowscalar sol.v_curr[pij_idx+7] = 0.0
 
         sol.rho[pij_idx+4:pij_idx+7] .= rho_va
     end
@@ -310,9 +310,6 @@ This function restarts the ADMM with a given `env::AdmmEnv` containing solutions
 admm_restart!(env::AdmmEnv; options...) = admm_solve!(env, env.solution; options...)
 
 function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-4)
-    if env.use_gpu
-        CUDA.device!(env.gpu_no)
-    end
 
     data, par, mod = env.data, env.params, env.model
 
@@ -329,13 +326,12 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
     @time begin
     while it < iterlim
         it += 1
-
-        if !env.use_gpu
+        if env.device == KA.CPU()
             sol.u_prev .= sol.u_curr
             sol.v_prev .= sol.v_curr
             sol.l_prev .= sol.l_curr
 
-            tcpu = generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho)
+            tcpu = generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho, env.device)
             time_gen += tcpu.time
 
             if env.use_polar
@@ -374,42 +370,47 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
                 break
             end
         else
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, sol.u_prev, sol.u_curr)
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, sol.v_prev, sol.v_curr)
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) copy_data_kernel(mod.nvar, sol.l_prev, sol.l_curr)
-            CUDA.synchronize()
+            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.u_prev, sol.u_curr, dependencies=Event(env.device)))
+            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.v_prev, sol.v_curr, dependencies=Event(env.device)))
+            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.l_prev, sol.l_curr, dependencies=Event(env.device)))
 
-            tgpu = generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho)
+            tgpu = generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho, env.device)
 
             time_gen += tgpu.time
             if env.use_polar
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size polar_kernel(mod.n, mod.nline, mod.line_start, scale,
+                ev = polar_kernel(env.device, 32, mod.nline*32)(mod.n, mod.nline, mod.line_start, scale,
                                                                                                  sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
                                                                                                  shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                                                 mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                                                                                                 mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound,
+                                                                                                 dependencies=Event(env.device)
+                                                                                                 )
+                wait(ev)
             else
-                tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, it, par.max_auglag, mod.line_start, scale, par.mu_max,
-                                                                                                  sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                                                                  shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                                                                  mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                # tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_br shmem=shmem_size auglag_kernel(mod.n, it, par.max_auglag, mod.line_start, scale, par.mu_max,
+                #                                                                                   sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
+                #                                                                                   shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                #                                                                                   mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound)
+                error("Not implemented")
             end
             time_br += tgpu.time
-            tgpu = CUDA.@timed @cuda threads=32 blocks=nblk_bus bus_kernel(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start,
+            wait(bus_kernel(env.device, 32, mod.nbus)(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start,
                                                                            mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart,
                                                                            mod.GenIdx, mod.Pd, mod.Qd, sol.u_curr, sol.v_curr, sol.l_curr,
-                                                                           sol.rho, mod.YshR, mod.YshI)
+                                                                           sol.rho, mod.YshR, mod.YshI,
+                                                                           dependencies=Event(env.device)
+                                                                           )
+            )
             time_bus += tgpu.time
 
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) update_multiplier_kernel(mod.nvar, sol.l_curr, sol.u_curr, sol.v_curr, sol.rho)
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) primal_residual_kernel(mod.nvar, sol.rp, sol.u_curr, sol.v_curr)
-            @cuda threads=64 blocks=(div(mod.nvar-1, 64)+1) dual_residual_kernel(mod.nvar, sol.rd, sol.v_prev, sol.v_curr, sol.rho)
-            CUDA.synchronize()
+            wait(update_multiplier_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.l_curr, sol.u_curr, sol.v_curr, sol.rho, dependencies=Event(env.device)))
+            wait(primal_residual_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.rp, sol.u_curr, sol.v_curr, dependencies=Event(env.device)))
+            wait(dual_residual_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.rd, sol.v_prev, sol.v_curr, sol.rho, dependencies=Event(env.device)))
 
-            gpu_primres = CUDA.norm(sol.rp)
-            gpu_dualres = CUDA.norm(sol.rd)
+            gpu_primres = norm(sol.rp)
+            gpu_dualres = norm(sol.rd)
 
-            gpu_eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(CUDA.norm(sol.u_curr), CUDA.norm(sol.v_curr))
-            gpu_eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*CUDA.norm(sol.l_curr)
+            gpu_eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(norm(sol.u_curr), norm(sol.v_curr))
+            gpu_eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*norm(sol.l_curr)
 
             (par.verbose > 0) && @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
 
@@ -453,9 +454,9 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
     return
 end
 
-function admm_rect_gpu(case::String; iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-                       use_gpu=false, use_polar=true, gpu_no=0, verbose=1)
-    env = AdmmEnv(case, use_gpu, rho_pq, rho_va; use_polar=use_polar, gpu_no=gpu_no, verbose=verbose,)
+function admm_rect_gpu(case::String; device::KA.Device=KA.CPU(), iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
+                       use_polar=true, verbose=1)
+    env = AdmmEnv(case, device, rho_pq, rho_va; use_polar=use_polar, verbose=verbose,)
     admm_restart!(env, iterlim=iterlim, scale=scale)
     return env
 end

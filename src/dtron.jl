@@ -233,7 +233,8 @@ end
                wa1, wa2,
                wa3, wa4,
                wa5,
-               I, J)
+               I, J
+               )
     zero = 0.0
     p5 = 0.5
     one = 1.0

@@ -746,7 +746,7 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 
                 # time_gen += tgpu.time
                 if env.use_polar
-                    ev = polar_kernel_two_level(env.device, 32, mod.nline*32)(mod.n, mod.nline, mod.line_start, mod.bus_start, scale,
+                    ev = polar_kernel_two_level(env.device, 32, mod.nline*32)(Val{mod.n}(), mod.nline, mod.line_start, mod.bus_start, scale,
                                                               u_curr, xbar_curr, zu_curr, lu_curr, rho_u,
                                                               shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
                                                               mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound, mod.brBusIdx,
@@ -923,15 +923,15 @@ function admm_solve!(env::AdmmEnv, sol::SolutionTwoLevel; outer_iterlim=10, inne
 end
 
 function admm_rect_gpu_two_level(
-    case::String;
+    case::String; device::KA.Device=KA.CPU(),
     outer_iterlim=10, inner_iterlim=800, rho_pq=400.0, rho_va=40000.0, scale=1e-4,
-    use_gpu=false, use_polar=true, allow_infeas=false, rho_sigma=1e8,
-    gpu_no=0, verbose=1, outer_eps=2e-4
+    use_polar=true, allow_infeas=false, rho_sigma=1e8,
+    verbose=1, outer_eps=2e-4
 )
     env = AdmmEnv(
-        case, use_gpu, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true,
+        case, device, rho_pq, rho_va; use_polar=use_polar, use_twolevel=true,
         allow_infeas=allow_infeas, rho_sigma=rho_sigma,
-        gpu_no=gpu_no, verbose=verbose,
+        verbose=verbose,
     )
     admm_restart!(env, outer_iterlim=outer_iterlim, inner_iterlim=inner_iterlim, scale=scale)
     return env
