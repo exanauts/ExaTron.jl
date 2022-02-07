@@ -190,14 +190,14 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            g = @localmem Float64 (4,)
-            s = @localmem Float64 (4,)
-            wa = @localmem Float64 (4,)
-            A = @localmem Float64 (4,4)
-            if tx <= n && ty == 1
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            g = @localmem Float64 (n,)
+            s = @localmem Float64 (n,)
+            wa = @localmem Float64 (n,)
+            A = @localmem Float64 (n,n)
+            if tx <= n
                 for i in 1:n
                     A[tx,i] = dA[tx,i]
                 end
@@ -269,14 +269,14 @@ end
             A = @localmem Float64 (4,4)
             L = @localmem Float64 (4,4)
 
-            g = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            p = @localmem Float64 (4,)
-            q = @localmem Float64 (4,)
-            r = @localmem Float64 (4,)
-            t = @localmem Float64 (4,)
-            z = @localmem Float64 (4,)
-            if tx <= n && ty <= 1
+            g = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            p = @localmem Float64 (n,)
+            q = @localmem Float64 (n,)
+            r = @localmem Float64 (n,)
+            t = @localmem Float64 (n,)
+            z = @localmem Float64 (n,)
+            if tx <= n
                 for i in 1:n
                     A[tx,i] = d_in[tx,i]
                     L[tx,i] = d_in[tx,i]
@@ -361,7 +361,7 @@ end
             wa2 = @localmem Float64 (4,)
             A = @localmem Float64 (4,4)
 
-            if tx <= n && ty <= 1
+            if tx <= n
                 for i in 1:n
                     A[tx,i] = d_A[tx,i]
                 end
@@ -431,9 +431,9 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            y = @localmem Float64 (4,)
-            if ty == 1 && tx <= n
+            x = @localmem Float64 (n,)
+            y = @localmem Float64 (n,)
+            if tx <= n
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx + n]
             end
@@ -475,7 +475,7 @@ end
             q = @localmem Float64 (4,)
             A = @localmem Float64 (4,4)
 
-            if ty == 1 && tx <= n
+            if tx <= n
                 for i in 1:n
                     A[tx,i] = d_in[tx,i]
                 end
@@ -518,10 +518,10 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            if ty == 1 && tx <= n
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            if tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
                 xu[tx] = du[tx]
@@ -580,12 +580,12 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            s = @localmem Float64 (4,)
-            if ty == 1 && tx <= n
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            s = @localmem Float64 (n,)
+            if tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
                 xu[tx] = du[tx]
@@ -656,11 +656,11 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            xl = @localmem Float64 (4,)
-            xu = @localmem Float64 (4,)
-            w = @localmem Float64 (4,)
-            if ty == 1 && tx <= n
+            x = @localmem Float64 (n,)
+            xl = @localmem Float64 (n,)
+            xu = @localmem Float64 (n,)
+            w = @localmem Float64 (n,)
+            if tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
                 xu[tx] = du[tx]
@@ -721,8 +721,8 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            if tx <= n && ty <= 1
+            x = @localmem Float64 (n,)
+            if tx <= n
                 x[tx] = d_in[tx]
             end
             @synchronize
@@ -807,7 +807,7 @@ end
             x = @localmem Float64 (4,)
             y = @localmem Float64 (4,)
 
-            if tx <= n && ty <= 1
+            if tx <= n
                 x[tx] = d_in[tx]
             end
             @synchronize
@@ -845,7 +845,7 @@ end
 
             x = @localmem Float64 (4,)
             y = @localmem Float64 (4,)
-            if tx <= n && ty <= 1
+            if tx <= n
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx]
             end
@@ -885,8 +885,8 @@ end
             tx = J
             ty = 1
 
-            x = @localmem Float64 (4,)
-            if tx <= n && ty <= 1
+            x = @localmem Float64 (n,)
+            if tx <= n
                 x[tx] = d_in[tx]
             end
             @synchronize
@@ -927,7 +927,7 @@ end
             x = @localmem Float64 (4,)
             p = @localmem Float64 (4,)
 
-            if tx <= n && ty <= 1
+            if tx <= n
                 x[tx] = d_x[tx]
                 p[tx] = d_p[tx]
             end
@@ -994,7 +994,7 @@ end
             B = @localmem Float64 (4,4)
             L = @localmem Float64 (4,4)
 
-            if ty <= 1 && tx <= n
+            if tx <= n
                 for i in 1:n
                     A[i,tx] = dA[i,tx]
                 end
@@ -1078,7 +1078,7 @@ end
             xu = @localmem Float64 (4,)
             g = @localmem Float64 (4,)
 
-            if ty <= 1 && tx <= n
+            if tx <= n
                 x[tx] = dx[tx]
                 xl[tx] = dxl[tx]
                 xu[tx] = dxu[tx]
