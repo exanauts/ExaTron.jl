@@ -1,14 +1,10 @@
+using AMDGPU
 using CUDA
 using ExaTron
+using KernelAbstractions
 using LinearAlgebra
 using Random
 using Test
-
-try
-    tmp = CuArray{Float64}(undef, 10)
-catch e
-    throw(e)
-end
 
 """
 Test ExaTron's internal routines written for GPU.
@@ -48,9 +44,11 @@ is checked if n < blockDim().x is OK.
 Random.seed!(0)
 
 if has_cuda_gpu()
+    using CUDAKernels
     device = CUDADevice()
     AT = CuArray
-elseif AMDGPU.hsa_configured
+elseif has_rocm_gpu()
+    using ROCKernels
     device = ROCDevice()
     AT = ROCArray
 else
@@ -58,11 +56,12 @@ else
     error("CPU KA implementation is currently broken for nested functions")
 end
 
-@testset "GPU" begin
+@testset "GPU tests on $device" begin
     itermax = 100
     iterdebug = 100
+    iterdebug2 = 100
     n = 4
-    nblk = 4
+    nblk = 1
 
     @testset "dicf" begin
     println("Testing dicf")
@@ -101,7 +100,7 @@ end
             d_in = AT{Float64,2}(undef, (n,n))
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_in, tron_A.vals)
-            wait(dicf_test(device, (n,n))(Val{n}(), d_in, d_out, ndrange=(n,n*nblk), dependencies=Event(device)))
+            wait(dicf_test(device, n)(Val{n}(), d_in, d_out, ndrange=(n,nblk), dependencies=Event(device)))
             h_L = d_out |> Array
 
             tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
@@ -161,7 +160,7 @@ end
             d_out = AT{Float64,2}(undef, (n,n))
             alpha = 1.0
             copyto!(dA, tron_A.vals)
-            wait(dicfs_test(device, (n,n))(Val{n}(),alpha,dA,d_out,ndrange=(n, n*nblk),dependencies=Event(device)))
+            wait(dicfs_test(device, n)(Val{n}(),alpha,dA,d_out,ndrange=(n, nblk),dependencies=Event(device)))
             h_L = d_out |> Array
             iwa = zeros(Int, 3*n)
             wa1 = zeros(n)
@@ -176,7 +175,7 @@ end
                 tron_A.vals[j,j] = -tron_A.vals[j,j]
             end
             copyto!(dA, tron_A.vals)
-            wait(dicfs_test(device, (n,n))(Val{n}(),alpha,dA,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dicfs_test(device, n)(Val{n}(),alpha,dA,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_L, d_out)
             ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
@@ -253,7 +252,7 @@ end
             copyto!(du, xu)
             copyto!(dg, g)
             copyto!(dA, A.vals)
-            wait(dcauchy_test(device, (n,n))(Val{n}(),dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dcauchy_test(device, n)(Val{n}(),dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2,ndrange=(n,nblk),dependencies=Event(device)))
             h_s = zeros(n)
             h_alpha = zeros(n)
             copyto!(h_s, d_out1)
@@ -333,7 +332,7 @@ end
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, A)
             copyto!(d_g, g)
-            wait(dtrpcg_test(device, (n,n))(Val{n}(),delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dtrpcg_test(device, n)(Val{n}(),delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             h_w = zeros(n)
             h_L = zeros(n,n)
             copyto!(h_L, d_out_L)
@@ -423,7 +422,7 @@ end
             copyto!(dg, g)
             copyto!(dw, w)
             copyto!(dA, A.vals)
-            wait(dprsrch_test(device,(n,n))(Val{n}(),dx,dl,du,dg,dw,dA,d_out1,d_out2,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dprsrch_test(device, n)(Val{n}(),dx,dl,du,dg,dw,dA,d_out1,d_out2,ndrange=(n,nblk),dependencies=Event(device)))
             h_x = zeros(n)
             h_w = zeros(n)
             copyto!(h_x, d_out1)
@@ -469,7 +468,7 @@ end
             d_in = AT{Float64}(undef, 2*n)
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, h_in)
-            wait(daxpy_test(device,(n,n))(Val{n}(),da,d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(daxpy_test(device,n)(Val{n}(),da,d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(h_out .- (h_in[n+1:2*n] .+ da.*h_in[1:n])) <= 1e-12
@@ -516,7 +515,7 @@ end
             d_out = AT{Float64}(undef, n)
             copyto!(d_z, z)
             copyto!(d_in, h_in)
-            wait(dssyax_test(device,(n,n))(Val{n}(),d_z,d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dssyax_test(device,n)(Val{n}(),d_z,d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(h_out .- h_in*z) <= 1e-12
@@ -576,7 +575,7 @@ end
             copyto!(dx, x)
             copyto!(dl, xl)
             copyto!(du, xu)
-            wait(dmid_test(device,(n,n))(Val{n}(),dx,dl,du,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dmid_test(device,n)(Val{n}(),dx,dl,du,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(x_out, d_out)
 
             ExaTron.dmid(n, x, xl, xu)
@@ -652,7 +651,7 @@ end
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dw, w)
-            wait(dgpstep_test(device,(n,n))(Val{n}(),dx,dl,du,alpha,dw,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dgpstep_test(device,n)(Val{n}(),dx,dl,du,alpha,dw,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(s_out, d_out)
 
             ExaTron.dgpstep(n, x, xl, xu, alpha, w, s)
@@ -719,7 +718,7 @@ end
             copyto!(dl, xl)
             copyto!(du, xu)
             copyto!(dw, w)
-            wait(dbreakpt_test(device,(n,n))(Val{n}(),dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dbreakpt_test(device,n)(Val{n}(),dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_nbrpt, d_nbrpt)
             copyto!(h_brptmin, d_brptmin)
             copyto!(h_brptmax, d_brptmax)
@@ -763,7 +762,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_in, h_in)
-            wait(dnrm2_test(device,(n,n))(Val{n}(),d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dnrm2_test(device,n)(Val{n}(),d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
             xnorm = norm(h_in, 2)
 
@@ -808,7 +807,7 @@ end
             d_out = AT{Float64}(undef, n)
             h_wa = zeros(n)
             copyto!(d_A, A)
-            wait(nrm2_test(device,(n,n))(Val{n}(),d_A,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(nrm2_test(device,n)(Val{n}(),d_A,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_wa, d_out)
 
             @test norm(wa .- h_wa) <= 1e-10
@@ -848,7 +847,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, h_in)
-            wait(dcopy_test(device,(n,n))(Val{n}(),d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dcopy_test(device,n)(Val{n}(),d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test !(false in (h_in .== h_out))
@@ -890,7 +889,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_in, h_in)
-            wait(ddot_test(device, (n,n))(Val{n}(),d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(ddot_test(device, n)(Val{n}(),d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(dot(h_in,h_in) .- h_out, 2) <= 1e-10
@@ -929,7 +928,7 @@ end
             d_in = AT{Float64}(undef, n)
             d_out = AT{Float64}(undef, n)
             copyto!(d_in, h_in)
-            wait(dscal_test(device, (n,n))(Val{n}(),da,d_in,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dscal_test(device,n)(Val{n}(),da,d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
             copyto!(h_out, d_out)
 
             @test norm(h_out .- (da.*h_in)) <= 1e-12
@@ -977,7 +976,7 @@ end
             d_out = AT{Float64,2}(undef, (n,n))
             copyto!(d_x, x)
             copyto!(d_p, p)
-            wait(dtrqsol_test(device, (n,n))(Val{n}(),d_x,d_p,d_out,delta,ndrange=(n, n*nblk),dependencies=Event(device)))
+            wait(dtrqsol_test(device,n)(Val{n}(),d_x,d_p,d_out,delta,ndrange=(n,nblk),dependencies=Event(device)))
 
             d_out = d_out |> Array
             @test norm(sigma .- d_out) <= 1e-10
@@ -1000,24 +999,25 @@ end
             tx = J
             ty = I
 
-            x = @localmem Float64 (n,)
-            xl = @localmem Float64 (n,)
-            xu = @localmem Float64 (n,)
-            g = @localmem Float64 (n,)
-            s = @localmem Float64 (n,)
-            w = @localmem Float64 (n,)
-            wa1 = @localmem Float64 (n,)
-            wa2 = @localmem Float64 (n,)
-            wa3 = @localmem Float64 (n,)
-            wa4 = @localmem Float64 (n,)
-            wa5 = @localmem Float64 (n,)
-            gfree = @localmem Float64 (n,)
-            indfree = @localmem Int (n,)
-            iwa = @localmem Int (n,)
+            x = @localmem Float64 (4,)
+            xl = @localmem Float64 (4,)
+            xu = @localmem Float64 (4,)
+            g = @localmem Float64 (4,)
+            s = @localmem Float64 (4,)
+            w = @localmem Float64 (4,)
+            wa1 = @localmem Float64 (4,)
+            wa2 = @localmem Float64 (4,)
+            wa3 = @localmem Float64 (4,)
+            wa4 = @localmem Float64 (4,)
+            wa5 = @localmem Float64 (4,)
+            gfree = @localmem Float64 (4,)
+            indfree = @localmem Int (4,)
+            iwa = @localmem Int (4,)
+            nfree = @localmem Int (1,)
 
-            A = @localmem Float64 (n,n)
-            B = @localmem Float64 (n,n)
-            L = @localmem Float64 (n,n)
+            A = @localmem Float64 (4,4)
+            B = @localmem Float64 (4,4)
+            L = @localmem Float64 (4,4)
 
             if tx <= n
                 for i in 1:n
@@ -1028,6 +1028,9 @@ end
                 xu[tx] = dxu[tx]
                 g[tx] = dg[tx]
                 s[tx] = ds[tx]
+            end
+            if tx == 1
+                nfree[1] = 0
             end
             @synchronize
 
@@ -1042,7 +1045,7 @@ end
 
         end
 
-        for i=1:itermax
+        for i=1:iterdebug2
             L = tril(rand(n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
@@ -1079,7 +1082,7 @@ end
             copyto!(dg, g)
             copyto!(ds, s)
 
-            wait(dspcg_test(device, (n,n))(Val{n}(),delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+            wait(dspcg_test(device, n)(Val{n}(),delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out,ndrange=(n,1),dependencies=Event(device)))
             h_x = zeros(n)
             copyto!(h_x, d_out)
 
@@ -1200,7 +1203,7 @@ end
 
         end
 
-        for i=1:itermax
+        for i=1:iterdebug
             L = tril(rand(n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))

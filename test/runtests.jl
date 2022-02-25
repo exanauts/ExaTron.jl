@@ -4,15 +4,15 @@ using Random
 using LinearAlgebra
 using SparseArrays
 using StatsBase
-# using AMDGPU
+using AMDGPU
 using CUDA
 using KernelAbstractions
 using CUDAKernels
-# using ROCKernels
+using ROCKernels
 const KA = KernelAbstractions
 
 @testset "Test ExaTron" begin
-    if has_cuda_gpu()
+    if has_cuda_gpu() || has_rocm_gpu()
         @testset "gputest" begin
             include("gputest.jl")
         end
