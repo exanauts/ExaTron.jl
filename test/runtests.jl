@@ -17,16 +17,16 @@ const KA = KernelAbstractions
             include("gputest.jl")
         end
     end
-    @testset "qptests" begin
-        include("qptest.jl")
-    end
-    @testset "densetest" begin
-        include("densetest.jl")
-    end
-    @testset "proxal_wrapper" begin
-        include("proxal_wrapper.jl")
-    end
-    @testset "admmtest" begin
-        include("admmtest.jl")
-    end
+    # @testset "qptests" begin
+    #     include("qptest.jl")
+    # end
+    # @testset "densetest" begin
+    #     include("densetest.jl")
+    # end
+    # @testset "proxal_wrapper" begin
+    #     include("proxal_wrapper.jl")
+    # end
+    # @testset "admmtest" begin
+    #     include("admmtest.jl")
+    # end
 end
