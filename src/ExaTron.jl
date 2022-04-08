@@ -10,6 +10,8 @@ using MPI
 using Printf
 using DelimitedFiles
 
+import PowerModels
+
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
 const BLAS_LIBRARY = :Tron

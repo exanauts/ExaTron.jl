@@ -3,7 +3,7 @@
 using Test
 using LinearAlgebra
 
-CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
+CASE = joinpath(dirname(@__FILE__), "..", "data", "case9.m")
 
 @testset "OPFData" begin
     data = ExaTron.opf_loaddata(CASE)

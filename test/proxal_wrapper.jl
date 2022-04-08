@@ -3,7 +3,7 @@ using ExaTron
 using LinearAlgebra
 using Test
 
-CASE = joinpath(dirname(@__FILE__), "..", "data", "case9")
+CASE = joinpath(dirname(@__FILE__), "..", "data", "case9.m")
 
 RAMP_AGC = [1.25, 1.5, 1.35]
 
