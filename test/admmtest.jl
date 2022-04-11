@@ -1,9 +1,10 @@
 
 
 using Test
+using LazyArtifacts
 using LinearAlgebra
 
-CASE = joinpath(dirname(@__FILE__), "..", "data", "case9.m")
+CASE = joinpath(artifact"ExaData", "ExaData", "matpower", "case9.m")
 
 @testset "OPFData" begin
     data = ExaTron.opf_loaddata(CASE)

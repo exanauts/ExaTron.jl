@@ -1,9 +1,10 @@
 using CUDA
 using ExaTron
+using LazyArtifacts
 using LinearAlgebra
 using Test
 
-CASE = joinpath(dirname(@__FILE__), "..", "data", "case9.m")
+CASE = joinpath(artifact"ExaData", "ExaData", "matpower", "case9.m")
 
 RAMP_AGC = [1.25, 1.5, 1.35]
 
