@@ -13,59 +13,34 @@ and its code [TRON](https://www.mcs.anl.gov/~more/tron).
 
 This package can be installed by cloning this repository:
 ```julia
-] add https://github.com/exanauts/ExaTron.jl
+pkg> add ExaTron
 ```
 
 ## Usage: solving ACOPF using ADMM and ExaTron.jl on single GPU.
-
-### On command line
-```bash
-$ julia --project examples/admm_standalone.jl casename rho_pq rho_va max_iter use_gpu
-```
-where
-* `caename`: the name of the test file of type `string`
-* `rho_pq`: ADMM parameter for power flow of type `float`
-* `rho_va`: ADMM parameter for voltage and angle of type `float`
-* `max_iter`: maximum number of iterations of type `int`
-* `use_gpu`: indicates whether to use gpu or not, of type `bool`
-
-#### Example
-```bash
-$ julia --project examples/admm_standalone.jl case2868rte 10 1000 5000 true
-```
-
-### On REPL
 ```julia
-julia> using ExaTron
-julia> env = ExaTron.admm_rect_gpu("./data/"*casename; iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, use_gpu=use_gpu)
-julia> ExaTron.admm_restart(env; iterlim=max_iter)
-```
+using ExaTron
+using LazyArtifacts
 
-## Usage: solving ACOPF using ADMM and ExaTron.jl on multiple GPUs.
-In order to employ multiple GPUs, `MPI.jl` should be configured to work with `CuArray`.
-We recommend to configure `Spack` for this.
-```bash
-$ git clone https://github.com/spack/spack.git
-$ cd spack/
-$ source share/spack/setup-env.sh
-$ spack install openmpi +cuda
-$ spack load openmpi
-$ julia --project -e 'ENV["JULIA_MPI_BINARY"]="system"; using Pkg; Pkg.build("MPI"; verbose=true)'
-```
+# `datafile`: the name of the test file of type `String`
+# here: MATPOWER case2868rte.m in ExaData project Artifact
+datafile = joinpath(artifact"ExaData", "ExaData", "matpower", "case2868rte.m")
+# `rho_pq`: ADMM parameter for power flow of type `Float64`
+rho_pq = 10.0
+# `rho_va`: ADMM parameter for voltage and angle of type `Float64`
+rho_va = 1000.0
+# `max_iter`: maximum number of iterations of type `Int`
+max_iter = 5000
+# `use_gpu`: indicates whether to use gpu or not, of type `Bool`
+use_gpu = true
+# Use polar formulation for branch problems
+use_polar = true
 
-Once `MPI.jl` is configured, run `launch_mpi.jl` to use MPI:
-```bash
-$ mpiexec -n num julia --project launch_mpi.jl casename rho_pq rho_va max_iter use_gpu
-```
+env = ExaTron.admm_rect_gpu(datafile;
+                      iterlim=max_iter, rho_pq=rho_pq, rho_va=rho_va, scale=1e-4, use_polar=use_polar, use_gpu=use_gpu)
 
-## Data and parameter values
-| Data | # Generators | # Branches | # Buses | rho_pq | rho_va | max_iter |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| case2868rte | 600 | 3,808 | 2,868 | 10.0 | 1000.0 | 5,000
-| case6515rte | 1,389 | 9,037 | 6,515 | 20.0 | 2000.0 | 15,000
-| case9241pegase | 1,445 | 16,049 | 9,241 | 50.0 | 5000.0 | 35,000
-| case13659pegase | 4,092 | 20,467 | 13,659 | 50.0 | 5000.0 | 45,000
-| case19402_goc | 971 | 34,704 | 19,402 | 500.0 | 50000.0 | 30,000
+# Restart and run 5000 iterations
+ExaTron.admm_restart(env; iterlim=max_iter)
+```
 
 ## Citing this package
 
