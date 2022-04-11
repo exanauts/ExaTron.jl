@@ -158,7 +158,7 @@ function _sort_keys(data, k)
     return sorted_index, bus2idx
 end
 
-function opf_loaddata_mat(case_name, lineOff=Line())
+function _opf_loaddata_mat(case_name, lineOff=Line())
     # import data as Dict(...)
     baseMVA = 100
     data = PowerModels.parse_file(case_name)
@@ -212,12 +212,19 @@ function opf_loaddata_mat(case_name, lineOff=Line())
         buses[idx].Bs = shunt["bs"]
     end
 
-    num_lines = length(data["branch"])
+    # Get active branches
+    active_branch = Int[]
+    for (_, branch) in data["branch"]
+        if branch["br_status"] == 1
+            push!(active_branch, branch["index"])
+        end
+    end
+    num_lines = length(active_branch)
     lines = Array{Line}(undef, num_lines)
 
-    for (_, branch) in data["branch"]
+    for (lit, idx) in enumerate(active_branch)
+        branch = data["branch"][string(idx)]
         @assert branch["br_status"] == 1  # should be on since we discarded all other
-        lit = branch["index"]
         lines[lit] = Line(
             branch["f_bus"],
             branch["t_bus"],
@@ -235,37 +242,41 @@ function opf_loaddata_mat(case_name, lineOff=Line())
         )
     end
 
-    num_gens = length(data["gen"])
-
-    generators = Array{Gener}(undef, num_gens)
-    i = 0
+    # Get active generators
+    active_gens = Int[]
     for (_, gen) in data["gen"]
         if gen["gen_status"] == 1
-            i += 1
-            generators[i] = Gener(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, Array{Int}(undef, 0))
-
-            generators[i].bus      = gen["gen_bus"]
-            generators[i].Pg       = gen["pg"]
-            generators[i].Qg       = gen["qg"]
-            generators[i].Qmax     = gen["qmax"]
-            generators[i].Qmin     = gen["qmin"]
-            generators[i].Vg       = gen["vg"]
-            generators[i].mBase    = gen["mbase"]
-            generators[i].status   = gen["gen_status"]
-            generators[i].Pmax     = gen["pmax"]
-            generators[i].Pmin     = gen["pmin"]
-            generators[i].Pc1      = get(gen, "pc1", 0.0)
-            generators[i].Pc2      = get(gen, "pc2", 0.0)
-            generators[i].Qc1min   = get(gen, "qc1min", 0.0)
-            generators[i].Qc1max   = get(gen, "qc1max", 0.0)
-            generators[i].Qc2min   = get(gen, "qc2min", 0.0)
-            generators[i].Qc2max   = get(gen, "qc2max", 0.0)
-            # generators[i].gentype  = costgen_arr[git,1]
-            generators[i].startup  = gen["startup"]
-            generators[i].shutdown = gen["shutdown"]
-            generators[i].n        = gen["ncost"]
-            generators[i].coeff    = gen["cost"] ./ [baseMVA^2, baseMVA, 1.0]
+            push!(active_gens, gen["index"])
         end
+    end
+    num_gens = length(active_gens)
+    generators = Array{Gener}(undef, num_gens)
+    for (i, idx) in enumerate(active_gens)
+        gen = data["gen"][string(idx)]
+        @assert gen["gen_status"] == 1
+        generators[i] = Gener(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, Array{Int}(undef, 0))
+
+        generators[i].bus      = gen["gen_bus"]
+        generators[i].Pg       = gen["pg"]
+        generators[i].Qg       = gen["qg"]
+        generators[i].Qmax     = gen["qmax"]
+        generators[i].Qmin     = gen["qmin"]
+        generators[i].Vg       = gen["vg"]
+        generators[i].mBase    = gen["mbase"]
+        generators[i].status   = gen["gen_status"]
+        generators[i].Pmax     = gen["pmax"]
+        generators[i].Pmin     = gen["pmin"]
+        generators[i].Pc1      = get(gen, "pc1", 0.0)
+        generators[i].Pc2      = get(gen, "pc2", 0.0)
+        generators[i].Qc1min   = get(gen, "qc1min", 0.0)
+        generators[i].Qc1max   = get(gen, "qc1max", 0.0)
+        generators[i].Qc2min   = get(gen, "qc2min", 0.0)
+        generators[i].Qc2max   = get(gen, "qc2max", 0.0)
+        # generators[i].gentype  = costgen_arr[git,1]
+        generators[i].startup  = gen["startup"]
+        generators[i].shutdown = gen["shutdown"]
+        generators[i].n        = gen["ncost"]
+        generators[i].coeff    = gen["cost"] ./ [baseMVA^2, baseMVA, 1.0]
     end
 
     # build a dictionary between buses ids and their indexes
@@ -282,7 +293,7 @@ function opf_loaddata_mat(case_name, lineOff=Line())
     return OPFData(buses, lines, generators, bus_ref, baseMVA, busIdx, FromLines, ToLines, BusGeners)
 end
 
-function opf_loaddata_raw(case_name, lineOff=Line())
+function _opf_loaddata_legacy(case_name, lineOff=Line())
     #
     # load buses
     #
@@ -416,9 +427,9 @@ end
 
 function opf_loaddata(case_name, lineOff=Line())
     if endswith(case_name, ".m") || endswith(case_name, ".raw")
-        opf_loaddata_mat(case_name, lineOff)
+        _opf_loaddata_mat(case_name, lineOff)
     else
-        opf_loaddata_raw(case_name, lineOff)
+        _opf_loaddata_legacy(case_name, lineOff)
     end
 end
 
