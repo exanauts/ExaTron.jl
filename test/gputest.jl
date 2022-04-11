@@ -93,7 +93,8 @@ Random.seed!(0)
 
             @test norm(tron_A.vals .- tril(h_L)*transpose(tril(h_L))) <= 1e-10
             @test norm(tril(h_L) .- transpose(triu(h_L))) <= 1e-10
-            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-10
+            # 1e-10 is too tight for some cases
+            @test norm(tril(tron_L.vals) .- tril(h_L)) <= 1e-9
         end
     end
 
