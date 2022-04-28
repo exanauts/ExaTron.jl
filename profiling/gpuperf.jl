@@ -11,10 +11,10 @@ function run_dicfs_gpu(n::Int, alpha::Float64,
     ty = threadIdx().y
     blk = blockIdx().x
 
-    wa1 = @cuDynamicSharedMem(Float64, n)
-    wa2 = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-    A = @cuDynamicSharedMem(Float64, (n,n), (2*n)*sizeof(Float64))
-    L = @cuDynamicSharedMem(Float64, (n,n), (2*n+n^2)*sizeof(Float64))
+    wa1 = CuDynamicSharedArray(Float64, n)
+    wa2 = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+    A = CuDynamicSharedArray(Float64, (n,n), (2*n)*sizeof(Float64))
+    L = CuDynamicSharedArray(Float64, (n,n), (2*n+n^2)*sizeof(Float64))
 
     A[tx,ty] = dA[tx,ty,blk]
     CUDA.sync_threads()
@@ -81,24 +81,24 @@ function run_spcg_gpu(n::Int, delta::Float64, rtol::Float64,
     ty = threadIdx().y
     blk = blockIdx().x
 
-    x = @cuDynamicSharedMem(Float64, n)
-    xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-    xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-    g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-    s = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-    w = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-    wa1 = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-    wa2 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-    wa3 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-    wa4 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-    wa5 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-    gfree = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-    indfree = @cuDynamicSharedMem(Int, n, (12*n)*sizeof(Float64))
-    iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (12*n)*sizeof(Float64))
+    x = CuDynamicSharedArray(Float64, n)
+    xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+    xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+    g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+    s = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+    w = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+    wa1 = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
+    wa2 = CuDynamicSharedArray(Float64, n, (7*n)*sizeof(Float64))
+    wa3 = CuDynamicSharedArray(Float64, n, (8*n)*sizeof(Float64))
+    wa4 = CuDynamicSharedArray(Float64, n, (9*n)*sizeof(Float64))
+    wa5 = CuDynamicSharedArray(Float64, n, (10*n)*sizeof(Float64))
+    gfree = CuDynamicSharedArray(Float64, n, (11*n)*sizeof(Float64))
+    indfree = CuDynamicSharedArray(Int, n, (12*n)*sizeof(Float64))
+    iwa = CuDynamicSharedArray(Int, 2*n, n*sizeof(Int) + (12*n)*sizeof(Float64))
 
-    A = @cuDynamicSharedMem(Float64, (n,n), (12*n)*sizeof(Float64)+(3*n)*sizeof(Int))
-    B = @cuDynamicSharedMem(Float64, (n,n), (12*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
-    L = @cuDynamicSharedMem(Float64, (n,n), (12*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+    A = CuDynamicSharedArray(Float64, (n,n), (12*n)*sizeof(Float64)+(3*n)*sizeof(Int))
+    B = CuDynamicSharedArray(Float64, (n,n), (12*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+    L = CuDynamicSharedArray(Float64, (n,n), (12*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
 
     A[tx,ty] = dA[tx,ty,blk]
     if ty == 1
@@ -196,25 +196,25 @@ function run_tron_gpu(n::Int, f::CuDeviceArray{Float64}, frtol::Float64, fatol::
     ty = threadIdx().y
     blk = blockIdx().x
 
-    x = @cuDynamicSharedMem(Float64, n)
-    xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-    xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-    g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-    xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-    s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-    wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-    wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-    wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-    wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-    wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-    wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-    gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-    indfree = @cuDynamicSharedMem(Int, n, (13*n)*sizeof(Float64))
-    iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (13*n)*sizeof(Float64))
+    x = CuDynamicSharedArray(Float64, n)
+    xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+    xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+    g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+    xc = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+    s = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+    wa = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
+    wa1 = CuDynamicSharedArray(Float64, n, (7*n)*sizeof(Float64))
+    wa2 = CuDynamicSharedArray(Float64, n, (8*n)*sizeof(Float64))
+    wa3 = CuDynamicSharedArray(Float64, n, (9*n)*sizeof(Float64))
+    wa4 = CuDynamicSharedArray(Float64, n, (10*n)*sizeof(Float64))
+    wa5 = CuDynamicSharedArray(Float64, n, (11*n)*sizeof(Float64))
+    gfree = CuDynamicSharedArray(Float64, n, (12*n)*sizeof(Float64))
+    indfree = CuDynamicSharedArray(Int, n, (13*n)*sizeof(Float64))
+    iwa = CuDynamicSharedArray(Int, 2*n, n*sizeof(Int) + (13*n)*sizeof(Float64))
 
-    A = @cuDynamicSharedMem(Float64, (n,n), (13*n)*sizeof(Float64)+(3*n)*sizeof(Int))
-    B = @cuDynamicSharedMem(Float64, (n,n), (13*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
-    L = @cuDynamicSharedMem(Float64, (n,n), (13*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+    A = CuDynamicSharedArray(Float64, (n,n), (13*n)*sizeof(Float64)+(3*n)*sizeof(Int))
+    B = CuDynamicSharedArray(Float64, (n,n), (13*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+    L = CuDynamicSharedArray(Float64, (n,n), (13*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
 
     fval = f[blk]
     A[tx,ty] = dA[tx,ty,blk]

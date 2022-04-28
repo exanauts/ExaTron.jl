@@ -14,9 +14,9 @@ function auglag_kernel(n::Int, major_iter::Int, max_auglag::Int,
     ty = threadIdx().y
     I = blockIdx().x
 
-    x = @cuDynamicSharedMem(Float64, n)
-    xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-    xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+    x = CuDynamicSharedArray(Float64, n)
+    xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+    xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
 
     pij_idx = line_start + 8*(I-1)
 
