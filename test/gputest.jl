@@ -58,7 +58,7 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            L = @cuDynamicSharedMem(Float64, (n,n))
+            L = CuDynamicSharedArray(Float64, (n,n))
             L[tx,ty] = d_in[tx,ty]
             CUDA.sync_threads()
 
@@ -105,10 +105,10 @@ Random.seed!(0)
             tx = threadIdx().x
             bx = blockIdx().x
 
-            wa1 = @cuDynamicSharedMem(Float64, n)
-            wa2 = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            A = @cuDynamicSharedMem(Float64, (n,n), (2*n)*sizeof(Float64))
-            L = @cuDynamicSharedMem(Float64, (n,n), (2*n+n^2)*sizeof(Float64))
+            wa1 = CuDynamicSharedArray(Float64, n)
+            wa2 = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            A = CuDynamicSharedArray(Float64, (n,n), (2*n)*sizeof(Float64))
+            L = CuDynamicSharedArray(Float64, (n,n), (2*n+n^2)*sizeof(Float64))
 
             @inbounds for j=1:n
                 A[j,tx] = dA[j,tx]
@@ -176,13 +176,13 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g =  @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            s =  @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            wa = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            A =  @cuDynamicSharedMem(Float64, (n,n), (6*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            g =  CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+            s =  CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+            wa = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+            A =  CuDynamicSharedArray(Float64, (n,n), (6*n)*sizeof(Float64))
 
             A[tx,ty] = dA[tx,ty]
             if ty == 1
@@ -250,16 +250,16 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            A = @cuDynamicSharedMem(Float64, (n,n))
-            L = @cuDynamicSharedMem(Float64, (n,n), (n^2)*sizeof(Float64))
+            A = CuDynamicSharedArray(Float64, (n,n))
+            L = CuDynamicSharedArray(Float64, (n,n), (n^2)*sizeof(Float64))
 
-            g = @cuDynamicSharedMem(Float64, n, (2*n^2)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (2*n^2 + n)*sizeof(Float64))
-            p = @cuDynamicSharedMem(Float64, n, (2*n^2 + 2*n)*sizeof(Float64))
-            q = @cuDynamicSharedMem(Float64, n, (2*n^2 + 3*n)*sizeof(Float64))
-            r = @cuDynamicSharedMem(Float64, n, (2*n^2 + 4*n)*sizeof(Float64))
-            t = @cuDynamicSharedMem(Float64, n, (2*n^2 + 5*n)*sizeof(Float64))
-            z = @cuDynamicSharedMem(Float64, n, (2*n^2 + 6*n)*sizeof(Float64))
+            g = CuDynamicSharedArray(Float64, n, (2*n^2)*sizeof(Float64))
+            w = CuDynamicSharedArray(Float64, n, (2*n^2 + n)*sizeof(Float64))
+            p = CuDynamicSharedArray(Float64, n, (2*n^2 + 2*n)*sizeof(Float64))
+            q = CuDynamicSharedArray(Float64, n, (2*n^2 + 3*n)*sizeof(Float64))
+            r = CuDynamicSharedArray(Float64, n, (2*n^2 + 4*n)*sizeof(Float64))
+            t = CuDynamicSharedArray(Float64, n, (2*n^2 + 5*n)*sizeof(Float64))
+            z = CuDynamicSharedArray(Float64, n, (2*n^2 + 6*n)*sizeof(Float64))
 
             A[tx,ty] = d_in[tx,ty]
             L[tx,ty] = d_in[tx,ty]
@@ -332,14 +332,14 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            A = @cuDynamicSharedMem(Float64, (n,n), (7*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+            w = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+            wa1 = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+            wa2 = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
+            A = CuDynamicSharedArray(Float64, (n,n), (7*n)*sizeof(Float64))
 
             A[tx,ty] = d_A[tx,ty]
             if ty == 1
@@ -407,8 +407,8 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            y = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            y = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
             if ty == 1
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx + n]
@@ -445,9 +445,9 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            z = @cuDynamicSharedMem(Float64, n)
-            q = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            A = @cuDynamicSharedMem(Float64, (n,n), (2*n)*sizeof(Float64))
+            z = CuDynamicSharedArray(Float64, n)
+            q = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            A = CuDynamicSharedArray(Float64, (n,n), (2*n)*sizeof(Float64))
             A[tx,ty] = d_in[tx,ty]
             if ty == 1
                 z[tx] = d_z[tx]
@@ -487,9 +487,9 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
             if ty == 1
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -547,11 +547,11 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            w = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+            s = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
             if ty == 1
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -621,10 +621,10 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            w = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
             if ty == 1
                 x[tx] = dx[tx]
                 xl[tx] = dl[tx]
@@ -679,7 +679,7 @@ Random.seed!(0)
                             d_out::CuDeviceArray{Float64})
             tx = threadIdx().x
 
-            x = @cuDynamicSharedMem(Float64, n)
+            x = CuDynamicSharedArray(Float64, n)
             x[tx] = d_in[tx]
             CUDA.sync_threads()
 
@@ -709,8 +709,8 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            wa = @cuDynamicSharedMem(Float64, n)
-            A = @cuDynamicSharedMem(Float64, (n,n), n*sizeof(Float64))
+            wa = CuDynamicSharedArray(Float64, n)
+            A = CuDynamicSharedArray(Float64, (n,n), n*sizeof(Float64))
             A[tx,ty] = d_A[tx,ty]
             CUDA.sync_threads()
 
@@ -749,8 +749,8 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            y = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            y = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
 
             if ty == 1
                 x[tx] = d_in[tx]
@@ -786,8 +786,8 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            y = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            y = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
             if ty == 1
                 x[tx] = d_in[tx]
                 y[tx] = d_in[tx]
@@ -821,7 +821,7 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
+            x = CuDynamicSharedArray(Float64, n)
             if ty == 1
                 x[tx] = d_in[tx]
             end
@@ -858,8 +858,8 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            p = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            p = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
 
             if ty == 1
                 x[tx] = d_x[tx]
@@ -900,24 +900,24 @@ Random.seed!(0)
                             d_out::CuDeviceArray{Float64})
             tx = threadIdx().x
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            w = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-            wa3 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-            wa4 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-            wa5 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-            gfree = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-            indfree = @cuDynamicSharedMem(Int, n, (12*n)*sizeof(Float64))
-            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (12*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+            s = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+            w = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+            wa1 = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
+            wa2 = CuDynamicSharedArray(Float64, n, (7*n)*sizeof(Float64))
+            wa3 = CuDynamicSharedArray(Float64, n, (8*n)*sizeof(Float64))
+            wa4 = CuDynamicSharedArray(Float64, n, (9*n)*sizeof(Float64))
+            wa5 = CuDynamicSharedArray(Float64, n, (10*n)*sizeof(Float64))
+            gfree = CuDynamicSharedArray(Float64, n, (11*n)*sizeof(Float64))
+            indfree = CuDynamicSharedArray(Int, n, (12*n)*sizeof(Float64))
+            iwa = CuDynamicSharedArray(Int, 2*n, n*sizeof(Int) + (12*n)*sizeof(Float64))
 
-            A = @cuDynamicSharedMem(Float64, (n,n), (12*n)*sizeof(Float64)+(3*n)*sizeof(Int))
-            B = @cuDynamicSharedMem(Float64, (n,n), (12*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
-            L = @cuDynamicSharedMem(Float64, (n,n), (12*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+            A = CuDynamicSharedArray(Float64, (n,n), (12*n)*sizeof(Float64)+(3*n)*sizeof(Int))
+            B = CuDynamicSharedArray(Float64, (n,n), (12*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+            L = CuDynamicSharedArray(Float64, (n,n), (12*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
 
             @inbounds for j=1:n
                 A[j,tx] = dA[j,tx]
@@ -992,10 +992,10 @@ Random.seed!(0)
             tx = threadIdx().x
             ty = threadIdx().y
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
 
             if ty == 1
                 x[tx] = dx[tx]
@@ -1047,25 +1047,25 @@ Random.seed!(0)
                             dg::CuDeviceArray{Float64}, d_out::CuDeviceArray{Float64})
             tx = threadIdx().x
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-            wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-            wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-            wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-            gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-            indfree = @cuDynamicSharedMem(Int, n, (13*n)*sizeof(Float64))
-            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (13*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
+            g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+            xc = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+            s = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+            wa = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
+            wa1 = CuDynamicSharedArray(Float64, n, (7*n)*sizeof(Float64))
+            wa2 = CuDynamicSharedArray(Float64, n, (8*n)*sizeof(Float64))
+            wa3 = CuDynamicSharedArray(Float64, n, (9*n)*sizeof(Float64))
+            wa4 = CuDynamicSharedArray(Float64, n, (10*n)*sizeof(Float64))
+            wa5 = CuDynamicSharedArray(Float64, n, (11*n)*sizeof(Float64))
+            gfree = CuDynamicSharedArray(Float64, n, (12*n)*sizeof(Float64))
+            indfree = CuDynamicSharedArray(Int, n, (13*n)*sizeof(Float64))
+            iwa = CuDynamicSharedArray(Int, 2*n, n*sizeof(Int) + (13*n)*sizeof(Float64))
 
-            A = @cuDynamicSharedMem(Float64, (n,n), (13*n)*sizeof(Float64)+(3*n)*sizeof(Int))
-            B = @cuDynamicSharedMem(Float64, (n,n), (13*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
-            L = @cuDynamicSharedMem(Float64, (n,n), (13*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+            A = CuDynamicSharedArray(Float64, (n,n), (13*n)*sizeof(Float64)+(3*n)*sizeof(Int))
+            B = CuDynamicSharedArray(Float64, (n,n), (13*n+n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
+            L = CuDynamicSharedArray(Float64, (n,n), (13*n+2*n^2)*sizeof(Float64)+(3*n)*sizeof(Int))
 
             @inbounds for j=1:n
                 A[j,tx] = dA[j,tx]
@@ -1193,24 +1193,24 @@ Random.seed!(0)
             # We start with a shared memory allocation.
             # The first 3*n*sizeof(Float64) bytes are used for x, xl, and xu.
 
-            g = @cuDynamicSharedMem(Float64, n, (3*n)*sizeof(Float64))
-            xc = @cuDynamicSharedMem(Float64, n, (4*n)*sizeof(Float64))
-            s = @cuDynamicSharedMem(Float64, n, (5*n)*sizeof(Float64))
-            wa = @cuDynamicSharedMem(Float64, n, (6*n)*sizeof(Float64))
-            wa1 = @cuDynamicSharedMem(Float64, n, (7*n)*sizeof(Float64))
-            wa2 = @cuDynamicSharedMem(Float64, n, (8*n)*sizeof(Float64))
-            wa3 = @cuDynamicSharedMem(Float64, n, (9*n)*sizeof(Float64))
-            wa4 = @cuDynamicSharedMem(Float64, n, (10*n)*sizeof(Float64))
-            wa5 = @cuDynamicSharedMem(Float64, n, (11*n)*sizeof(Float64))
-            gfree = @cuDynamicSharedMem(Float64, n, (12*n)*sizeof(Float64))
-            dsave = @cuDynamicSharedMem(Float64, n, (13*n)*sizeof(Float64))
-            indfree = @cuDynamicSharedMem(Int, n, (14*n)*sizeof(Float64))
-            iwa = @cuDynamicSharedMem(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(Float64))
-            isave = @cuDynamicSharedMem(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(Float64))
+            g = CuDynamicSharedArray(Float64, n, (3*n)*sizeof(Float64))
+            xc = CuDynamicSharedArray(Float64, n, (4*n)*sizeof(Float64))
+            s = CuDynamicSharedArray(Float64, n, (5*n)*sizeof(Float64))
+            wa = CuDynamicSharedArray(Float64, n, (6*n)*sizeof(Float64))
+            wa1 = CuDynamicSharedArray(Float64, n, (7*n)*sizeof(Float64))
+            wa2 = CuDynamicSharedArray(Float64, n, (8*n)*sizeof(Float64))
+            wa3 = CuDynamicSharedArray(Float64, n, (9*n)*sizeof(Float64))
+            wa4 = CuDynamicSharedArray(Float64, n, (10*n)*sizeof(Float64))
+            wa5 = CuDynamicSharedArray(Float64, n, (11*n)*sizeof(Float64))
+            gfree = CuDynamicSharedArray(Float64, n, (12*n)*sizeof(Float64))
+            dsave = CuDynamicSharedArray(Float64, n, (13*n)*sizeof(Float64))
+            indfree = CuDynamicSharedArray(Int, n, (14*n)*sizeof(Float64))
+            iwa = CuDynamicSharedArray(Int, 2*n, n*sizeof(Int) + (14*n)*sizeof(Float64))
+            isave = CuDynamicSharedArray(Int, n, (3*n)*sizeof(Int) + (14*n)*sizeof(Float64))
 
-            A = @cuDynamicSharedMem(Float64, (n,n), (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
-            B = @cuDynamicSharedMem(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
-            L = @cuDynamicSharedMem(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+            A = CuDynamicSharedArray(Float64, (n,n), (14*n)*sizeof(Float64)+(4*n)*sizeof(Int))
+            B = CuDynamicSharedArray(Float64, (n,n), (14*n+n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
+            L = CuDynamicSharedArray(Float64, (n,n), (14*n+2*n^2)*sizeof(Float64)+(4*n)*sizeof(Int))
 
             task = 0
             status = 0
@@ -1295,9 +1295,9 @@ Random.seed!(0)
                                     dx, dxl, dxu, dA, dc, d_out)
             tx = threadIdx().x
 
-            x = @cuDynamicSharedMem(Float64, n)
-            xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-            xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+            x = CuDynamicSharedArray(Float64, n)
+            xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+            xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
 
             x[tx] = dx[tx]
             xl[tx] = dxl[tx]

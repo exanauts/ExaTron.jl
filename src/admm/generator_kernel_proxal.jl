@@ -333,12 +333,12 @@ function generator_kernel_two_level_proxal(ngen::Int, gen_start::Int,
 
     if I <= ngen
         n = 2
-        x = @cuDynamicSharedMem(Float64, n)
-        xl = @cuDynamicSharedMem(Float64, n, n*sizeof(Float64))
-        xu = @cuDynamicSharedMem(Float64, n, (2*n)*sizeof(Float64))
+        x = CuDynamicSharedArray(Float64, n)
+        xl = CuDynamicSharedArray(Float64, n, n*sizeof(Float64))
+        xu = CuDynamicSharedArray(Float64, n, (2*n)*sizeof(Float64))
 
-        A = @cuDynamicSharedMem(Float64, (n,n), (13*n+3)*sizeof(Float64)+(3*n+3)*sizeof(Int))
-        c = @cuDynamicSharedMem(Float64, n, (13*n+3+3*n^2)*sizeof(Float64)+(3*n+3)*sizeof(Int))
+        A = CuDynamicSharedArray(Float64, (n,n), (13*n+3)*sizeof(Float64)+(3*n+3)*sizeof(Int))
+        c = CuDynamicSharedArray(Float64, n, (13*n+3+3*n^2)*sizeof(Float64)+(3*n+3)*sizeof(Int))
 
         pg_idx = gen_start + 2*(I-1)
         qg_idx = gen_start + 2*(I-1) + 1
