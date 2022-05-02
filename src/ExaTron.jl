@@ -10,12 +10,6 @@ using MPI
 using Printf
 using DelimitedFiles
 
-#=
-using JuMP
-using Ipopt
-using MathOptInterface
-=#
-
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
 const BLAS_LIBRARY = :Tron
@@ -49,40 +43,6 @@ include("dtrpcg.jl")
 include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
-
-include("admm/parse_matpower.jl")
-include("admm/opfdata.jl")
-include("admm/environment.jl")
-include("admm/check_violations.jl")
-include("admm/model_io.jl")
-#include("admm/environment_multiperiod.jl")
-include("admm/bus_kernel.jl")
-include("admm/generator_kernel.jl")
-include("admm/eval_generator_kernel.jl")
-include("admm/generator_kernel_multiperiod.jl")
-include("admm/polar_kernel.jl")
-include("admm/tron_kernel.jl")
-include("admm/eval_kernel.jl")
-include("admm/auglag_kernel.jl")
-include("admm/eval_linelimit_kernel.jl")
-include("admm/tron_linelimit_kernel.jl")
-include("admm/auglag_linelimit_kernel.jl")
-include("admm/acopf_admm_gpu.jl")
-include("admm/acopf_admm_gpu_two_level.jl")
-include("admm/acopf_admm_gpu_two_level_alternative.jl")
-include("admm/acopf_admm_two_level_mpi_cpu.jl")
-include("admm/acopf_admm_two_level_mpi.jl")
-include("admm/acopf_admm_multiperiod_two_level_cpu.jl")
-include("admm/acopf_admm_multiperiod_two_level_gpu.jl")
-include("admm/acopf_admm_multiperiod.jl")
-include("admm/acopf_admm_rolling_horizon_two_level_cpu.jl")
-include("admm/acopf_admm_rolling_horizon_two_level_gpu.jl")
-include("admm/acopf_admm_rolling_horizon.jl")
-#include("admm/acopf_admm_gpu_multiperiod.jl")
-
-#include("admm/test_multiperiod.jl")
-#include("admm/test_parser.jl")
-#include("admm/test_linelimit.jl")
 
 function __init__()
     MPI.Init()
