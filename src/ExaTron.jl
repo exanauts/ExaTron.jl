@@ -10,8 +10,6 @@ using MPI
 using Printf
 using DelimitedFiles
 
-import PowerModels
-
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
 const BLAS_LIBRARY = :Tron
@@ -46,17 +44,8 @@ include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
 
-include("admm/opfdata.jl")
-include("admm/environment.jl")
-include("admm/proxal_wrapper.jl")
-include("admm/bus_kernel.jl")
-include("admm/generator_kernel.jl")
-include("admm/generator_kernel_proxal.jl")
-include("admm/polar_kernel.jl")
-include("admm/tron_kernel.jl")
-include("admm/eval_kernel.jl")
-include("admm/auglag_kernel.jl")
-include("admm/acopf_admm_gpu.jl")
-include("admm/acopf_admm_gpu_two_level.jl")
+function __init__()
+    MPI.Init()
+end
 
 end # module

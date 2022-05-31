@@ -18,10 +18,4 @@ using CUDA
     @testset "densetest" begin
         include("densetest.jl")
     end
-    @testset "proxal_wrapper" begin
-        include("proxal_wrapper.jl")
-    end
-    @testset "admmtest" begin
-        include("admmtest.jl")
-    end
 end
