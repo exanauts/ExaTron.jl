@@ -5,10 +5,7 @@ using LinearAlgebra
 using CUDA
 using CUDA.CUBLAS
 
-using MPI
-
 using Printf
-using DelimitedFiles
 
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
 
@@ -43,9 +40,5 @@ include("dtrpcg.jl")
 include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
-
-function __init__()
-    MPI.Init()
-end
 
 end # module

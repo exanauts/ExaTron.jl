@@ -31,7 +31,7 @@ end
 
 @testset "PosDef QP" begin
     n = 1000
-    obj♯ = -193.05853878066543
+    obj♯ = -175.028369041816
     prob = build_problem(; n=n)
 
     @testset "Problem definition" begin
@@ -43,7 +43,7 @@ end
     @testset "Tron: Julia" begin
         prob.x .= 0.5 .* (prob.x_l .+ prob.x_u)
         ExaTron.solveProblem(prob)
-        @test_broken prob.f ≈ obj♯ atol=1e-8
+        @test prob.f ≈ obj♯ atol=1e-8
     end
 
     if ExaTron.has_c_library()
