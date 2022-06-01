@@ -7,7 +7,7 @@ using CUDA.CUBLAS
 
 using Printf
 
-export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem
+export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem, tron_qp_kernel
 
 const BLAS_LIBRARY = :Tron
 const EXATRON_LIBRARY = "libtron"
@@ -40,5 +40,7 @@ include("dtrpcg.jl")
 include("dspcg.jl")
 include("dtron.jl")
 include("driver.jl")
+include("eval_kernel.jl")
+include("tron_kernel.jl")
 
 end # module
