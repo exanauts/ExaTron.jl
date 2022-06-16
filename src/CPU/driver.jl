@@ -137,12 +137,8 @@ function instantiate_memory!(tron::ExaTronProblem{VI,VD}, n, nele_hess) where {V
     tron.values = tron_zeros(VD, nele_hess)
 end
 
-function typedim(a, n::Int)
-    ((typeof(a).name).wrapper){Float64,n}
-end
-
-function createProblem(n::Integer, x_l::AT, x_u::AT,
-                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb; options...) where {AT}
+function createProblem(n::Integer, x_l::AbstractVector{Float64}, x_u::AbstractVector{Float64},
+                       nele_hess::Integer, eval_f_cb, eval_grad_f_cb, eval_h_cb; options...)
     @assert n == length(x_l) == length(x_u)
     @assert typeof(x_l) == typeof(x_u)
 
@@ -159,7 +155,8 @@ function createProblem(n::Integer, x_l::AT, x_u::AT,
     if options_dict["matrix_type"] == :Sparse
         TM = TronSparseMatrixCSC{VI, VD}
     else
-        TM = TronDenseMatrix{typedim(x_l,2)}
+        AT = isa(x_l, Array) ? Array{Float64, 2} : CuArray{Float64, 2}
+        TM = TronDenseMatrix{AT}
     end
 
     tron = ExaTronProblem{VI, VD, TM}()
@@ -183,8 +180,13 @@ function createProblem(n::Integer, x_l::AT, x_u::AT,
         tron.nnz_a = tron.A.nnz
     else
         tron.A = TronDenseMatrix(tron.rows, tron.cols, tron.values, n)
-        tron.B = TronDenseMatrix{typedim(x_l,2)}(n)
-        tron.L = TronDenseMatrix{typedim(x_l,2)}(n)
+        if isa(x_l, Array)
+            tron.B = TronDenseMatrix{Array{Float64, 2}}(n)
+            tron.L = TronDenseMatrix{Array{Float64, 2}}(n)
+        else
+            tron.B = TronDenseMatrix{CuArray{Float64, 2}}(n)
+            tron.L = TronDenseMatrix{CuArray{Float64, 2}}(n)
+        end
         tron.nnz_a = n*n
     end
     tron.status = :NotSolved
@@ -258,37 +260,13 @@ function solveProblem(tron::ExaTronProblem)
         # Call Tron.
 
         if search
-            if tcode == :Fortran
-                delta = Ref{Cdouble}(tron.delta)
-                # TODO
-                ccall((:dtron_, EXATRON_LIBRARY),
-                    Cvoid,
-                    (Ref{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
-                    Ref{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
-                    Ptr{Cint}, Ptr{Cint}, Ref{Cdouble}, Ref{Cdouble},
-                    Ref{Cdouble}, Ref{Cdouble}, Ref{Cint}, Ref{Cdouble},
-                    Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint},
-                    Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint},
-                    Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint},
-                    Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}),
-                    tron.n, tron.x, tron.x_l, tron.x_u,
-                    tron.f, tron.g, tron.A.tril_vals, tron.A.diag_vals,
-                    tron.A.colptr, tron.A.rowval, frtol, fatol,
-                    fmin, cgtol, itermax, delta,
-                    task, tron.B.tril_vals, tron.B.diag_vals, tron.B.colptr,
-                    tron.B.rowval, tron.L.tril_vals, tron.L.diag_vals, tron.L.colptr,
-                    tron.L.rowval, tron.xc, tron.s, tron.indfree,
-                    isave, dsave, tron.wa, tron.iwa)
-                tron.delta = delta[]
-            else
-                tron.delta = ExaTron.dtron(tron.n, tron.x, tron.x_l, tron.x_u,
-                                tron.f, tron.g, tron.A,
-                                frtol, fatol,
-                                fmin, cgtol, itermax, tron.delta,
-                                task, tron.B, tron.L,
-                                tron.xc, tron.s, tron.indfree,
-                                isave, dsave, tron.wa, tron.iwa)
-            end
+            tron.delta = ExaTron.dtron(tron.n, tron.x, tron.x_l, tron.x_u,
+                            tron.f, tron.g, tron.A,
+                            frtol, fatol,
+                            fmin, cgtol, itermax, tron.delta,
+                            task, tron.B, tron.L,
+                            tron.xc, tron.s, tron.indfree,
+                            isave, dsave, tron.wa, tron.iwa)
         end
 
         if unsafe_string(pointer(task), 4) == "NEWX"
