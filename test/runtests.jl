@@ -25,8 +25,8 @@ using Test
                 push!(devices, ROCDevice())
             end
         end
-        include("admmtest.jl")
         @testset "Testing one-level ADMM using $device" for device in devices
+            include("admmtest.jl")
             one_level_admm(CASE, device)
         end
     end

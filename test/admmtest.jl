@@ -18,7 +18,7 @@ include("../examples/admm/bus_kernel.jl")
 include("../examples/admm/tron_kernel.jl")
 include("../examples/admm/acopf_admm_gpu.jl")
 
-CASE = joinpath("..", "examples", "case9.m")
+CASE = joinpath(@__DIR__, "..", "examples", "case9.m")
 
 function one_level_admm(case::String, device::KA.Device)
     # NB: Need to run almost 2,000 iterations to reach convergence with this
@@ -54,3 +54,5 @@ function one_level_admm(case::String, device::KA.Device)
     admm_restart!(env)
     return nothing
 end
+
+# one_level_admm(CASE, ROCDevice())
