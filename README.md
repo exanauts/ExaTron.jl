@@ -11,7 +11,6 @@ and its code [TRON](https://www.mcs.anl.gov/~more/tron).
 
 ## Installation
 
-This package can be installed by cloning this repository:
 ```julia
 pkg> add ExaTron
 ```
