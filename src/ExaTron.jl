@@ -2,45 +2,34 @@ module ExaTron
 
 using Libdl
 using LinearAlgebra
-using CUDA
-using CUDA.CUBLAS
-
+using Requires
 using Printf
 
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem, tron_qp_kernel
+export daxpy, dcopy, ddot, dmid, dnrm2, dgpnorm, dscal, dssyax, dnsol, dtsol, dtrqsol, dbreakpt, dgpstep
+export dicf, dicfs, dprsrch, dcauchy, dtrpcg, dspcg, dtron
+export nrm2!, reorder!
 
 const BLAS_LIBRARY = :Tron
 const EXATRON_LIBRARY = "libtron"
 
 has_c_library() = !isnothing(Libdl.dlopen(EXATRON_LIBRARY; throw_error=false))
-tron_zeros(S, n) = fill!(S(undef, Int64(n)), zero(eltype(S)))
-tron_zeros(S, dims::Tuple) = fill!(S(undef, Int64(dims[1]), Int64(dims[1])), zero(eltype(S)))
 
-include("daxpy.jl")
-include("dcopy.jl")
-include("ddot.jl")
-include("dmid.jl")
-include("dnrm2.jl")
-include("dgpnorm.jl")
-include("dscal.jl")
-include("dsel2.jl")
-include("dssyax.jl")
+
+include("TronMatrix.jl")
 include("ihsort.jl")
 include("insort.jl")
-include("dnsol.jl")
-include("dtsol.jl")
-include("dtrqsol.jl")
-include("dbreakpt.jl")
-include("dgpstep.jl")
-include("dicf.jl")
-include("dicfs.jl")
-include("dprsrch.jl")
-include("dcauchy.jl")
-include("dtrpcg.jl")
-include("dspcg.jl")
-include("dtron.jl")
 include("driver.jl")
-include("eval_kernel.jl")
-include("tron_kernel.jl")
+include("dsel2.jl")
+
+# Default CPU kernels
+include("CPU/ExaTronCPUKernels.jl")
+
+function __init__()
+    @require CUDA="052768ef-5323-5732-b1bb-66c8b64840ba" include("CUDA/ExaTronCUDAKernels.jl")
+    @require CUDA="052768ef-5323-5732-b1bb-66c8b64840ba" using ExaTron.ExaTronCUDAKernels
+    @require KernelAbstractions="63c18a36-062a-441e-b654-da1e3ab1ce7c" include("KA/ExaTronKAKernels.jl")
+    @require KernelAbstractions="63c18a36-062a-441e-b654-da1e3ab1ce7c" using ExaTron.ExaTronKAKernels
+end
 
 end # module
