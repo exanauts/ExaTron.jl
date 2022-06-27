@@ -12,8 +12,8 @@ This contains the parameters used in ADMM algorithm.
 mutable struct Parameters
     mu_max::Float64 # Augmented Lagrangian
     max_auglag::Int # Augmented Lagrangian
-    ABSTOL::Float64
-    RELTOL::Float64
+    abstol::Float64
+    reltol::Float64
 
     rho_max::Float64    # TODO: not used
     rho_min_pq::Float64 # TODO: not used
@@ -45,8 +45,8 @@ mutable struct Parameters
         par.rt_dec = 2.0
         par.eta = 0.99
         par.max_auglag = 50
-        par.ABSTOL = 1e-6
-        par.RELTOL = 1e-5
+        par.abstol = 1e-6
+        par.reltol = 1e-5
         par.verbose = 1
         par.outer_eps = 2*1e-4
         par.Kf = 100

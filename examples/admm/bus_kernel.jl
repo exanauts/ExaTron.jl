@@ -107,7 +107,7 @@ function bus_kernel_cpu(
     FrStart, FrIdx, ToStart, ToIdx, GenStart, GenIdx,
     Pd, Qd, u, v, l, rho, YshR, YshI
 )
-    Threads.@threads for I=1:nbus
+    for I=1:nbus
         common_wi = 0.0
         common_ti = 0.0
         inv_rhosum_pij_ji = 0.0

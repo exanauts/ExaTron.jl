@@ -9,6 +9,5 @@
     @inbounds for i=1:n
         v += dx[i]*dy[i]
     end
-    CUDA.sync_threads()
     return v
 end

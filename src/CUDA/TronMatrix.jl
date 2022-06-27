@@ -1,4 +1,4 @@
-function ExaTron.TronDenseMatrix(I::VI, J::VI, V::CuArray, n) where {VI}
+function ExaTron.TronDenseMatrix(I::VI, J::VI, V::CuArray, n) where {VI <: CuVector{Int}}
     @assert n >= 1
     @assert length(I) == length(J) == length(V)
 
@@ -11,7 +11,7 @@ function ExaTron.TronDenseMatrix(I::VI, J::VI, V::CuArray, n) where {VI}
     return A
 end
 
-@inline function ExaTron.Base.fill!(w::CuDeviceArray{Float64,1}, val::Float64)
+@inline function Base.fill!(w::CuDeviceArray{Float64,1}, val::Float64)
     tx = threadIdx().x
     bx = blockIdx().x
 

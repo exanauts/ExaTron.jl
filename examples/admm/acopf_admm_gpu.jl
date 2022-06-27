@@ -482,8 +482,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
             primres = norm(sol.rp)
             dualres = norm(sol.rd)
 
-            eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(norm(sol.u_curr), norm(-sol.v_curr))
-            eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*norm(sol.l_curr)
+            eps_pri = sqrt(length(sol.l_curr))*par.abstol + par.reltol*max(norm(sol.u_curr), norm(-sol.v_curr))
+            eps_dual = sqrt(length(sol.u_curr))*par.abstol + par.reltol*norm(sol.l_curr)
 
             (par.verbose > 1) && @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n",
                     it, primres, dualres, eps_pri, eps_dual, auglag_it, tron_it)
@@ -530,8 +530,8 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
             gpu_primres = norm(sol.rp)
             gpu_dualres = norm(sol.rd)
 
-            gpu_eps_pri = sqrt(length(sol.l_curr))*par.ABSTOL + par.RELTOL*max(norm(sol.u_curr), norm(sol.v_curr))
-            gpu_eps_dual = sqrt(length(sol.u_curr))*par.ABSTOL + par.RELTOL*norm(sol.l_curr)
+            gpu_eps_pri = sqrt(length(sol.l_curr))*par.abstol + par.reltol*max(norm(sol.u_curr), norm(sol.v_curr))
+            gpu_eps_dual = sqrt(length(sol.u_curr))*par.abstol + par.reltol*norm(sol.l_curr)
 
             (par.verbose > 1) && @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
             if Base.mod(it, 1000) == 0

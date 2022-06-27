@@ -35,6 +35,5 @@
 
     @synchronize
     res = inf_norm[1]
-    @synchronize
     return res
 end

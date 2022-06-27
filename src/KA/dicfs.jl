@@ -42,25 +42,6 @@
     if alpha > 0
         alpha = max(alpha,alphas)
     end
-    # if tx <= n  # No check on ty so that each warp has alpha.
-    #     @inbounds alpha = (A[tx,tx] == zero) ? alphas : max(alpha, -A[tx,tx]*(wa2[tx]^2))
-    # end
-
-    # shfl_down_sync will automatically sync threads in a warp.
-
-    # Find the maximum alpha in a warp and put it in the first thread.
-    #offset = div(blockDim().x, 2)
-    # offset = 16
-    # while offset > 0
-    #     alpha = max(alpha, CUDA.shfl_down_sync(0xffffffff, alpha, offset))
-    #     offset >>= 1
-    # end
-    # # Broadcast it to the entire threads in a warp.
-    # alpha = CUDA.shfl_sync(0xffffffff, alpha, 1)
-
-    # if alpha > 0
-    #     alpha = max(alpha,alphas)
-    # end
 
     # Search for an acceptable shift. During the search we decrease
     # the lower bound alphas until we determine a lower bound that
