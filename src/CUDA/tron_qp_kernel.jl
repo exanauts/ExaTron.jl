@@ -1,3 +1,40 @@
+# Assume that scaling factor has already been applied to Q and c.
+@inline function eval_qp_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, Q::CuDeviceArray{Float64,2}, c::CuDeviceArray{Float64,1})
+    # f = xQx/2 + cx
+    f = 0.0
+    @inbounds begin
+        for j=1:n
+            for i=1:n
+                f += x[i]*Q[i,j]*x[j]
+            end
+        end
+        f *= 0.5
+        for j=1:n
+            f += c[j]*x[j]
+        end
+    end
+    return f
+end
+
+@inline function eval_qp_grad_f_kernel(n::Int, x::CuDeviceArray{Float64,1}, g::CuDeviceArray{Float64,1}, Q::CuDeviceArray{Float64,2}, c::CuDeviceArray{Float64,1})
+    # g = Qx + c
+    tx = threadIdx().x
+
+    @inbounds begin
+        if tx <= n
+            g[tx] = c[tx]
+        end
+        CUDA.sync_threads()
+        if tx <= n
+            for j=1:n
+                g[tx] += Q[tx,j]*x[j]
+            end
+        end
+        CUDA.sync_threads()
+    end
+    return
+end
+
 @inline function tron_qp_kernel(n::Int, max_feval::Int, max_minor::Int, gtol::Float64, scale::Float64,
     x::CuDeviceArray{Float64,1}, xl::CuDeviceArray{Float64,1}, xu::CuDeviceArray{Float64,1},
     A::CuDeviceArray{Float64,2}, c::CuDeviceArray{Float64,1})
@@ -82,7 +119,7 @@
         # Call Tron.
 
         if search
-            delta, task = dtron(n, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
+            delta, task = ExaTron.dtron(n, x, xl, xu, f, g, A, frtol, fatol, fmin, cgtol,
                                 cg_itermax, delta, task, B, L, xc, s, indfree, gfree,
                                 isave, dsave, wa, iwa, wa1, wa2, wa3, wa4, wa5)
         end
@@ -90,7 +127,7 @@
         # [3] NEWX: a new point was computed.
 
         if task == 3
-            gnorm_inf = dgpnorm(n, x, xl, xu, g)
+            gnorm_inf = ExaTron.dgpnorm(n, x, xl, xu, g)
 
             if gnorm_inf <= gtol
                 task = 4

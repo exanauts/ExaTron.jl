@@ -21,5 +21,6 @@ module ExaTronCUDAKernels
     include("dtrpcg.jl")
     include("dspcg.jl")
     include("dtron.jl")
+    include("tron_qp_kernel.jl")
     include("TronMatrix.jl")
 end
