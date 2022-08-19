@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+    tags: '*'
   pull_request:
     types: [opened, synchronize, reopened]
   schedule:
@@ -15,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04]
-        julia-version: ['1.7']
+        julia-version: ['1.7','1.8']
         julia-arch: [x64]
 
     steps:
@@ -35,7 +36,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04]
-        julia-version: ['1.7']
+        julia-version: ['1.7','1.8']
         julia-arch: [x64]
 
     steps:
