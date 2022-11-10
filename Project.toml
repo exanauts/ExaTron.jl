@@ -16,6 +16,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Requires = "1"
 TOML = "1"
 julia = "1.7"
+KernelAbstractions = "0.8"
 
 [extras]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
