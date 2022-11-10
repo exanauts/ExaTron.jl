@@ -561,11 +561,10 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
 
     if par.verbose > 0
         rateA_nviols, rateA_maxviol, rateC_nviols, rateC_maxviol = check_linelimit_violation(data, u_curr)
-        if isa(env.device, KA.GPU)
-            @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
-        end
         if isa(env.device, KA.CPU)
             @printf("[CPU] %10d  %.6e  %.6e  %.6e  %.6e  %6.2f  %6.2f\n", it, primres, dualres, eps_pri, eps_dual, auglag_it, tron_it)
+        else
+            @printf("[GPU] %10d  %.6e  %.6e  %.6e  %.6e\n", it, gpu_primres, gpu_dualres, gpu_eps_pri, gpu_eps_dual)
         end
         status = sol.status == HAS_CONVERGED ? "converged" : "not converged"
         @printf(" ** Line limit violations\n")

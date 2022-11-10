@@ -486,7 +486,7 @@ function computeAdmitances(lines, buses, baseMVA, device; VI=Array{Int}, VD=Arra
     @assert 0==length(findall(isnan.(YshR)))+length(findall(isinf.(YshR)))
     @assert 0==length(findall(isnan.(YshI)))+length(findall(isinf.(YshI)))
 
-    if isa(device, KA.GPU)
+    if !isa(device, KA.CPU)
         return copyto!(VD(undef, nlines), 1, YffR, 1, nlines),
         copyto!(VD(undef, nlines), 1, YffI, 1, nlines),
         copyto!(VD(undef, nlines), 1, YttR, 1, nlines),
