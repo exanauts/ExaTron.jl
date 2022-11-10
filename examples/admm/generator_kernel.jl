@@ -48,7 +48,7 @@ end
 function generator_kernel(
     gen_mod::GeneratorModel,
     baseMVA::Float64, u, v, l, rho,
-    device::KA.GPU
+    device
 )
     nblk = div(gen_mod.ngen, 32, RoundUp)
     nblk
