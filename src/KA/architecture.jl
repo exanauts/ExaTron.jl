@@ -1,3 +1,3 @@
 
 norm(x) = sqrt(mapreduce(x->x*x, +, x))
-synchronize(device) = wait(Event(device))
+# synchronize(device) = wait(Event(device))
