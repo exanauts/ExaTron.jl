@@ -52,7 +52,9 @@ if has_cuda_gpu()
     AT = CuArray
 elseif has_rocm_gpu()
     using ROCKernels
-    device = ROCDevice()
+    # Set for crusher login node to avoid other users
+    AMDGPU.default_device!(AMDGPU.devices()[2])
+    device = AMDGPU.ROCDevice()
     AT = ROCArray
 else
     device = CPU()
@@ -793,13 +795,13 @@ end
         tx = @index(Local, Linear)
         bx = @index(Group, Linear)
 
-        x = @localmem Float64 (4,)
-        y = @localmem Float64 (4,)
+        x = @localmem Float64 (n,)
+        y = @localmem Float64 (n,)
         x[tx] = d_in[tx]
         y[tx] = d_in[tx]
         @synchronize
 
-        v = ExaTron.ddot(n, x, 1, y, 1)
+        v = ExaTron.ddot(n, x, 1, y, 1, tx)
 
         if bx == 1
             for i in 1:n
