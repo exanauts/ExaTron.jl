@@ -20,7 +20,7 @@ include("../examples/admm/acopf_admm_gpu.jl")
 
 CASE = joinpath(@__DIR__, "..", "examples", "case9.m")
 
-function one_level_admm(case::String, device::KA.Device)
+function one_level_admm(case::String, device)
     # NB: Need to run almost 2,000 iterations to reach convergence with this
     # set of parameters.
     env = admm_gpu(

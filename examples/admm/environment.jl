@@ -113,7 +113,7 @@ mutable struct Model{T,TD,TI}
     bus_start::Int # this is for varibles of type v.
     brBusIdx::TI
 
-    function Model{T,TD,TI}(data::OPFData, device::KA.Device) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
+    function Model{T,TD,TI}(data::OPFData, device) where {T, TD<:AbstractArray{T}, TI<:AbstractArray{Int}}
         model = new{T,TD,TI}()
 
         ngen = length(data.generators)
@@ -233,7 +233,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     solution::AbstractSolution{T,TD}
 
     membuf::TM # was param
-    device::KA.Device
+    device
 
     function AdmmEnv{T,TD,TI,TM}(
         opfdata, rho_pq, rho_va; verbose=1,
@@ -265,7 +265,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
     end
 end
 
-function AdmmEnv(case::String, device::KA.Device, rho_pq, rho_va; options...)
+function AdmmEnv(case::String, device, rho_pq, rho_va; options...)
     opfdata = opf_loaddata(case)
     env = AdmmEnv(opfdata, device, rho_pq, rho_va; options...)
     env.case = case

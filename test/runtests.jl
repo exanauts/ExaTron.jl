@@ -12,7 +12,7 @@ using Test
     @testset "KA.jl" begin
         using KernelAbstractions
         KA = KernelAbstractions
-        devices = Vector{KA.Device}()
+        devices = Vector()
         push!(devices, KA.CPU())
         if CUDA.has_cuda_gpu() || AMDGPU.has_rocm_gpu()
             include("KA.jl")
