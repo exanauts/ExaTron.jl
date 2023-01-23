@@ -32,7 +32,7 @@ pkg> add ExaTron
 
 This material is based upon work supported by the U.S. Department of Energy, Office of Science, under contract number DE-AC02-06CH11357.
 
-[build-release-img]: https://github.com/exanauts/ExaTron.jl/workflows/Run%20tests/badge.svg?branch=release
+[build-release-img]: https://github.com/exanauts/ExaTron.jl/workflows/Run%20tests/badge.svg?branch=main
 [build-url]: https://github.com/exanauts/ExaTron.jl/actions?query=workflow
 [doi-img]: https://zenodo.org/badge/DOI/10.5281/zenodo.5829757.svg
 [doi-url]: https://doi.org/10.5281/zenodo.5829757
