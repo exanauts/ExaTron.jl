@@ -52,11 +52,12 @@ function generator_kernel(
 )
     nblk = div(gen_mod.ngen, 32, RoundUp)
     nblk
-    wait(generator_kernel(device, 32, gen_mod.ngen)(baseMVA, gen_mod.ngen, gen_mod.gen_start,
-                u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1,
-                dependencies=Event(device)
-                )
+    generator_kernel(device, 32, gen_mod.ngen)(
+        baseMVA, gen_mod.ngen, gen_mod.gen_start,
+        u, v, l, rho, gen_mod.pgmin, gen_mod.pgmax, gen_mod.qgmin, gen_mod.qgmax, gen_mod.c2, gen_mod.c1
     )
+    KA.synchronize(device)
+
     return 0.0
 end
 

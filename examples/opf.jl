@@ -1,8 +1,6 @@
 using KernelAbstractions
 using AMDGPU
-using ROCKernels
 using CUDA
-using CUDAKernels
 
 # One day for Intel GPUs
 # using oneAPI
@@ -32,7 +30,7 @@ rho_va = parse(Float64, ARGS[2])
 max_iter = parse(Int, ARGS[3])
 # Indicate which GPU device to use
 device = CPU()
-# device = CUDADevice()
+# device = CUDABackend()
 # device = ROCDevice()
 # verbose = 0: No output
 # verbose = 1: Final result metrics
