@@ -1,8 +1,6 @@
 using KernelAbstractions
 using AMDGPU
-using ROCKernels
 using CUDA
-using CUDAKernels
 using LinearAlgebra
 using Printf
 using PowerModels

@@ -278,7 +278,7 @@ AdmmEnv(opfdata::OPFData, device::KA.CPU, rho_pq, rho_va; options...) = AdmmEnv{
         opfdata, rho_pq, rho_va; device=device, options...
     )
 
-AdmmEnv(opfdata::OPFData, device::CUDADevice, rho_pq, rho_va; options...) = AdmmEnv{Float64, CuArray{Float64, 1}, CuArray{Int, 1}, CuArray{Float64, 2}}(
+AdmmEnv(opfdata::OPFData, device::CUDABackend, rho_pq, rho_va; options...) = AdmmEnv{Float64, CuArray{Float64, 1}, CuArray{Int, 1}, CuArray{Float64, 2}}(
         opfdata, rho_pq, rho_va; device=device, options...
     )
 

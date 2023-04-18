@@ -31,7 +31,7 @@ function get_generator_data(data::OPFData, ::KA.CPU)
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
 
-function get_generator_data(data::OPFData, ::CUDADevice)
+function get_generator_data(data::OPFData, ::CUDABackend)
     ngen = length(data.generators)
 
     pgmin = CuArray{Float64}(undef, ngen)
@@ -109,7 +109,7 @@ function get_bus_data(data::OPFData, ::KA.CPU)
     return FrStart,FrIdx,ToStart,ToIdx,GenStart,GenIdx,Pd,Qd
 end
 
-function get_bus_data(data::OPFData, ::CUDADevice)
+function get_bus_data(data::OPFData, ::CUDABackend)
     nbus = length(data.buses)
 
     FrIdx = [l for b=1:nbus for l in data.FromLines[b]]
@@ -194,7 +194,7 @@ function get_branch_data(data::OPFData, device::KA.CPU)
             ybus.YttR, ybus.YttI, ybus.YtfR, ybus.YtfI, frBound, toBound
 end
 
-function get_branch_data(data::OPFData, device::CUDADevice)
+function get_branch_data(data::OPFData, device::CUDABackend)
     buses = data.buses
     lines = data.lines
     BusIdx = data.BusIdx
@@ -492,40 +492,44 @@ function admm_solve!(env::AdmmEnv, sol::SolutionOneLevel; iterlim=800, scale=1e-
                 break
             end
         else
-            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.u_prev, sol.u_curr, dependencies=Event(env.device)))
-            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.v_prev, sol.v_curr, dependencies=Event(env.device)))
-            wait(copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.l_prev, sol.l_curr, dependencies=Event(env.device)))
+            copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.u_prev, sol.u_curr)
+            copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.v_prev, sol.v_curr)
+            copy_data_kernel(env.device, 64, mod.nvar)(mod.nvar, sol.l_prev, sol.l_curr)
+            KA.synchronize(env.device)
 
             generator_kernel(mod.gen_mod, data.baseMVA, sol.u_curr, sol.v_curr, sol.l_curr, sol.rho, env.device)
 
-            wait(polar_kernel(env.device, 32, mod.nline*32)(mod.n, mod.nline, mod.line_start, scale,
-                                                            sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
-                                                            shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
-                                                            mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound,
-                                                            dependencies=Event(env.device)
-                                                            )
+            polar_kernel(env.device, 32, mod.nline*32)(
+                mod.n, mod.nline, mod.line_start, scale,
+                sol.u_curr, sol.v_curr, sol.l_curr, sol.rho,
+                shift_lines, env.membuf, mod.YffR, mod.YffI, mod.YftR, mod.YftI,
+                mod.YttR, mod.YttI, mod.YtfR, mod.YtfI, mod.FrBound, mod.ToBound
             )
-            wait(bus_kernel(env.device, 32, mod.nbus)(data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start,
-                                                                           mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart,
-                                                                           mod.GenIdx, mod.Pd, mod.Qd, sol.u_curr, sol.v_curr, sol.l_curr,
-                                                                           sol.rho, mod.YshR, mod.YshI,
-                                                                           dependencies=Event(env.device)
-                                                                           )
-            )
+            KA.synchronize(env.device)
 
-            wait(update_multiplier_kernel(env.device, 32, mod.nvar)(mod.nvar, sol.l_curr,
-                    sol.u_curr, sol.v_curr, sol.rho,
-                    dependencies=Event(env.device)
-                )
+            bus_kernel(env.device, 32, mod.nbus)(
+                data.baseMVA, mod.nbus, mod.gen_mod.gen_start, mod.line_start,
+                mod.FrStart, mod.FrIdx, mod.ToStart, mod.ToIdx, mod.GenStart,
+                mod.GenIdx, mod.Pd, mod.Qd, sol.u_curr, sol.v_curr, sol.l_curr,
+                sol.rho, mod.YshR, mod.YshI
             )
-            wait(primal_residual_kernel(env.device, 32, mod.nvar)(mod.nvar, sol.rp, sol.u_curr, sol.v_curr,
-                    dependencies=Event(env.device)
-                )
+            KA.synchronize(env.device)
+
+            update_multiplier_kernel(env.device, 32, mod.nvar)(
+                mod.nvar, sol.l_curr,
+                sol.u_curr, sol.v_curr, sol.rho
             )
-            wait(dual_residual_kernel(env.device, 32, mod.nvar)(mod.nvar, sol.rd, sol.v_prev, sol.v_curr, sol.rho,
-                    dependencies=Event(env.device)
-                )
+            KA.synchronize(env.device)
+
+            primal_residual_kernel(env.device, 32, mod.nvar)(
+                mod.nvar, sol.rp, sol.u_curr, sol.v_curr
             )
+            KA.synchronize(env.device)
+
+            dual_residual_kernel(env.device, 32, mod.nvar)(
+                mod.nvar, sol.rd, sol.v_prev, sol.v_curr, sol.rho
+            )
+            KA.synchronize(env.device)
 
             gpu_primres = norm(sol.rp)
             gpu_dualres = norm(sol.rd)

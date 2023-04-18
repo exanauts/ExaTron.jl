@@ -6,6 +6,8 @@ using LinearAlgebra
 using Random
 using Test
 
+const KA = KernelAbstractions
+
 """
 Test ExaTron's internal routines written for GPU.
 
@@ -47,14 +49,12 @@ n = 4
 nblk = 4
 
 if has_cuda_gpu()
-    using CUDAKernels
-    device = CUDADevice()
+    device = CUDABackend()
     AT = CuArray
 elseif has_rocm_gpu()
-    using ROCKernels
     # Set for crusher login node to avoid other users
     AMDGPU.default_device!(AMDGPU.devices()[2])
-    device = AMDGPU.ROCDevice()
+    device = AMDGPU.ROCBackend()
     AT = ROCArray
 else
     device = CPU()
@@ -94,7 +94,8 @@ end
         d_in = AT{Float64,2}(undef, (n,n))
         d_out = AT{Float64,2}(undef, (n,n))
         copyto!(d_in, tron_A.vals)
-        wait(dicf_test(device, n)(Val{n}(), d_in, d_out, ndrange=(n,nblk), dependencies=Event(device)))
+        dicf_test(device, n)(Val{n}(), d_in, d_out, ndrange=(n,nblk))
+        KA.synchronize(device)
         h_L = d_out |> Array
 
         tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
@@ -149,7 +150,8 @@ end
         d_out = AT{Float64,2}(undef, (n,n))
         alpha = 1.0
         copyto!(dA, tron_A.vals)
-        wait(dicfs_test(device, n)(Val{n}(),alpha,dA,d_out,ndrange=(n, nblk),dependencies=Event(device)))
+        dicfs_test(device, n)(Val{n}(),alpha,dA,d_out,ndrange=(n, nblk))
+        KA.synchronize(device)
         h_L = d_out |> Array
         iwa = zeros(Int, 3*n)
         wa1 = zeros(n)
@@ -164,7 +166,8 @@ end
             tron_A.vals[j,j] = -tron_A.vals[j,j]
         end
         copyto!(dA, tron_A.vals)
-        wait(dicfs_test(device, n)(Val{n}(),alpha,dA,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dicfs_test(device, n)(Val{n}(),alpha,dA,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_L, d_out)
         ExaTron.dicfs(n, n^2, tron_A, tron_L, 5, alpha, iwa, wa1, wa2)
 
@@ -236,7 +239,8 @@ end
         copyto!(du, xu)
         copyto!(dg, g)
         copyto!(dA, A.vals)
-        wait(dcauchy_test(device, n)(Val{n}(),dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2,ndrange=(n,nblk),dependencies=Event(device)))
+        dcauchy_test(device, n)(Val{n}(),dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2,ndrange=(n,nblk))
+        KA.synchronize(device)
         h_s = zeros(n)
         h_alpha = zeros(n)
         copyto!(h_s, d_out1)
@@ -311,7 +315,8 @@ end
         d_out = AT{Float64}(undef, n)
         copyto!(d_in, A)
         copyto!(d_g, g)
-        wait(dtrpcg_test(device, n)(Val{n}(),delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dtrpcg_test(device, n)(Val{n}(),delta,tol,stol,d_in,d_g,d_out_L,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         h_w = zeros(n)
         h_L = zeros(n,n)
         copyto!(h_L, d_out_L)
@@ -396,7 +401,8 @@ end
         copyto!(dg, g)
         copyto!(dw, w)
         copyto!(dA, A.vals)
-        wait(dprsrch_test(device, n)(Val{n}(),dx,dl,du,dg,dw,dA,d_out1,d_out2,ndrange=(n,nblk),dependencies=Event(device)))
+        dprsrch_test(device, n)(Val{n}(),dx,dl,du,dg,dw,dA,d_out1,d_out2,ndrange=(n,nblk))
+        KA.synchronize(device)
         h_x = zeros(n)
         h_w = zeros(n)
         copyto!(h_x, d_out1)
@@ -437,7 +443,8 @@ end
         d_in = AT{Float64}(undef, 2*n)
         d_out = AT{Float64}(undef, n)
         copyto!(d_in, h_in)
-        wait(daxpy_test(device,n)(Val{n}(),da,d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        daxpy_test(device,n)(Val{n}(),da,d_in,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_out, d_out)
 
         @test norm(h_out .- (h_in[n+1:2*n] .+ da.*h_in[1:n])) <= 1e-12
@@ -479,7 +486,8 @@ end
         d_out = AT{Float64}(undef, n)
         copyto!(d_z, z)
         copyto!(d_in, h_in)
-        wait(dssyax_test(device,n)(Val{n}(),d_z,d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dssyax_test(device,n)(Val{n}(),d_z,d_in,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_out, d_out)
 
         @test norm(h_out .- h_in*z) <= 1e-12
@@ -534,7 +542,8 @@ end
         copyto!(dx, x)
         copyto!(dl, xl)
         copyto!(du, xu)
-        wait(dmid_test(device,n)(Val{n}(),dx,dl,du,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dmid_test(device,n)(Val{n}(),dx,dl,du,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(x_out, d_out)
 
         ExaTron.dmid(n, x, xl, xu)
@@ -605,7 +614,8 @@ end
         copyto!(dl, xl)
         copyto!(du, xu)
         copyto!(dw, w)
-        wait(dgpstep_test(device,n)(Val{n}(),dx,dl,du,alpha,dw,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dgpstep_test(device,n)(Val{n}(),dx,dl,du,alpha,dw,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(s_out, d_out)
 
         ExaTron.dgpstep(n, x, xl, xu, alpha, w, s)
@@ -667,7 +677,8 @@ end
         copyto!(dl, xl)
         copyto!(du, xu)
         copyto!(dw, w)
-        wait(dbreakpt_test(device,n)(Val{n}(),dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax,ndrange=(n,nblk),dependencies=Event(device)))
+        dbreakpt_test(device,n)(Val{n}(),dx,dl,du,dw,d_nbrpt,d_brptmin,d_brptmax,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_nbrpt, d_nbrpt)
         copyto!(h_brptmin, d_brptmin)
         copyto!(h_brptmax, d_brptmax)
@@ -706,7 +717,8 @@ end
         d_in = AT{Float64}(undef, n)
         d_out = AT{Float64,2}(undef, (n,n))
         copyto!(d_in, h_in)
-        wait(dnrm2_test(device,n)(Val{n}(),d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dnrm2_test(device,n)(Val{n}(),d_in,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_out, d_out)
         xnorm = norm(h_in, 2)
 
@@ -746,7 +758,8 @@ end
         d_out = AT{Float64}(undef, n)
         h_wa = zeros(n)
         copyto!(d_A, A)
-        wait(nrm2_test(device,n)(Val{n}(),d_A,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        nrm2_test(device,n)(Val{n}(),d_A,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_wa, d_out)
 
         @test norm(wa .- h_wa) <= 1e-10
@@ -781,7 +794,8 @@ end
         d_in = AT{Float64}(undef, n)
         d_out = AT{Float64}(undef, n)
         copyto!(d_in, h_in)
-        wait(dcopy_test(device,n)(Val{n}(),d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dcopy_test(device,n)(Val{n}(),d_in,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_out, d_out)
 
         @test !(false in (h_in .== h_out))
@@ -818,7 +832,8 @@ end
         d_in = AT{Float64}(undef, n)
         d_out = AT{Float64,2}(undef, (n,n))
         copyto!(d_in, h_in)
-        wait(ddot_test(device, n)(Val{n}(),d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        ddot_test(device, n)(Val{n}(),d_in,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_out, d_out)
 
         @test norm(dot(h_in,h_in) .- h_out, 2) <= 1e-10
@@ -854,7 +869,8 @@ end
         d_in = AT{Float64}(undef, n)
         d_out = AT{Float64}(undef, n)
         copyto!(d_in, h_in)
-        wait(dscal_test(device,n)(Val{n}(),da,d_in,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        dscal_test(device,n)(Val{n}(),da,d_in,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         copyto!(h_out, d_out)
 
         @test norm(h_out .- (da.*h_in)) <= 1e-12
@@ -897,7 +913,8 @@ end
         d_out = AT{Float64,2}(undef, (n,n))
         copyto!(d_x, x)
         copyto!(d_p, p)
-        wait(dtrqsol_test(device,n)(Val{n}(),d_x,d_p,d_out,delta,ndrange=(n,nblk),dependencies=Event(device)))
+        dtrqsol_test(device,n)(Val{n}(),d_x,d_p,d_out,delta,ndrange=(n,nblk))
+        KA.synchronize(device)
 
         d_out = d_out |> Array
         @test norm(sigma .- d_out) <= 1e-10
@@ -994,7 +1011,8 @@ end
         copyto!(dg, g)
         copyto!(ds, s)
 
-        wait(dspcg_test(device, n)(Val{n}(),delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out,ndrange=(n,1),dependencies=Event(device)))
+        dspcg_test(device, n)(Val{n}(),delta,rtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out,ndrange=(n,1))
+        KA.synchronize(device)
         h_x = zeros(n)
         copyto!(h_x, d_out)
 
@@ -1046,7 +1064,8 @@ end
         copyto!(dxu, xu)
         copyto!(dg, g)
 
-        wait(dgpnorm_test(device, n)(Val{n}(), dx, dxl, dxu, dg, d_out, ndrange=(n,n*nblk), dependencies=Event(device)))
+        dgpnorm_test(device, n)(Val{n}(), dx, dxl, dxu, dg, d_out, ndrange=(n,n*nblk))
+        KA.synchronize(device)
         h_v = zeros(n)
         copyto!(h_v, d_out)
 
@@ -1151,7 +1170,8 @@ end
         copyto!(dA, tron_A.vals)
         copyto!(dg, g)
 
-        wait(dtron_test(device,n)(Val{n}(),f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out,ndrange=(n,n*nblk),dependencies=Event(device)))
+        dtron_test(device,n)(Val{n}(),f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out,ndrange=(n,n*nblk))
+        KA.synchronize(device)
         h_x = zeros(n)
         copyto!(h_x, d_out)
 
@@ -1395,7 +1415,8 @@ end
         copyto!(tron.x, x)
         status = ExaTron.solveProblem(tron)
 
-        wait(driver_kernel_test(device,n)(Val{n}(),max_feval,max_minor,dx,dxl,dxu,dA,dc,d_out,ndrange=(n,nblk),dependencies=Event(device)))
+        driver_kernel_test(device,n)(Val{n}(),max_feval,max_minor,dx,dxl,dxu,dA,dc,d_out,ndrange=(n,nblk))
+        KA.synchronize(device)
         h_x = zeros(n)
         copyto!(h_x, d_out)
 
