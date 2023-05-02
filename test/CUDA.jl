@@ -1097,7 +1097,7 @@ Random.seed!(0)
             return
         end
 
-        for i=1:itermax
+        @testset "random instance iteration $i" for i=1:itermax
             L = tril(rand(n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
@@ -1156,6 +1156,67 @@ Random.seed!(0)
                             cg_itermax, delta, task_str, tron_B, tron_L, xc, s, indfree,
                             isave, dsave, wa, iwa)
             @test norm(x .- h_x) <= 1e-10
+        end
+
+        @testset "issue/52" begin
+            n = 13
+            x = [0.1, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.0, 0.0, -0.0]
+            xl = [0.1, -3.0, 0.1, 0.0, 0.0, 0.0, 0.0, -0.36, -0.36, -3.1, -3.1, -6.0, -6.0]
+            xu = [3.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            f = 1673.85
+            g = [-1138.0, 20.0, 0.0, -34.099999999999994, 0.0, 0.0, 0.0, 0.0, 0.0, -11.0, 11.0, -10.0, 10.0]
+            A = [2720.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 1020.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; -31.0 0.0 0.0 40270.1 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 40000.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 40000.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; -10.0 0.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0 0.0 0.0; 10.0 0.0 0.0 -1.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0 0.0; 0.0 -10.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0; 0.0 10.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0]
+            frtol = 1.0e-12
+            fatol = 0.0
+            fmin = -1.0e32
+            cgtol = 0.1
+            cg_itermax = n
+            delta = norm(g)
+            # delta = 1138.8805073404321
+            xc = zeros(n)
+            s = zeros(n)
+            indfree = zeros(Int, n)
+            isave = zeros(Int, 3)
+            dsave = zeros(3)
+            wa = zeros(7*n)
+            iwa = zeros(Int, 3*n)
+
+            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A.vals .= A
+            tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+
+            dx = CuArray{Float64}(undef, n)
+            dxl = CuArray{Float64}(undef, n)
+            dxu = CuArray{Float64}(undef, n)
+            dA = CuArray{Float64,2}(undef, (n,n))
+            dg = CuArray{Float64}(undef, n)
+            disave = CuArray{Int}(undef, n)
+            ddsave = CuArray{Float64}(undef, n)
+            d_out = CuArray{Float64}(undef, n)
+
+            copyto!(dx, x)
+            copyto!(dxl, xl)
+            copyto!(dxu, xu)
+            copyto!(dA, tron_A.vals)
+            copyto!(dg, g)
+
+            task = 0 # START
+            @cuda threads=n blocks=nblk shmem=((3*n)*sizeof(Int)+(13*n+3*(n^2))*sizeof(Float64)) dtron_test(n,f,frtol,fatol,fmin,cgtol,cg_itermax,delta,task,disave,ddsave,dx,dxl,dxu,dA,dg,d_out)
+            h_x = zeros(n)
+            copyto!(h_x, d_out)
+
+            task_str = Vector{UInt8}(undef, 60)
+            for (i,s) in enumerate("START")
+                task_str[i] = UInt8(s)
+            end
+            ExaTron.dtron(n, x, xl, xu, f, g, tron_A, frtol, fatol, fmin, cgtol,
+                            cg_itermax, delta, task_str, tron_B, tron_L, xc, s, indfree,
+                            isave, dsave, wa, iwa)
+            @test norm(x .- h_x) <= 1e-10
+
+            # back to the original value of n
+            n = 8
         end
     end
 
