@@ -208,7 +208,7 @@ Random.seed!(0)
             return
         end
 
-        for i=1:itermax
+        @testset "random instance $i" for i=1:itermax
             L = tril(rand(n,n))
             A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
             A.vals .= L*transpose(L)
@@ -244,6 +244,53 @@ Random.seed!(0)
 
             @test norm(s .- h_s) <= 1e-10
             @test norm(alpha .- h_alpha) <= 1e-10
+        end
+
+        @testset "issue/52" begin
+            n_old = n
+            n = 13
+            x = [0.1, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.0, 0.0, -0.0]
+            xl = [0.1, -3.0, 0.1, 0.0, 0.0, 0.0, 0.0, -0.36, -0.36, -3.1, -3.1, -6.0, -6.0]
+            xu = [3.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            f = 1673.85
+            g = [-1138.0, 20.0, 0.0, -34.099999999999994, 0.0, 0.0, 0.0, 0.0, 0.0, -11.0, 11.0, -10.0, 10.0]
+            A = [2720.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 1020.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; -31.0 0.0 0.0 40270.1 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 40000.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 40000.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; -10.0 0.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0 0.0 0.0; 10.0 0.0 0.0 -1.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0 0.0; 0.0 -10.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0; 0.0 10.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0]
+            alpha = 1.0
+            delta = norm(g)
+            # delta = 1138.8805073404321
+            xc = zeros(n)
+            s = zeros(n)
+            wa = zeros(n)
+
+            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A.vals .= A
+
+            dx = CuArray{Float64}(undef, n)
+            dl = CuArray{Float64}(undef, n)
+            du = CuArray{Float64}(undef, n)
+            dA = CuArray{Float64,2}(undef, (n,n))
+            dg = CuArray{Float64}(undef, n)
+            d_out1 = CuArray{Float64}(undef, n)
+            d_out2 = CuArray{Float64}(undef, n)
+            copyto!(dx, x)
+            copyto!(dl, xl)
+            copyto!(du, xu)
+            copyto!(dA, tron_A.vals)
+            copyto!(dg, g)
+
+            CUDA.@sync @cuda threads=n blocks=nblk shmem=((6*n+n^2)*sizeof(Float64)) dcauchy_test(n,dx,dl,du,dA,dg,delta,alpha,d_out1,d_out2)
+            h_s = zeros(n)
+            h_alpha = zeros(n)
+            copyto!(h_s, d_out1)
+            copyto!(h_alpha, d_out2)
+
+            alpha = ExaTron.dcauchy(n, x, xl, xu, tron_A, g, delta, alpha, s, wa)
+
+            @test norm(s .- h_s) <= 1e-10
+            @test norm(alpha .- h_alpha) <= 1e-10
+
+            # back to the original value of n
+            n = n_old
         end
     end
 
@@ -947,7 +994,7 @@ Random.seed!(0)
             return
         end
 
-        for i=1:itermax
+        @testset "random instance $i" for i=1:itermax
             L = tril(rand(n,n))
             A = L*transpose(L)
             A .= tril(A) .+ (transpose(tril(A)) .- Diagonal(A))
@@ -992,6 +1039,61 @@ Random.seed!(0)
                             tron_B, tron_L, indfree, gfree, w, wa, iwa)
 
             @test norm(x .- h_x) <= 1e-10
+        end
+
+        @testset "issue/52" begin
+            n_old = n
+            n = 13
+            x = [0.1, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.0, 0.0, -0.0]
+            xl = [0.1, -3.0, 0.1, 0.0, 0.0, 0.0, 0.0, -0.36, -0.36, -3.1, -3.1, -6.0, -6.0]
+            xu = [3.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            g = [-1138.0, 20.0, 0.0, -34.099999999999994, 0.0, 0.0, 0.0, 0.0, 0.0, -11.0, 11.0, -10.0, 10.0]
+            A = [2720.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 1020.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; -31.0 0.0 0.0 40270.1 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 40000.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 40000.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; -10.0 0.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0 0.0 0.0; 10.0 0.0 0.0 -1.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0 0.0; 0.0 -10.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0 0.0; 0.0 10.0 0.0 30.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 10.0]
+            cgtol = 0.1
+            cg_itermax = n
+            delta = norm(g)
+            # delta = 1138.8805073404321
+            gfree = zeros(n)
+            indfree = zeros(Int, n)
+            w = zeros(n)
+            iwa = zeros(Int, 3*n)
+            wa = zeros(5*n)
+
+            # Below is obtained from dcauchy
+            s = [0.11380000000000004, -0.0020000000000000005, -0.0, 0.0034100000000000007, -0.0, -0.0, -0.0, -0.0, -0.0, 0.0, -0.0011000000000000003, 0.0, -0.0010000000000000002]
+            wa[1:n] .= [309.4192900000001, -2.0500000000000003, 0.0, 133.76434100000003, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0357000000000003, 1.1235900000000005, 0.12230000000000002, 0.0723]
+
+            tron_A = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_A.vals .= A
+            tron_B = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+            tron_L = ExaTron.TronDenseMatrix{Array{Float64,2}}(n)
+
+            dx = CuArray{Float64}(undef, n)
+            dxl = CuArray{Float64}(undef, n)
+            dxu = CuArray{Float64}(undef, n)
+            dA = CuArray{Float64,2}(undef, (n,n))
+            dg = CuArray{Float64}(undef, n)
+            ds = CuArray{Float64}(undef, n)
+            d_out = CuArray{Float64}(undef, n)
+
+            copyto!(dx, x)
+            copyto!(dxl, xl)
+            copyto!(dxu, xu)
+            copyto!(dA, tron_A.vals)
+            copyto!(dg, g)
+            copyto!(ds, s)
+
+            CUDA.@sync @cuda threads=n blocks=nblk shmem=((3*n)*sizeof(Int)+(12*n+3*(n^2))*sizeof(Float64)) dspcg_test(n,delta,cgtol,cg_itermax,dx,dxl,dxu,dA,dg,ds,d_out)
+            h_x = zeros(n)
+            copyto!(h_x, d_out)
+
+            ExaTron.dspcg(n, x, xl, xu, tron_A, g, delta, cgtol, s, 5, cg_itermax,
+                            tron_B, tron_L, indfree, gfree, w, wa, iwa)
+
+            @test norm(x .- h_x) <= 1e-10
+
+            # back to the original value of n
+            n = n_old
         end
     end
 
@@ -1159,6 +1261,7 @@ Random.seed!(0)
         end
 
         @testset "issue/52" begin
+            n_old = n
             n = 13
             x = [0.1, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.0, 0.0, -0.0]
             xl = [0.1, -3.0, 0.1, 0.0, 0.0, 0.0, 0.0, -0.36, -0.36, -3.1, -3.1, -6.0, -6.0]
@@ -1216,7 +1319,7 @@ Random.seed!(0)
             @test norm(x .- h_x) <= 1e-10
 
             # back to the original value of n
-            n = 8
+            n = n_old
         end
     end
 
