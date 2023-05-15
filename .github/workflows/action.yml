@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        julia-version: ['1.8']
+        julia-version: ['1.9']
         julia-arch: [x64]
 
     steps:
@@ -31,12 +31,11 @@ jobs:
     env:
       CUDA_VISIBLE_DEVICES: 1
       JULIA_DEPOT_PATH: /scratch/github-actions/julia_depot_exatron
-      JULIA_CUDA_USE_BINARYBUILDER: true
     runs-on: self-hosted
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        julia-version: ['1.8']
+        julia-version: ['1.9']
         julia-arch: [x64]
 
     steps:
