@@ -53,7 +53,6 @@ if has_cuda_gpu()
     AT = CuArray
 elseif has_rocm_gpu()
     # Set for crusher login node to avoid other users
-    AMDGPU.default_device!(AMDGPU.devices()[2])
     device = AMDGPU.ROCBackend()
     AT = ROCArray
 else

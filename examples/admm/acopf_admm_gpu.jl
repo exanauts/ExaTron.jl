@@ -60,7 +60,7 @@ function get_generator_data(data::OPFData, ::CUDABackend)
     return pgmin,pgmax,qgmin,qgmax,c2,c1,c0
 end
 
-function get_generator_data(data::OPFData, ::ROCDevice)
+function get_generator_data(data::OPFData, ::ROCBackend)
     ngen = length(data.generators)
 
     pgmin = ROCArray{Float64}(undef, ngen)
@@ -143,7 +143,7 @@ function get_bus_data(data::OPFData, ::CUDABackend)
     return cuFrStart,cuFrIdx,cuToStart,cuToIdx,cuGenStart,cuGenIdx,cuPd,cuQd
 end
 
-function get_bus_data(data::OPFData, ::ROCDevice)
+function get_bus_data(data::OPFData, ::ROCBackend)
     nbus = length(data.buses)
 
     FrIdx = [l for b=1:nbus for l in data.FromLines[b]]
@@ -232,7 +232,7 @@ function get_branch_data(data::OPFData, device::CUDABackend)
             cuYttR, cuYttI, cuYtfR, cuYtfI, cuFrBound, cuToBound
 end
 
-function get_branch_data(data::OPFData, device::ROCDevice)
+function get_branch_data(data::OPFData, device::ROCBackend)
     buses = data.buses
     lines = data.lines
     BusIdx = data.BusIdx

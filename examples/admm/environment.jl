@@ -282,7 +282,7 @@ AdmmEnv(opfdata::OPFData, device::CUDABackend, rho_pq, rho_va; options...) = Adm
         opfdata, rho_pq, rho_va; device=device, options...
     )
 
-AdmmEnv(opfdata::OPFData, device::ROCDevice, rho_pq, rho_va; options...) = AdmmEnv{Float64, ROCArray{Float64, 1}, ROCArray{Int, 1}, ROCArray{Float64, 2}}(
+AdmmEnv(opfdata::OPFData, device::ROCBackend, rho_pq, rho_va; options...) = AdmmEnv{Float64, ROCArray{Float64, 1}, ROCArray{Int, 1}, ROCArray{Float64, 2}}(
         opfdata, rho_pq, rho_va; device=device, options...
     )
 

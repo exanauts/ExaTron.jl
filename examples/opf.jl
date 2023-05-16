@@ -31,7 +31,7 @@ max_iter = parse(Int, ARGS[3])
 # Indicate which GPU device to use
 device = CPU()
 # device = CUDABackend()
-# device = ROCDevice()
+# device = ROCBackend()
 # verbose = 0: No output
 # verbose = 1: Final result metrics
 # verbose = 2: Iteration output
