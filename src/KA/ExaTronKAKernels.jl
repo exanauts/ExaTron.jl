@@ -1,6 +1,8 @@
 module ExaTronKAKernels
     using ..ExaTron
     using ..KernelAbstractions
+    using KernelAbstractions: @atomic, @atomicswap, @atomicreplace
+    using ..AMDGPU
     const KA = KernelAbstractions
     include("architecture.jl")
     include("daxpy.jl")

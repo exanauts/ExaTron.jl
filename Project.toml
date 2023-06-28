@@ -4,6 +4,7 @@ authors = ["Youngdae Kim <youngdae@anl.gov>", "François Pacaud <fpacaud@anl.gov
 version = "3.0.1"
 
 [deps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"

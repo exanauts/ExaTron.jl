@@ -11,7 +11,7 @@ where P is the projection on the n-dimensional interval [xl,xu].
                          xu,alpha,w,
                          s,
                          tx)
-    if tx <= n
+    # if tx <= n
         @inbounds begin
             # It might be better to process this using just a single thread,
             # rather than diverging between multiple threads.
@@ -24,7 +24,7 @@ where P is the projection on the n-dimensional interval [xl,xu].
                 s[tx] = alpha*w[tx]
             end
         end
-    end
+    # end
     @synchronize
 
     return

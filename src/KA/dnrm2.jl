@@ -7,7 +7,7 @@
     end
 
     @synchronize
-    v = sqrt(v)
+    # v = sqrt(v)
 
     return v
 end

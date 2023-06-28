@@ -4,6 +4,7 @@ using Libdl
 using LinearAlgebra
 using Requires
 using Printf
+using AMDGPU
 
 export dtron, solveProblem, createProblem, setOption, getOption, ExaTronProblem, tron_qp_kernel
 export daxpy, dcopy, ddot, dmid, dnrm2, dgpnorm, dscal, dssyax, dnsol, dtsol, dtrqsol, dbreakpt, dgpstep
