@@ -33,6 +33,7 @@
         q = p5*ddot(n,s,1,wa,1) + gts
         interp = (q >= mu0*gts)
     end
+    CUDA.sync_threads()
 
     # Either interpolate or extrapolate to find a successful step.
 
@@ -81,6 +82,7 @@
                 search = false
             end
         end
+        CUDA.sync_threads()
 
         # Recover the last successful step.
 

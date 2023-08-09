@@ -51,6 +51,7 @@
                 end
             end
         end
+        CUDA.sync_threads()
         nfree = CUDA.shfl_sync(0xffffffff, nfree, 1)
 
         # Exit if there are no free constraints.

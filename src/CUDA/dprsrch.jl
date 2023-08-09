@@ -46,6 +46,7 @@
             alpha = interpf*alpha
         end
     end
+    CUDA.sync_threads()
 
     # Force at least one more constraint to be added to the active
     # set if alpha < brptmin and the full step is not successful.
