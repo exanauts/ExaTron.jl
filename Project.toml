@@ -1,7 +1,7 @@
 name = "ExaTron"
 uuid = "28b18bf8-76f9-41ea-81fa-0f922810b349"
 authors = ["Youngdae Kim <youngdae@anl.gov>", "François Pacaud <fpacaud@anl.gov>", "Kibaek Kim <kimk@anl.gov>", "Michel Schanen <mschanen@anl.gov>"]
-version = "3.0.1"
+version = "3.0.2"
 
 [deps]
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
