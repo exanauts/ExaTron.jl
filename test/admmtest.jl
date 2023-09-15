@@ -1,5 +1,6 @@
 using KernelAbstractions
 using AMDGPU
+using Adapt
 using CUDA
 using LinearAlgebra
 using Printf

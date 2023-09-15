@@ -256,7 +256,7 @@ mutable struct AdmmEnv{T,TD,TI,TM}
             env.data.lines, env.data.buses, env.data.baseMVA, device; VI=Array{Int}, VD=Array{T})...)
 
         env.solution = SolutionOneLevel{T,TD}(env.model)
-        init_solution!(env, env.solution, ybus, rho_pq, rho_va)
+        init_solution!(env, env.solution, ybus, rho_pq, rho_va, device)
 
         env.membuf = TM(undef, (31, env.model.nline))
         fill!(env.membuf, 0.0)
