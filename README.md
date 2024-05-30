@@ -89,7 +89,7 @@ Note that the following table shows correspondence between the casename and the 
 | case13659pegase | 20K |
 | case19402_goc | 34K |
 
-### Figure 5
+### Figure 10
 
 To reproduce Figure 5, submit a job with each case file and its parameter values.
 For each case with name `casename`, it will generate `output_gpu1_casename.txt`. 
@@ -101,7 +101,7 @@ Branch/iter = 3.94 (millisecs)
 ```
 Here `3.94` miiliseconds will be the input for the `34K` batch size in Figure 5.
 
-### Figure 6
+### Figure 11
 
 To reproduce Figure 6, submit a job with each case file, its parameter values, and different GPU number `N`.
 It will generate `output_gpu${N}_casename.txt` file for each `casename` where `N` represents the number of GPUs
@@ -115,7 +115,7 @@ For example, in order to obtain timing results for `case19402_goc` with 6 GPUs, 
 ```
 The speedup is `3.94/0.79 = 4.98` in this case. In this way, you can reproduce Figure 6.
 
-### Table 5
+### Table 2
 
 ```bash
 $ ./table5.sh branch_time_file
@@ -135,7 +135,7 @@ $ ./table5.sh br_time_gpu6_case13659pegase.txt
 ```
 Similarly, you can reproduce load imbalance statistics for other case files.
 
-### Figure 7
+### Figure 12
 
 ```bash
 $ ./figure7.sh branch_time_file
@@ -148,7 +148,7 @@ $ ./figure7.sh br_time_gpu6_case13659pegase.txt
 ```
 It will generate `br_time_gpu6_case13659pegase.pdf`. The file should look similar to Figure 7.
 
-### Figure 8
+### Figure 13
 
 To reproduce Figure 8, we need to execute ExaTron with 40 CPU cores. 
 For this, we replace the line starting with `jsrun` with the following:

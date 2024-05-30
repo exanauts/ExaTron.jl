@@ -9,7 +9,7 @@ export JULIA_CUDA_VERBOSE=1
 export JULIA_MPI_BINARY="system"
 
 function usage() {
-    echo "Usage: ./table5.sh case"
+    echo "Usage: ./table2.sh case"
     echo "  case: the case file containing branch computation time of each GPU"
 }
 

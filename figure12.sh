@@ -9,7 +9,7 @@
 # running figure6.sh.
 
 function usage() {
-    echo "Usage: ./figure7.sh case"
+    echo "Usage: ./figure12.sh case"
     echo "  case: the case file containing branch computation time of each GPU"
 }
 
