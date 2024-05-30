@@ -9,7 +9,7 @@ Our basic algorithm to solve each problem on GPUs is an extension of the
 algorithm by [Lin and More](https://doi.org/10.1137/S1052623498345075)
 and its code [TRON](https://www.mcs.anl.gov/~more/tron).
 
-Please check out [this branch](https:/github.com/exanauts/ExaTron.jl/tree/sc2021) to see how to generate PTX code for our kernel and reproduce the experimental results in our [technical report](https://arxiv.org/abs/2106.14995).
+Please check out [this branch](https://github.com/exanauts/ExaTron.jl/tree/sc2021) to see how to generate PTX code for our kernel and reproduce the experimental results in our [technical report](https://arxiv.org/abs/2106.14995).
 
 ## Installation
 
