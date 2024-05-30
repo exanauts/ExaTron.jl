@@ -1,6 +1,6 @@
 # ExaTron.jl
 
-ExaTron.jl implements a trust-region Newton algorithm for bound constrained batch nonlinear 
+ExaTron.jl implements a trust-region Newton algorithm for bound constrained batch nonlinear
 programming on GPUs.
 Its algorithm is based on [Lin and More](https://epubs.siam.org/doi/10.1137/S1052623498345075)
 and [TRON](https://www.mcs.anl.gov/~more/tron).
@@ -92,9 +92,9 @@ Note that the following table shows correspondence between the casename and the 
 ### Figure 10
 
 To reproduce Figure 5, submit a job with each case file and its parameter values.
-For each case with name `casename`, it will generate `output_gpu1_casename.txt`. 
+For each case with name `casename`, it will generate `output_gpu1_casename.txt`.
 Near the end of the file, you will see the timing results: `Branch/iter = %.2f (millisecs)` is the relevant result.
-For example, in order to obtain timing results for `case19402_goc`, we read the following line around the end of 
+For example, in order to obtain timing results for `case19402_goc`, we read the following line around the end of
 the file
 ```bash
 Branch/iter = 3.94 (millisecs)
@@ -105,7 +105,7 @@ Here `3.94` miiliseconds will be the input for the `34K` batch size in Figure 5.
 
 To reproduce Figure 6, submit a job with each case file, its parameter values, and different GPU number `N`.
 It will generate `output_gpu${N}_casename.txt` file for each `casename` where `N` represents the number of GPUs
-used. 
+used.
 Near the end of the file, you will see the timing results: `[0] (Br+MPI)/iter = %.2f (millisecs)` is the relevant result,
 where `[0]` represents the rank (the root in this case) of a process.
 For example, in order to obtain timing results for `case19402_goc` with 6 GPUs, we read the following line around the end of the file
@@ -150,7 +150,7 @@ It will generate `br_time_gpu6_case13659pegase.pdf`. The file should look simila
 
 ### Figure 13
 
-To reproduce Figure 8, we need to execute ExaTron with 40 CPU cores. 
+To reproduce Figure 8, we need to execute ExaTron with 40 CPU cores.
 For this, we replace the line starting with `jsrun` with the following:
 ```bash
 jsrun -n 1 -r 1 -a 40 -c 40 -g 0 -d packed julia --project ./src/launch_mpi.jl ./data/casename pq_val va_val iterlim false
@@ -180,6 +180,15 @@ Here `30.03` will be the input for `case19402_goc` for CPUs in Figure 8. For 6 G
 If you want to run ExaTron on a non-cluster, copy `julia --project ...` part in the line containing `jsrun`.
 For multiple GPUs, run with `mpirun -np N julia --project ..`
 Note that all of the MPI processes should be able to see the `N` number of GPUs. Otherwise, it will generate an error.
+
+### Generating PTX code for a kernel
+
+By running the following, you could generate PTX code for a kernel:
+```bash
+@device_code_ptx CUDA.@sync @cuda threads=32 blocks=10240 kernel_func(a,b)
+```
+where the numbers for `threads` and `blocks` and the arguments `a` and `b` depend on `kernel_func`.
+If needed, you may want to specify its shared memory size.
 
 ## Citing this package
 
